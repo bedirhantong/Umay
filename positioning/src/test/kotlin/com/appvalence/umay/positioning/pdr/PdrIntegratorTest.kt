@@ -49,4 +49,14 @@ class PdrIntegratorTest {
         assertEquals(1.0, position.y, 1e-9)
         assertTrue(position.accuracyMeters < 0.5)
     }
+
+    @Test
+    fun `changeFloor jumps to the new floor's position and reports the new floor afterwards`() {
+        val integrator = PdrIntegrator(startX = 0.0, startY = 0.0, floor = 0)
+        integrator.changeFloor(newFloor = 1, x = 12.0, y = 4.0, headingDeg = 90.0)
+        val position = integrator.integrate(StepEvent(stepLengthMeters = 1.0, headingDeltaDeg = 0.0, timestampMs = 0L))
+        assertEquals(1, position.floor)
+        assertEquals(13.0, position.x, 1e-9)
+        assertEquals(4.0, position.y, 1e-9)
+    }
 }

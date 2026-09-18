@@ -100,4 +100,39 @@ class BeaconMapBuilderTest {
         assertEquals(1, floor.nodes.count { it.type == NodeType.BLE_ANCHOR })
         assertEquals(1, floor.edges.size) // only the two waypoints are connected, the anchor stays unconnected
     }
+
+    @Test
+    fun `buildFromWaypoints turns a consecutive cross-floor tag into a FloorTransition`() {
+        val waypoints = listOf(
+            TaggedWaypoint("Merdiven Giris", x = 0.0, y = 0.0, floor = 0, fingerprint = emptyList()),
+            TaggedWaypoint("Merdiven Cikis", x = 1.0, y = 1.0, floor = 1, fingerprint = emptyList()),
+            TaggedWaypoint("Ofis", x = 10.0, y = 10.0, floor = 1, fingerprint = emptyList()),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("test-building", waypoints)
+
+        assertEquals(1, map.floorTransitions.size)
+        val transition = map.floorTransitions.single()
+        assertEquals(0, transition.fromFloorIndex)
+        assertEquals(1, transition.toFloorIndex)
+        val floor0Node = map.floors.single { it.floorIndex == 0 }.nodes.single()
+        val floor1Nodes = map.floors.single { it.floorIndex == 1 }.nodes
+        assertEquals(floor0Node.id, transition.fromNodeId)
+        assertEquals(floor1Nodes.first { it.name == "Merdiven Cikis" }.id, transition.toNodeId)
+        // The transition is a separate edge, not folded into either floor's own edge list.
+        assertEquals(0, map.floors.single { it.floorIndex == 0 }.edges.size)
+        assertEquals(1, map.floors.single { it.floorIndex == 1 }.edges.size)
+    }
+
+    @Test
+    fun `buildFromWaypoints produces no transitions when every tag stays on the same floor`() {
+        val waypoints = listOf(
+            TaggedWaypoint("A", x = 0.0, y = 0.0, floor = 0, fingerprint = emptyList()),
+            TaggedWaypoint("B", x = 1.0, y = 1.0, floor = 0, fingerprint = emptyList()),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("test-building", waypoints)
+
+        assertTrue(map.floorTransitions.isEmpty())
+    }
 }

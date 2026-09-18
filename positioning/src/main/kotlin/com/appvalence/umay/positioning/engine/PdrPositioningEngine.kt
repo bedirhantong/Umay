@@ -27,4 +27,8 @@ class PdrPositioningEngine(
     override fun resetTo(x: Double, y: Double, headingDeg: Double, accuracyMeters: Double) {
         integrator.resetTo(x, y, headingDeg, accuracyMeters)
     }
+
+    fun changeFloor(newFloor: Int, x: Double, y: Double, headingDeg: Double) {
+        integrator.changeFloor(newFloor, x, y, headingDeg)
+    }
 }

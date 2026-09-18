@@ -4,6 +4,7 @@ import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.FloorMap
+import com.appvalence.umay.coremodel.FloorTransition
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
@@ -53,6 +54,15 @@ class NavigationOrchestratorTest {
 
     private val emptyMap = BuildingMap(id = "test-building", floors = emptyList())
 
+    // A single-node "route" (start == destination == "A"), used by tests that only
+    // care about obstacle-alerting behavior — an empty map would also be valid there,
+    // but now unconditionally raises its own "no route found" alert, which would
+    // pollute the exact-alert-count assertions these tests make.
+    private val singleNodeMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(FloorMap(floorIndex = 0, nodes = listOf(MapNode("A", 0.0, 0.0, NodeType.CORRIDOR)), edges = emptyList())),
+    )
+
     @Test
     fun `combines the latest position and obstacles into a NavigationState`() = runTest {
         val position = position(1.0, 2.0, timestampMs = 1_000L)
@@ -78,10 +88,10 @@ class NavigationOrchestratorTest {
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0)),
             perception = FakeObstacleDetector(listOf(listOf(personObstacle("p1", distanceMeters = 0.5)))),
-            map = emptyMap,
+            map = singleNodeMap,
             feedback = feedback,
             startNodeId = "A",
-            destinationNodeId = "B",
+            destinationNodeId = "A",
         )
 
         orchestrator.start().toList()
@@ -100,10 +110,10 @@ class NavigationOrchestratorTest {
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0)),
             perception = FakeObstacleDetector(obstacleSightings),
-            map = emptyMap,
+            map = singleNodeMap,
             feedback = feedback,
             startNodeId = "A",
-            destinationNodeId = "B",
+            destinationNodeId = "A",
         )
 
         orchestrator.start().toList()
@@ -121,10 +131,10 @@ class NavigationOrchestratorTest {
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0)),
             perception = FakeObstacleDetector(obstacleSightings),
-            map = emptyMap,
+            map = singleNodeMap,
             feedback = feedback,
             startNodeId = "A",
-            destinationNodeId = "B",
+            destinationNodeId = "A",
         )
 
         orchestrator.start().toList()
@@ -319,5 +329,121 @@ class NavigationOrchestratorTest {
 
         val noRouteAlerts = feedback.emitted.filter { it.id.startsWith("no-route-") }
         assertEquals(1, noRouteAlerts.size)
+    }
+
+    // Two-floor fixture shared by the multi-floor tests below:
+    // Floor 0: Giris(A) --10m-- Merdiven Alt(B)
+    // Floor 1: Merdiven Ust(C) --10m-- Ofis(D)
+    // B and C are connected by a FloorTransition (stairs), cost 15.
+    private val floor0 = FloorMap(
+        floorIndex = 0,
+        nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "Giris"),
+            MapNode("B", 0.0, 10.0, NodeType.CORRIDOR, name = "Merdiven Alt"),
+        ),
+        edges = listOf(MapEdge("A", "B", accessible = true, distanceMeters = 10.0)),
+    )
+    private val floor1 = FloorMap(
+        floorIndex = 1,
+        nodes = listOf(
+            MapNode("C", 0.0, 0.0, NodeType.CORRIDOR, name = "Merdiven Ust"),
+            MapNode("D", 0.0, 10.0, NodeType.DESTINATION, name = "Ofis"),
+        ),
+        edges = listOf(MapEdge("C", "D", accessible = true, distanceMeters = 10.0)),
+    )
+    private val twoFloorMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(floor0, floor1),
+        floorTransitions = listOf(FloorTransition(fromNodeId = "B", fromFloorIndex = 0, toNodeId = "C", toFloorIndex = 1, costMeters = 15.0)),
+    )
+
+    @Test
+    fun `a multi-floor route crosses via a FloorTransition`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0, floor = 0, timestampMs = 0L)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = twoFloorMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(listOf("A", "B", "C", "D"), states.last().route.map { it.id })
+    }
+
+    @Test
+    fun `pendingFloorChange appears on reaching the transition, and the leg instruction says to change floors`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, floor = 0, timestampMs = 0L),
+            position(0.0, 9.0, floor = 0, timestampMs = 1_000L), // within arrival radius of B
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = twoFloorMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+        )
+
+        val states = orchestrator.start().toList()
+
+        val hint = states.last().pendingFloorChange
+        assertEquals("C", hint?.targetNodeId)
+        assertEquals(1, hint?.targetFloor)
+        val guidance = feedback.emitted.last { it.id.startsWith("route-guide-") }
+        assertTrue(guidance.message.contains("kat değiştir"))
+    }
+
+    @Test
+    fun `confirming a floor change clears pendingFloorChange and the route continues`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, floor = 0, timestampMs = 0L),
+            position(0.0, 9.0, floor = 0, timestampMs = 1_000L), // reaches B, floor change pending
+            position(0.0, 0.0, floor = 1, timestampMs = 2_000L), // "kat değiştirdim": reset onto C
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = twoFloorMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(null, states.last().pendingFloorChange)
+    }
+
+    @Test
+    fun `proximity never advances across a floor the user hasn't actually confirmed`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, floor = 0, timestampMs = 0L),
+            position(0.0, 9.0, floor = 0, timestampMs = 1_000L), // reaches B, floor change pending
+            // Coincidentally lands on C's (x, y) but still reports floor 0 — must not
+            // count as having reached C, or a stray PDR reading could silently skip
+            // the floor confirmation the user never actually gave.
+            position(0.0, 0.0, floor = 0, timestampMs = 2_000L),
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = twoFloorMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals("C", states.last().pendingFloorChange?.targetNodeId)
+        assertEquals(listOf("A", "B", "C", "D"), states.last().route.map { it.id })
     }
 }

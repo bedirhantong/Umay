@@ -17,7 +17,7 @@ class PdrIntegrator(
     startY: Double = 0.0,
     startHeadingDeg: Double = 0.0,
     startAccuracyMeters: Double = DEFAULT_BASE_ACCURACY_METERS,
-    private val floor: Int = 0,
+    private var floor: Int = 0,
     private val driftPerStepMeters: Double = DEFAULT_DRIFT_PER_STEP_METERS,
 ) {
     private var x = startX
@@ -30,6 +30,15 @@ class PdrIntegrator(
         this.y = y
         this.headingDeg = normalizeDegrees(headingDeg)
         this.accuracyMeters = accuracyMeters
+    }
+
+    // Stairs/elevator crossing confirmed by the user (there's no barometer-based
+    // detection): jumps straight to the arrival node's surveyed (x, y) on the new
+    // floor, the same way resetTo() snaps to a fresh fix, since the old floor's
+    // coordinates have nothing to do with the new one's origin.
+    fun changeFloor(newFloor: Int, x: Double, y: Double, headingDeg: Double) {
+        floor = newFloor
+        resetTo(x, y, headingDeg, DEFAULT_BASE_ACCURACY_METERS)
     }
 
     fun integrate(step: StepEvent): Position {

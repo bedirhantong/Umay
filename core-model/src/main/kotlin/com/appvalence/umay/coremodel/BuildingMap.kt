@@ -36,8 +36,20 @@ data class FloorMap(
     val edges: List<MapEdge>,
 )
 
+// A stairs/elevator crossing between two nodes on different floors — the only way
+// routing can move between floors, since a FloorMap's edges never span floors.
+@Serializable
+data class FloorTransition(
+    val fromNodeId: String,
+    val fromFloorIndex: Int,
+    val toNodeId: String,
+    val toFloorIndex: Int,
+    val costMeters: Double,
+)
+
 @Serializable
 data class BuildingMap(
     val id: String,
     val floors: List<FloorMap>,
+    val floorTransitions: List<FloorTransition> = emptyList(),
 )

@@ -24,8 +24,9 @@ import kotlin.math.roundToInt
  * Combines the latest position and obstacle streams against the static
  * building map into a single [NavigationState] (FR-10/FR-11/FR-12):
  *
- * - Plans (and, on the first fix for a floor, re-plans) an A* route from
- *   [startNodeId] to [destinationNodeId] via [AStarPathfinder].
+ * - Plans (once) an A* route from [startNodeId] to [destinationNodeId] across
+ *   the *whole* building via [AStarPathfinder.findPathAcrossFloors] — the
+ *   route can cross floors via stairs/elevators ([BuildingMap.floorTransitions]).
  * - Speaks turn-by-turn route guidance as the user walks: a leg instruction
  *   ("X metre ilerle, sonra sağa dön") each time they reach a route node,
  *   repeated periodically while still on the same leg so a user who can't
@@ -33,13 +34,19 @@ import kotlin.math.roundToInt
  *   announcement. This is the actual point of the app — a blind user cannot
  *   read the on-screen route, so if this orchestrator only spoke about
  *   obstacles, it would never actually guide anyone anywhere.
+ * - When the route's current leg crosses floors, progress can't be tracked by
+ *   proximity (two floors' coordinates come from independent PDR origins) —
+ *   [NavigationState.pendingFloorChange] surfaces this so the UI can offer a
+ *   manual "kat değiştirdim" confirmation (there's no barometer-based
+ *   detection anywhere in this app); confirming it resets live tracking onto
+ *   the new floor, which is what actually lets progress continue.
  * - Raises CRITICAL/WARNING alerts for nearby obstacles, re-alerting on an
  *   interval (not every single frame — that would flood [feedback] with
  *   TTS requests) or immediately on a priority escalation.
  * - When an obstacle is found to be sitting on the current route's next
- *   edge (via [ObstacleEdgeMapper]), blocks that edge and replans from the
- *   nearest graph node to the destination, raising an INFO alert about the
- *   reroute.
+ *   edge on the user's current floor (via [ObstacleEdgeMapper]), blocks that
+ *   edge and replans from the nearest graph node to the destination, raising
+ *   an INFO alert about the reroute.
  *
  * Alerts are forwarded to [feedback] as they're produced.
  */
@@ -51,7 +58,10 @@ class NavigationOrchestrator(
     private val startNodeId: String,
     private val destinationNodeId: String,
 ) {
-    private var plannedFloorIndex: Int? = null
+    private val nodeFloor: Map<String, Int> =
+        map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap()
+
+    private var hasPlannedRoute = false
     private var currentRoute: List<MapNode> = emptyList()
     private val blockedEdges = mutableSetOf<Pair<String, String>>()
     private val lastAlertedAtMsByObstacleId = mutableMapOf<String, Long>()
@@ -64,45 +74,51 @@ class NavigationOrchestrator(
     private var lastLegAnnouncedAtMs = 0L
     private var arrivalAnnounced = false
     private var noRouteAnnounced = false
+    private var pendingFloorChange: FloorChangeHint? = null
 
     fun start(): Flow<NavigationState> =
         combine(positioning.positionUpdates(), perception.obstacleUpdates()) { position, obstacles ->
+            ensureRoute()
             val floorMap = floorMapFor(position.floor)
-            ensureRoute(floorMap)
             val alerts = deriveAlerts(position, obstacles, floorMap)
-            NavigationState(position = position, obstacles = obstacles, alerts = alerts, route = currentRoute)
+            NavigationState(
+                position = position,
+                obstacles = obstacles,
+                alerts = alerts,
+                route = currentRoute,
+                pendingFloorChange = pendingFloorChange,
+            )
         }.onEach { state ->
             state.alerts.forEach(feedback::emit)
         }
 
     private fun floorMapFor(floorIndex: Int): FloorMap? = map.floors.firstOrNull { it.floorIndex == floorIndex }
 
-    private fun ensureRoute(floorMap: FloorMap?) {
-        if (floorMap == null) return
-        // Guard by floor alone, not also "route non-empty": if pathfinding genuinely
-        // found no path, that's a stable fact until a reroute changes blockedEdges,
-        // not something to keep retrying (and re-announcing) every position update.
-        if (plannedFloorIndex == floorMap.floorIndex) return
-        plannedFloorIndex = floorMap.floorIndex
-        currentRoute = AStarPathfinder.findPath(floorMap, startNodeId, destinationNodeId, blockedEdges).orEmpty()
+    private fun ensureRoute() {
+        // The route spans the whole building, not one floor, so there's nothing to
+        // re-key this on — plan once, replan only via an obstacle-triggered reroute.
+        if (hasPlannedRoute) return
+        hasPlannedRoute = true
+        currentRoute = AStarPathfinder.findPathAcrossFloors(map, startNodeId, destinationNodeId, blockedEdges).orEmpty()
+        resetRouteProgress()
+    }
+
+    private fun resetRouteProgress() {
         routeTargetIndex = 1
         lastAnnouncedLegIndex = -1
         arrivalAnnounced = false
         noRouteAnnounced = false
+        pendingFloorChange = null
     }
 
     private fun deriveAlerts(position: Position, obstacles: List<DetectedObstacle>, floorMap: FloorMap?): List<NavigationAlert> {
         // Proximity alerts (FR-12) never depend on a loaded route/map — a person right in
         // front of the camera is dangerous whether or not we know the building's layout.
-        // Rerouting (FR-11) is the only part that genuinely needs a floor map.
+        // Rerouting (FR-11) is the only part that genuinely needs the current floor's map.
         val nodesById = floorMap?.nodes?.associateBy { it.id } ?: emptyMap()
         val alerts = mutableListOf<NavigationAlert>()
 
-        // Route guidance (like rerouting) genuinely needs a floor map — with none
-        // loaded there's no route to have gone missing, so there's nothing to say.
-        if (floorMap != null) {
-            deriveRouteGuidance(position)?.let { alerts += it }
-        }
+        deriveRouteGuidance(position)?.let { alerts += it }
 
         for (obstacle in obstacles) {
             // Proximity alerting and rerouting are independent: an obstacle can be far
@@ -132,6 +148,7 @@ class NavigationOrchestrator(
 
     private fun deriveRouteGuidance(position: Position): NavigationAlert? {
         if (currentRoute.isEmpty()) {
+            pendingFloorChange = null
             if (noRouteAnnounced) return null
             noRouteAnnounced = true
             return NavigationAlert(
@@ -146,25 +163,38 @@ class NavigationOrchestrator(
 
         // Advance toward the next route node each time the user gets close enough to
         // the one they were walking toward, so guidance always describes the leg
-        // that's actually ahead of them, not the one they already finished.
+        // that's actually ahead of them, not the one they already finished. Proximity
+        // is only meaningful on the same floor — two floors' (x, y) come from
+        // independent PDR origins, so a target on a different floor blocks advancement
+        // until the user confirms the crossing (see pendingFloorChange below).
         while (routeTargetIndex < currentRoute.lastIndex) {
             val target = currentRoute[routeTargetIndex]
+            if (nodeFloor[target.id] != position.floor) break
             if (hypot(target.x - position.x, target.y - position.y) > WAYPOINT_ARRIVAL_METERS) break
             routeTargetIndex++
             lastAnnouncedLegIndex = -1 // force an immediate announcement of the new leg
         }
 
-        val destination = currentRoute.last()
-        val distanceToDestination = hypot(destination.x - position.x, destination.y - position.y)
-        if (routeTargetIndex == currentRoute.lastIndex && distanceToDestination <= ARRIVAL_DISTANCE_METERS) {
-            arrivalAnnounced = true
-            return NavigationAlert(
-                id = "arrived-${UUID.randomUUID()}",
-                priority = AlertPriority.INFO,
-                message = "Hedefe ulaştın",
-                relatedObstacle = null,
-                createdAtMs = position.timestampMs,
-            )
+        val target = currentRoute[routeTargetIndex]
+        val targetFloor = nodeFloor[target.id]
+        pendingFloorChange = if (targetFloor != null && targetFloor != position.floor) {
+            FloorChangeHint(target.id, target.name, targetFloor)
+        } else {
+            null
+        }
+
+        if (routeTargetIndex == currentRoute.lastIndex && targetFloor == position.floor) {
+            val distanceToDestination = hypot(target.x - position.x, target.y - position.y)
+            if (distanceToDestination <= ARRIVAL_DISTANCE_METERS) {
+                arrivalAnnounced = true
+                return NavigationAlert(
+                    id = "arrived-${UUID.randomUUID()}",
+                    priority = AlertPriority.INFO,
+                    message = "Hedefe ulaştın",
+                    relatedObstacle = null,
+                    createdAtMs = position.timestampMs,
+                )
+            }
         }
 
         val now = position.timestampMs
@@ -185,15 +215,25 @@ class NavigationOrchestrator(
 
     private fun legInstruction(targetIndex: Int, position: Position): String {
         val target = currentRoute[targetIndex]
-        val distanceRounded = (hypot(target.x - position.x, target.y - position.y) * 10).roundToInt() / 10.0
+        val previous = currentRoute[targetIndex - 1]
 
+        if (nodeFloor[target.id] != nodeFloor[previous.id]) {
+            return "${target.name}'a git, sonra merdiven veya asansörle kat değiştir"
+        }
+
+        val distanceRounded = (hypot(target.x - position.x, target.y - position.y) * 10).roundToInt() / 10.0
         if (targetIndex == currentRoute.lastIndex) {
             return "Hedefe yaklaşık $distanceRounded metre kaldı"
         }
 
-        val previous = currentRoute[targetIndex - 1]
         val next = currentRoute[targetIndex + 1]
-        val turn = classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))
+        // A turn direction needs both bearings on the same floor as target — if the
+        // *next* leg crosses floors, there's nothing meaningful to compare against.
+        val turn = if (nodeFloor[next.id] == nodeFloor[target.id]) {
+            classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))
+        } else {
+            null
+        }
         return if (turn == null) {
             "${target.name}'a doğru yaklaşık $distanceRounded metre ilerle"
         } else {
@@ -234,8 +274,11 @@ class NavigationOrchestrator(
         if (!blockedEdges.add(blocked.fromId to blocked.toId)) return null // already accounted for
 
         val nearestNode = nodesById.values.minByOrNull { hypot(it.x - position.x, it.y - position.y) } ?: return null
-        val rerouted = AStarPathfinder.findPath(floorMap, nearestNode.id, destinationNodeId, blockedEdges) ?: return null
+        // The destination may be on a different floor than this obstacle, so replanning
+        // has to consider the whole building again, not just the floor it was found on.
+        val rerouted = AStarPathfinder.findPathAcrossFloors(map, nearestNode.id, destinationNodeId, blockedEdges) ?: return null
         currentRoute = rerouted
+        resetRouteProgress()
 
         return NavigationAlert(
             id = "reroute-${blocked.fromId}-${blocked.toId}-${UUID.randomUUID()}",

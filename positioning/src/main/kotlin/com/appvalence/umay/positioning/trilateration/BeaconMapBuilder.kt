@@ -2,6 +2,7 @@ package com.appvalence.umay.positioning.trilateration
 
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.FloorMap
+import com.appvalence.umay.coremodel.FloorTransition
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
@@ -47,6 +48,12 @@ object BeaconMapBuilder {
      * floor with no tagged waypoints but with beacon results falls back to
      * [build]'s proximity-connect behavior, so the tool stays useful even if
      * the user tags nothing on that floor.
+     *
+     * Wherever two *consecutive* tags in [taggedWaypoints] land on different
+     * floors, that's a stairs/elevator crossing caught mid-walk (tag, change
+     * floor via the recording screen's stepper, keep walking, tag again) — it
+     * becomes a [FloorTransition] rather than being silently dropped when
+     * waypoints get grouped by floor below.
      */
     fun buildFromWaypoints(
         buildingId: String,
@@ -54,30 +61,51 @@ object BeaconMapBuilder {
         beaconResults: List<BeaconSurveyResult> = emptyList(),
         maxEdgeDistanceMeters: Double = DEFAULT_MAX_EDGE_DISTANCE_METERS,
     ): BuildingMap {
-        val waypointsByFloor = taggedWaypoints.groupBy { it.floor }
+        // Assigned once, up front, so the same id can be used both inside each
+        // floor's node list and when detecting cross-floor transitions below.
+        val waypointNodeIds = taggedWaypoints.map { UUID.randomUUID().toString() }
+
+        val waypointIndicesByFloor = taggedWaypoints.indices.groupBy { taggedWaypoints[it].floor }
         val beaconResultsByFloor = beaconResults.groupBy { it.floor }
-        val floorIndices = (waypointsByFloor.keys + beaconResultsByFloor.keys).toSortedSet()
+        val floorIndices = (waypointIndicesByFloor.keys + beaconResultsByFloor.keys).toSortedSet()
 
         val floors = floorIndices.map { floorIndex ->
-            val floorWaypoints = waypointsByFloor[floorIndex].orEmpty()
+            val indices = waypointIndicesByFloor[floorIndex].orEmpty()
             val floorBeaconResults = beaconResultsByFloor[floorIndex].orEmpty()
-            if (floorWaypoints.isEmpty()) {
+            if (indices.isEmpty()) {
                 buildFloor(floorIndex, floorBeaconResults, maxEdgeDistanceMeters)
             } else {
-                buildWaypointFloor(floorIndex, floorWaypoints, floorBeaconResults)
+                buildWaypointFloor(floorIndex, indices, taggedWaypoints, waypointNodeIds, floorBeaconResults)
             }
         }
-        return BuildingMap(id = buildingId, floors = floors)
+
+        val transitions = (1 until taggedWaypoints.size).mapNotNull { i ->
+            val previous = taggedWaypoints[i - 1]
+            val current = taggedWaypoints[i]
+            if (previous.floor == current.floor) return@mapNotNull null
+            FloorTransition(
+                fromNodeId = waypointNodeIds[i - 1],
+                fromFloorIndex = previous.floor,
+                toNodeId = waypointNodeIds[i],
+                toFloorIndex = current.floor,
+                costMeters = FLOOR_TRANSITION_COST_METERS,
+            )
+        }
+
+        return BuildingMap(id = buildingId, floors = floors, floorTransitions = transitions)
     }
 
     private fun buildWaypointFloor(
         floorIndex: Int,
+        indices: List<Int>,
         taggedWaypoints: List<TaggedWaypoint>,
+        waypointNodeIds: List<String>,
         beaconResults: List<BeaconSurveyResult>,
     ): FloorMap {
-        val waypointNodes = taggedWaypoints.map { waypoint ->
+        val waypointNodes = indices.map { i ->
+            val waypoint = taggedWaypoints[i]
             MapNode(
-                id = UUID.randomUUID().toString(),
+                id = waypointNodeIds[i],
                 x = waypoint.x,
                 y = waypoint.y,
                 type = NodeType.WAYPOINT,
@@ -127,4 +155,9 @@ object BeaconMapBuilder {
     }
 
     const val DEFAULT_MAX_EDGE_DISTANCE_METERS = 20.0
+
+    // A fixed penalty, not a measured distance — stairs/elevators cost real time and
+    // effort A* should weigh against a same-floor detour, but there's no PDR distance
+    // to measure across a floor change (see FloorTransition).
+    const val FLOOR_TRANSITION_COST_METERS = 15.0
 }

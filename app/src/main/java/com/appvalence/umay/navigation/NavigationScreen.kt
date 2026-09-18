@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -55,7 +56,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
-import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.feedback.TtsFeedbackController
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
@@ -86,13 +86,14 @@ private const val ARRIVAL_DISTANCE_METERS = 1.5
 /**
  * Faz 3 end-to-end screen: loads the [BuildingMap] saved from the beacon
  * survey (see [BuildingMapStorage], [BeaconScannerScreen]), lets the
- * operator pick a start/destination point by name, then runs the real
- * [NavigationOrchestrator] — live position fused from continuous PDR and
- * sparse RSSI-fingerprint corrections (see [PositionFusionEngine]), camera
- * obstacle detection, A* routing with obstacle-triggered rerouting, TTS
- * alerts — and presents it the way a consumer navigation app would: one big
- * status message people can read at a glance, with the technical detail (raw
- * coordinates, node ids) folded away rather than in their face.
+ * operator pick a start/destination point by name from *any* floor, then
+ * runs the real [NavigationOrchestrator] — live position fused from
+ * continuous PDR and sparse RSSI-fingerprint corrections (see
+ * [PositionFusionEngine]), camera obstacle detection, A* routing across
+ * floors with obstacle-triggered rerouting, TTS alerts — and presents it the
+ * way a consumer navigation app would: one big status message people can
+ * read at a glance, with the technical detail (raw coordinates, node ids)
+ * folded away rather than in their face.
  */
 @Composable
 fun NavigationScreen(modifier: Modifier = Modifier) {
@@ -137,19 +138,23 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             return@Column
         }
 
-        val floorMap = map.floors.firstOrNull()
-        if (floorMap == null || floorMap.nodes.isEmpty()) {
+        val allNodes = map.floors.flatMap { it.nodes }
+        if (allNodes.isEmpty()) {
             EmptyState(icon = Icons.Filled.Map, title = "Harita boş", message = "Kaydedilmiş haritada hiç nokta yok.")
             return@Column
         }
+        val nodeFloor = remember(map) { map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap() }
+        val showFloorInLabels = map.floors.size > 1
 
         var startIndex by remember { mutableIntStateOf(0) }
-        var destinationIndex by remember { mutableIntStateOf((floorMap.nodes.size - 1).coerceAtLeast(0)) }
+        var destinationIndex by remember { mutableIntStateOf((allNodes.size - 1).coerceAtLeast(0)) }
         var isNavigating by remember { mutableStateOf(false) }
 
         if (!isNavigating) {
             RoutePicker(
-                nodes = floorMap.nodes,
+                nodes = allNodes,
+                nodeFloor = nodeFloor,
+                showFloor = showFloorInLabels,
                 startIndex = startIndex,
                 destinationIndex = destinationIndex,
                 onStartChange = { startIndex = it },
@@ -161,9 +166,9 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                 context = context,
                 lifecycleOwner = lifecycleOwner,
                 buildingMap = map,
-                floorMap = floorMap,
-                startNodeId = floorMap.nodes[startIndex].id,
-                destinationNode = floorMap.nodes[destinationIndex],
+                nodeFloor = nodeFloor,
+                startNodeId = allNodes[startIndex].id,
+                destinationNode = allNodes[destinationIndex],
                 onStop = { isNavigating = false },
             )
         }
@@ -188,6 +193,8 @@ private fun EmptyState(icon: ImageVector, title: String, message: String, modifi
 @Composable
 private fun RoutePicker(
     nodes: List<MapNode>,
+    nodeFloor: Map<String, Int>,
+    showFloor: Boolean,
     startIndex: Int,
     destinationIndex: Int,
     onStartChange: (Int) -> Unit,
@@ -201,11 +208,21 @@ private fun RoutePicker(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
     )
-    NodeDropdown(label = "Bulunduğum yer", icon = Icons.Filled.LocationSearching, nodes = nodes, selectedIndex = startIndex, onIndexChange = onStartChange)
+    NodeDropdown(
+        label = "Bulunduğum yer",
+        icon = Icons.Filled.LocationSearching,
+        nodes = nodes,
+        nodeFloor = nodeFloor,
+        showFloor = showFloor,
+        selectedIndex = startIndex,
+        onIndexChange = onStartChange,
+    )
     NodeDropdown(
         label = "Gitmek istediğim yer",
         icon = Icons.Filled.Flag,
         nodes = nodes,
+        nodeFloor = nodeFloor,
+        showFloor = showFloor,
         selectedIndex = destinationIndex,
         onIndexChange = onDestinationChange,
         modifier = Modifier.padding(top = 12.dp),
@@ -220,12 +237,17 @@ private fun RoutePicker(
     }
 }
 
+private fun nodeLabel(node: MapNode, nodeFloor: Map<String, Int>, showFloor: Boolean): String =
+    if (showFloor) "${node.name} (Kat ${nodeFloor[node.id] ?: 0})" else node.name
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NodeDropdown(
     label: String,
     icon: ImageVector,
     nodes: List<MapNode>,
+    nodeFloor: Map<String, Int>,
+    showFloor: Boolean,
     selectedIndex: Int,
     onIndexChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -233,7 +255,7 @@ private fun NodeDropdown(
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
         OutlinedTextField(
-            value = nodes[selectedIndex].name,
+            value = nodeLabel(nodes[selectedIndex], nodeFloor, showFloor),
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
@@ -244,7 +266,7 @@ private fun NodeDropdown(
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.exposedDropdownSize()) {
             nodes.forEachIndexed { index, node ->
                 DropdownMenuItem(
-                    text = { Text(node.name) },
+                    text = { Text(nodeLabel(node, nodeFloor, showFloor)) },
                     onClick = {
                         onIndexChange(index)
                         expanded = false
@@ -268,7 +290,7 @@ private fun ActiveNavigation(
     context: Context,
     lifecycleOwner: LifecycleOwner,
     buildingMap: BuildingMap,
-    floorMap: FloorMap,
+    nodeFloor: Map<String, Int>,
     startNodeId: String,
     destinationNode: MapNode,
     onStop: () -> Unit,
@@ -277,17 +299,22 @@ private fun ActiveNavigation(
     val feedback = remember { TtsFeedbackController(context) }
     val detector = remember { CameraXObstacleDetector(context) }
     val stepDetector = remember { StepDetector(context) }
+    val allNodes = remember(buildingMap) { buildingMap.floors.flatMap { it.nodes } }
+    val allNodesById = remember(allNodes) { allNodes.associateBy { it.id } }
+    val startFloorIndex = remember { nodeFloor[startNodeId] ?: 0 }
 
     var fingerprintCorrectionCount by remember { mutableIntStateOf(0) }
 
+    // Hoisted out of the orchestrator's own remember block so the "Kat değiştirdim"
+    // button below can reset it directly when the user confirms a floor crossing —
+    // there's no barometer to detect that automatically (see NavigationOrchestrator's
+    // pendingFloorChange).
+    val pdrEngine = remember {
+        val startNode = allNodesById.getValue(startNodeId)
+        PdrPositioningEngine(stepDetector = stepDetector, startX = startNode.x, startY = startNode.y, floor = startFloorIndex)
+    }
+
     val orchestrator = remember {
-        val startNode = floorMap.nodes.first { it.id == startNodeId }
-        val pdrEngine = PdrPositioningEngine(
-            stepDetector = stepDetector,
-            startX = startNode.x,
-            startY = startNode.y,
-            floor = floorMap.floorIndex,
-        )
         // RSSI-to-distance trilateration is too noisy in real buildings to trust as
         // the primary signal (see BeaconMapBuilder's field notes); instead we walk
         // continuously via PDR and only correct against named waypoints' recorded
@@ -295,8 +322,8 @@ private fun ActiveNavigation(
         // approach for indoor radio positioning.
         val fingerprintEngine = FingerprintPositioningEngine(
             beaconReadings = scanner.beaconUpdates(),
-            waypoints = floorMap.nodes.filter { it.fingerprint.isNotEmpty() },
-            floor = floorMap.floorIndex,
+            waypoints = allNodes.filter { it.fingerprint.isNotEmpty() },
+            floor = startFloorIndex,
         )
         val fusion = PositionFusionEngine(pdrResettable = pdrEngine)
         val fusedPositioning = object : PositioningEngine {
@@ -339,8 +366,17 @@ private fun ActiveNavigation(
     }
 
     val currentState = state
-    val status = currentState.toNavigationStatus(destinationNode)
-    val hasFingerprintedWaypoints = remember(floorMap) { floorMap.nodes.any { it.fingerprint.isNotEmpty() } }
+    val destinationFloor = remember { nodeFloor[destinationNode.id] ?: 0 }
+    val status = currentState.toNavigationStatus(destinationNode, destinationFloor)
+    val hasFingerprintedWaypoints = remember(allNodes) { allNodes.any { it.fingerprint.isNotEmpty() } }
+
+    val currentFloorIndex = currentState?.position?.floor ?: startFloorIndex
+    val currentFloorMap = remember(buildingMap, currentFloorIndex) {
+        buildingMap.floors.firstOrNull { it.floorIndex == currentFloorIndex } ?: buildingMap.floors.first()
+    }
+    val routeOnCurrentFloor = remember(currentState?.route, currentFloorIndex) {
+        currentState?.route.orEmpty().filter { nodeFloor[it.id] == currentFloorIndex }
+    }
 
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         StatusBanner(status)
@@ -361,6 +397,26 @@ private fun ActiveNavigation(
             modifier = Modifier.padding(top = 16.dp, bottom = 16.dp),
         )
 
+        val pendingFloorChange = currentState?.pendingFloorChange
+        if (pendingFloorChange != null) {
+            val direction = if (pendingFloorChange.targetFloor > currentFloorIndex) "yukarı" else "aşağı"
+            Button(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                onClick = {
+                    val targetNode = allNodesById[pendingFloorChange.targetNodeId] ?: return@Button
+                    pdrEngine.changeFloor(
+                        newFloor = pendingFloorChange.targetFloor,
+                        x = targetNode.x,
+                        y = targetNode.y,
+                        headingDeg = currentState.position.headingDeg,
+                    )
+                },
+            ) {
+                Icon(Icons.Filled.SwapVert, contentDescription = null)
+                Text(text = "Kat değiştirdim ($direction, Kat ${pendingFloorChange.targetFloor})", modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+
         Button(
             modifier = Modifier.fillMaxWidth(),
             onClick = onStop,
@@ -370,35 +426,33 @@ private fun ActiveNavigation(
         }
 
         NavigationMapCanvas(
-            floorMap = floorMap,
-            route = currentState?.route ?: emptyList(),
+            floorMap = currentFloorMap,
+            route = routeOnCurrentFloor,
             position = currentState?.position,
             obstacles = currentState?.obstacles ?: emptyList(),
             modifier = Modifier.padding(top = 16.dp),
         )
         Text(
-            text = "⚪ bina grafı   🔵 rota   🟠 hedef   🟢 senin konumun   🔴 algılanan engel",
+            text = "⚪ bina grafı (Kat $currentFloorIndex)   🔵 rota   🟠 hedef   🟢 senin konumun   🔴 algılanan engel",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
 
         if (currentState != null) {
-            val nodesById = floorMap.nodes.associateBy { it.id }
             Text(
-                text = "Rota: " + currentState.route.joinToString(" → ") { nodesById[it.id]?.name ?: it.name },
+                text = "Rota: " + currentState.route.joinToString(" → ") { allNodesById[it.id]?.name ?: it.name },
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 12.dp),
             )
             Text(
                 text = "Teknik: x=${currentState.position.x.round1()} y=${currentState.position.y.round1()} " +
-                    "doğruluk≈${currentState.position.accuracyMeters.round1()}m kaynak=${currentState.position.source} " +
-                    "fingerprint düzeltmesi=$fingerprintCorrectionCount",
+                    "kat=${currentState.position.floor} doğruluk≈${currentState.position.accuracyMeters.round1()}m " +
+                    "kaynak=${currentState.position.source} fingerprint düzeltmesi=$fingerprintCorrectionCount",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-
     }
 }
 
@@ -421,14 +475,18 @@ private fun StatusBanner(status: NavigationStatus) {
     }
 }
 
-private fun NavigationState?.toNavigationStatus(destinationNode: MapNode): NavigationStatus {
+private fun NavigationState?.toNavigationStatus(destinationNode: MapNode, destinationFloor: Int): NavigationStatus {
     if (this == null) return NavigationStatus.SEARCHING
+    if (pendingFloorChange != null) return NavigationStatus.ON_ROUTE
 
     val hasCritical = alerts.any { it.priority == AlertPriority.CRITICAL }
     val hasWarning = alerts.any { it.priority == AlertPriority.WARNING }
     if (hasCritical) return NavigationStatus.CRITICAL
     if (hasWarning) return NavigationStatus.WARNING
 
+    // Arrival can only be judged once the user is actually on the destination's floor
+    // — comparing (x, y) across floors is meaningless (independent PDR origins).
+    if (position.floor != destinationFloor) return NavigationStatus.ON_ROUTE
     val distanceToDestination = hypot(position.x - destinationNode.x, position.y - destinationNode.y)
     if (distanceToDestination <= ARRIVAL_DISTANCE_METERS) return NavigationStatus.ARRIVED
 
