@@ -31,7 +31,7 @@ import kotlin.math.sign
 class BarometricFloorChangeDetector(
     private val floorHeightMeters: Double = DEFAULT_FLOOR_HEIGHT_METERS,
 ) {
-    private val samples = ArrayDeque<Pair<Long, Double>>() // (timestampMs, altitude meters)
+    private val window = AltitudeWindow(SMOOTHING_WINDOW_MS)
     private var expectedFloorDelta = 0
     private var baselineMeters: Double? = null
 
@@ -44,7 +44,7 @@ class BarometricFloorChangeDetector(
         expectedFloorDelta = delta
         // Baseline is where the user was *before* the climb started; null until the
         // first reading arrives if nothing has been measured yet.
-        baselineMeters = smoothedMeters()
+        baselineMeters = window.smoothedMeters()
     }
 
     fun disarm() {
@@ -55,39 +55,23 @@ class BarometricFloorChangeDetector(
     /** Altitude change since [arm], for display/logging; null when not armed or no reading yet. */
     fun climbedMeters(): Double? {
         val baseline = baselineMeters ?: return null
-        return smoothedMeters()?.minus(baseline)
+        return window.smoothedMeters()?.minus(baseline)
     }
 
     fun onPressure(hPa: Double, timestampMs: Long): Boolean {
-        samples.addLast(timestampMs to PressureAltitude.metersFromHpa(hPa))
-        while (samples.isNotEmpty() && timestampMs - samples.first().first > SMOOTHING_WINDOW_MS) samples.removeFirst()
+        window.add(hPa, timestampMs)
 
         if (!isArmed) return false
-        val smoothed = smoothedMeters() ?: return false
+        val smoothed = window.smoothedMeters() ?: return false
         val baseline = baselineMeters ?: smoothed.also { baselineMeters = it }
 
         val climbedInExpectedDirection = (smoothed - baseline) * sign(expectedFloorDelta.toDouble())
         val needed = CONFIRM_FRACTION * floorHeightMeters * abs(expectedFloorDelta)
         if (climbedInExpectedDirection < needed) return false
-        if (abs(verticalSpeedMps() ?: return false) > SETTLED_VERTICAL_SPEED_MPS) return false
+        if (abs(window.verticalSpeedMps() ?: return false) > SETTLED_VERTICAL_SPEED_MPS) return false
 
         disarm()
         return true
-    }
-
-    private fun smoothedMeters(): Double? = samples.takeIf { it.isNotEmpty() }?.map { it.second }?.average()
-
-    // Older half of the window vs. newer half: a slope estimate that's robust to
-    // single noisy readings, unlike comparing the two most recent samples.
-    private fun verticalSpeedMps(): Double? {
-        if (samples.size < 4) return null
-        val midpoint = (samples.first().first + samples.last().first) / 2
-        val older = samples.filter { it.first <= midpoint }
-        val newer = samples.filter { it.first > midpoint }
-        if (older.isEmpty() || newer.isEmpty()) return null
-        val dtSeconds = (newer.map { it.first }.average() - older.map { it.first }.average()) / 1000.0
-        if (dtSeconds <= 0) return null
-        return (newer.map { it.second }.average() - older.map { it.second }.average()) / dtSeconds
     }
 
     companion object {
