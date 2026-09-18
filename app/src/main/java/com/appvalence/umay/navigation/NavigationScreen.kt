@@ -6,9 +6,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.Map
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,6 +37,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
@@ -54,6 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.MapNode
@@ -104,22 +110,37 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
     var hasPermissions by remember {
         mutableStateOf(NAVIGATION_PERMISSIONS.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED })
     }
+    var rationaleShown by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         hasPermissions = grants.values.all { it }
     }
-    LaunchedEffect(Unit) {
-        if (!hasPermissions) permissionLauncher.launch(NAVIGATION_PERMISSIONS)
-    }
 
-    var buildingMap by remember { mutableStateOf(BuildingMapStorage(context).load()) }
+    var buildings by remember { mutableStateOf(BuildingMapStorage(context).listBuildings()) }
+    var selectedBuildingId by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         if (!hasPermissions) {
-            EmptyState(
-                icon = Icons.Filled.LocationSearching,
-                title = "İzin gerekiyor",
-                message = "Yönlendirme için kamera, konum ve Bluetooth izni vermen gerekiyor.",
-            )
+            if (!rationaleShown) {
+                PermissionRationale(
+                    icon = Icons.Filled.LocationSearching,
+                    title = "İzin gerekiyor",
+                    message = "Nerede olduğunu bulmak için konum ve Bluetooth'a, önündeki engelleri görmek için " +
+                        "kameraya ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.",
+                    onContinue = {
+                        rationaleShown = true
+                        permissionLauncher.launch(NAVIGATION_PERMISSIONS)
+                    },
+                )
+            } else {
+                EmptyState(
+                    icon = Icons.Filled.LocationSearching,
+                    title = "İzin verilmedi",
+                    message = "Yönlendirme için kamera, konum ve Bluetooth izni gerekiyor.",
+                )
+                TextButton(modifier = Modifier.padding(top = 8.dp), onClick = { permissionLauncher.launch(NAVIGATION_PERMISSIONS) }) {
+                    Text("Tekrar dene")
+                }
+            }
             return@Column
         }
 
@@ -132,8 +153,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             return@Column
         }
 
-        val map = buildingMap
-        if (map == null) {
+        if (buildings.isEmpty()) {
             EmptyState(
                 icon = Icons.Filled.Map,
                 title = "Henüz bir harita yok",
@@ -141,10 +161,25 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             )
             TextButton(
                 modifier = Modifier.padding(top = 8.dp),
-                onClick = { buildingMap = BuildingMapStorage(context).load() },
+                onClick = { buildings = BuildingMapStorage(context).listBuildings() },
             ) {
                 Text("Yeniden dene")
             }
+            return@Column
+        }
+
+        // Skip the picker entirely when there's only one building — that's the common
+        // case, and making someone choose from a list of one is pure friction.
+        val map = if (buildings.size == 1) buildings.single() else buildings.firstOrNull { it.id == selectedBuildingId }
+        if (map == null) {
+            BuildingPicker(
+                buildings = buildings,
+                onSelect = { selectedBuildingId = it.id },
+                onDelete = { building ->
+                    BuildingMapStorage(context).delete(building.id)
+                    buildings = BuildingMapStorage(context).listBuildings()
+                },
+            )
             return@Column
         }
 
@@ -156,11 +191,16 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
         val nodeFloor = remember(map) { map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap() }
         val showFloorInLabels = map.floors.size > 1
 
-        var startIndex by remember { mutableIntStateOf(0) }
-        var destinationIndex by remember { mutableIntStateOf((allNodes.size - 1).coerceAtLeast(0)) }
-        var isNavigating by remember { mutableStateOf(false) }
+        var startIndex by remember(map.id) { mutableIntStateOf(0) }
+        var destinationIndex by remember(map.id) { mutableIntStateOf((allNodes.size - 1).coerceAtLeast(0)) }
+        var isNavigating by remember(map.id) { mutableStateOf(false) }
 
         if (!isNavigating) {
+            if (buildings.size > 1) {
+                TextButton(modifier = Modifier.padding(bottom = 8.dp), onClick = { selectedBuildingId = null }) {
+                    Text("Bina değiştir (şu an: ${map.id})")
+                }
+            }
             RoutePicker(
                 nodes = allNodes,
                 nodeFloor = nodeFloor,
@@ -195,6 +235,63 @@ private fun EmptyState(icon: ImageVector, title: String, message: String, modifi
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun BuildingPicker(buildings: List<BuildingMap>, onSelect: (BuildingMap) -> Unit, onDelete: (BuildingMap) -> Unit) {
+    var pendingDelete by remember { mutableStateOf<BuildingMap?>(null) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(text = "Hangi binada gitmek istiyorsun?", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            text = "Birden fazla saha kaydın var — birini seç.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+        )
+        buildings.forEach { building ->
+            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp).clickable { onSelect(building) },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(text = building.id, style = MaterialTheme.typography.titleMedium)
+                        val nodeCount = building.floors.sumOf { it.nodes.size }
+                        Text(
+                            text = "${building.floors.size} kat, $nodeCount nokta",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { pendingDelete = building }) {
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = "${building.id} binasını sil")
+                    }
+                }
+            }
+        }
+    }
+
+    val toDelete = pendingDelete
+    if (toDelete != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("'${toDelete.id}' silinsin mi?") },
+            text = { Text("Bu binanın haritası kalıcı olarak silinecek. Bu işlem geri alınamaz.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(toDelete)
+                    pendingDelete = null
+                }) {
+                    Text("Sil", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Vazgeç") }
+            },
         )
     }
 }

@@ -61,6 +61,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
@@ -129,19 +130,37 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
     var hasPermissions by remember {
         mutableStateOf(REQUIRED_BLE_PERMISSIONS.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED })
     }
+    var rationaleShown by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         hasPermissions = grants.values.all { it }
     }
-    LaunchedEffect(Unit) {
-        if (!hasPermissions) permissionLauncher.launch(REQUIRED_BLE_PERMISSIONS)
-    }
 
     if (!hasPermissions) {
-        Text(
-            text = "Beacon taraması için konum ve Bluetooth izni gerekiyor.",
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = modifier.padding(16.dp),
-        )
+        if (!rationaleShown) {
+            PermissionRationale(
+                icon = Icons.Filled.LocationOn,
+                title = "İzin gerekiyor",
+                message = "Binadaki beacon'ları bulmak için konum ve Bluetooth'a ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.",
+                onContinue = {
+                    rationaleShown = true
+                    permissionLauncher.launch(REQUIRED_BLE_PERMISSIONS)
+                },
+                modifier = modifier,
+            )
+        } else {
+            Column(modifier = modifier.padding(16.dp)) {
+                Text(
+                    text = "Beacon taraması için konum ve Bluetooth izni gerekiyor.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                TextButton(
+                    modifier = Modifier.padding(top = 8.dp),
+                    onClick = { permissionLauncher.launch(REQUIRED_BLE_PERMISSIONS) },
+                ) {
+                    Text("Tekrar dene")
+                }
+            }
+        }
         return
     }
 
@@ -511,8 +530,11 @@ private fun WaypointTaggingSection(
                     val typeLabel = TAGGABLE_HAZARD_TYPES.firstOrNull { it.first == waypoint.type }?.second
                     val label = if (typeLabel != null) "${waypoint.name} ($typeLabel, kat ${waypoint.floor})" else "${waypoint.name} (kat ${waypoint.floor})"
                     Text(text = label, style = MaterialTheme.typography.bodyMedium)
+                    // Includes the waypoint's own name, not just "Sil" — a screen reader
+                    // swiping past several tagged waypoints would otherwise hear the same
+                    // ambiguous "Sil, düğme" repeated with no way to tell which is which.
                     IconButton(onClick = { onDelete(index) }) {
-                        Icon(Icons.Filled.DeleteOutline, contentDescription = "Sil")
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = "${waypoint.name} sil")
                     }
                 }
             }
@@ -529,6 +551,7 @@ private fun SaveMapCard(
 ) {
     var saveMessage by remember { mutableStateOf<String?>(null) }
     var saveFailed by remember { mutableStateOf(false) }
+    var buildingName by remember { mutableStateOf("") }
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(modifier = Modifier.padding(16.dp)) {
             if (results.isEmpty() && taggedWaypoints.isEmpty()) {
@@ -547,11 +570,25 @@ private fun SaveMapCard(
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp),
             )
+            OutlinedTextField(
+                value = buildingName,
+                onValueChange = { buildingName = it },
+                label = { Text("Bina adı") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            )
+            Text(
+                text = "Aynı isimde kayıtlı bir bina varsa haritası bununla güncellenir.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
             Button(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                enabled = buildingName.isNotBlank(),
                 onClick = {
                     val map = BeaconMapBuilder.buildFromWaypoints(
-                        buildingId = "umay-building",
+                        buildingId = buildingName.trim(),
                         taggedWaypoints = taggedWaypoints,
                         beaconResults = results,
                     )
