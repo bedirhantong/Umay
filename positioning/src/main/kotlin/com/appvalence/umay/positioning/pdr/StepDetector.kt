@@ -41,10 +41,21 @@ import kotlin.math.sqrt
  */
 class StepDetector(context: Context) {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-    private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    private val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+    private val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val rotationVector: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
 
     fun stepEvents(): Flow<StepEvent> = callbackFlow {
+        val accel = accelerometer
+        val rotation = rotationVector
+        if (accel == null || rotation == null) {
+            // SensorManager.registerListener throws on a null Sensor — this device is
+            // simply missing hardware this app's whole positioning model depends on.
+            // Callers should check isAvailable(context) up front (see NavigationScreen/
+            // BeaconScannerScreen's permission-style gate) rather than rely on this catch.
+            close(IllegalStateException("Bu cihazda gerekli hareket sensörleri yok (ivmeölçer veya jiroskop eksik)"))
+            return@callbackFlow
+        }
+
         var lastStepTimestampMs = 0L
         var currentHeadingDeg = 0f
         var lastHeadingDeg = 0f
@@ -121,8 +132,8 @@ class StepDetector(context: Context) {
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
 
-        sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_GAME)
-        sensorManager.registerListener(listener, rotationVector, SensorManager.SENSOR_DELAY_GAME)
+        sensorManager.registerListener(listener, accel, SensorManager.SENSOR_DELAY_GAME)
+        sensorManager.registerListener(listener, rotation, SensorManager.SENSOR_DELAY_GAME)
 
         awaitClose { sensorManager.unregisterListener(listener) }
     }
@@ -140,5 +151,12 @@ class StepDetector(context: Context) {
         const val STEP_RISE_THRESHOLD_MPS2 = 1.2
         const val STEP_FALL_THRESHOLD_MPS2 = -0.5
         const val BASELINE_TIME_CONSTANT_SECONDS = 2.0
+
+        /** Whether this device has the hardware [StepDetector] needs — check before recording/navigating. */
+        fun isAvailable(context: Context): Boolean {
+            val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+            return sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null &&
+                sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR) != null
+        }
     }
 }

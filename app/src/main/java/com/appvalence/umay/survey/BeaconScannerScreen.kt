@@ -145,6 +145,16 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         return
     }
 
+    if (!remember { StepDetector.isAvailable(context) }) {
+        Text(
+            text = "Bu cihazda konum takibi için gereken ivmeölçer veya jiroskop sensörü yok, saha kaydı kullanılamıyor.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.error,
+            modifier = modifier.padding(16.dp),
+        )
+        return
+    }
+
     val scanner = remember { BleBeaconScanner(context) }
     DisposableEffect(BeaconSurveyLog.isRecording) {
         val isRecording = BeaconSurveyLog.isRecording
@@ -518,6 +528,7 @@ private fun SaveMapCard(
     trajectoryPointCount: Int,
 ) {
     var saveMessage by remember { mutableStateOf<String?>(null) }
+    var saveFailed by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(modifier = Modifier.padding(16.dp)) {
             if (results.isEmpty() && taggedWaypoints.isEmpty()) {
@@ -544,17 +555,27 @@ private fun SaveMapCard(
                         taggedWaypoints = taggedWaypoints,
                         beaconResults = results,
                     )
-                    BuildingMapStorage(context).save(map)
-                    val nodeCount = map.floors.sumOf { it.nodes.size }
-                    val edgeCount = map.floors.sumOf { it.edges.size }
-                    saveMessage = "Kaydedildi: $nodeCount nokta, $edgeCount bağlantı, ${map.floors.size} kat."
+                    val saved = BuildingMapStorage(context).save(map)
+                    saveFailed = !saved
+                    saveMessage = if (saved) {
+                        val nodeCount = map.floors.sumOf { it.nodes.size }
+                        val edgeCount = map.floors.sumOf { it.edges.size }
+                        "Kaydedildi: $nodeCount nokta, $edgeCount bağlantı, ${map.floors.size} kat."
+                    } else {
+                        "Kaydedilemedi — cihazda yer kalmamış olabilir. Tekrar dene."
+                    }
                 },
             ) {
                 Icon(Icons.Filled.Save, contentDescription = null)
                 Text(text = "Haritayı kaydet", modifier = Modifier.padding(start = 8.dp))
             }
             saveMessage?.let {
-                Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (saveFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
         }
     }

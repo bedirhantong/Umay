@@ -38,6 +38,7 @@ class CameraXObstacleDetector(
     private val context: Context,
     private val personScoreThreshold: Float = DEFAULT_SCORE_THRESHOLD,
     private val onLatencyTrace: (LatencyTrace) -> Unit = {},
+    private val onBindFailed: (String) -> Unit = {},
 ) : ObstacleDetector {
 
     private val obstacles = MutableSharedFlow<List<DetectedObstacle>>(replay = 1, extraBufferCapacity = 1)
@@ -45,6 +46,15 @@ class CameraXObstacleDetector(
     private var analyzerExecutor: ExecutorService? = null
     private var objectDetector: ObjectDetector? = null
     private var cameraProvider: ProcessCameraProvider? = null
+
+    init {
+        // NavigationOrchestrator combine()s this with the position stream, which only
+        // emits once *both* sources have emitted at least once — without a seed value,
+        // a camera/model failure (see bindInternal's try/catch) would silently hang the
+        // entire navigation experience, including position and route guidance, even
+        // though obstacle detection is meant to be a best-effort secondary signal.
+        obstacles.tryEmit(emptyList())
+    }
 
     override fun obstacleUpdates(): SharedFlow<List<DetectedObstacle>> = obstacles.asSharedFlow()
 
@@ -67,15 +77,27 @@ class CameraXObstacleDetector(
     }
 
     private fun bindInternal(lifecycleOwner: LifecycleOwner, preview: Preview?) {
-        val detector = ObjectDetector.createFromFileAndOptions(
-            context,
-            MODEL_ASSET_NAME,
-            ObjectDetector.ObjectDetectorOptions.builder()
-                .setBaseOptions(BaseOptions.builder().setNumThreads(NUM_THREADS).build())
-                .setMaxResults(MAX_RESULTS)
-                .setScoreThreshold(personScoreThreshold)
-                .build(),
-        )
+        // Model loading, camera-provider acquisition, and bindToLifecycle can each throw
+        // for reasons outside this app's control (corrupted asset on a flaky install, no
+        // back camera on some tablets, camera service down) — obstacle detection is a
+        // best-effort secondary signal, not something a failure here should take the
+        // whole app down for. The seeded empty obstacles emission (see init) means the
+        // rest of navigation (position, routing, TTS guidance) keeps working regardless.
+        val detector = try {
+            ObjectDetector.createFromFileAndOptions(
+                context,
+                MODEL_ASSET_NAME,
+                ObjectDetector.ObjectDetectorOptions.builder()
+                    .setBaseOptions(BaseOptions.builder().setNumThreads(NUM_THREADS).build())
+                    .setMaxResults(MAX_RESULTS)
+                    .setScoreThreshold(personScoreThreshold)
+                    .build(),
+            )
+        } catch (t: Throwable) {
+            Log.e(TAG, "Obstacle detection model failed to load", t)
+            onBindFailed("Engel algılama modeli yüklenemedi: ${t.message}")
+            return
+        }
         objectDetector = detector
 
         val executor = Executors.newSingleThreadExecutor()
@@ -92,11 +114,16 @@ class CameraXObstacleDetector(
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener(
             {
-                val provider = cameraProviderFuture.get()
-                cameraProvider = provider
-                provider.unbindAll()
-                val useCases = listOfNotNull(preview, imageAnalysis).toTypedArray()
-                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, *useCases)
+                try {
+                    val provider = cameraProviderFuture.get()
+                    cameraProvider = provider
+                    provider.unbindAll()
+                    val useCases = listOfNotNull(preview, imageAnalysis).toTypedArray()
+                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, *useCases)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Camera binding failed", t)
+                    onBindFailed("Kamera başlatılamadı: ${t.message}")
+                }
             },
             ContextCompat.getMainExecutor(context),
         )

@@ -13,9 +13,9 @@ import java.io.File
 class BuildingMapStorage(context: Context) {
     private val file = File(context.filesDir, FILE_NAME)
 
-    fun save(map: BuildingMap) {
-        file.writeText(BuildingMapJson.encode(map))
-    }
+    /** Returns true on success; false (never throws) if the disk write failed — e.g. storage full. */
+    fun save(map: BuildingMap): Boolean =
+        runCatching { file.writeText(BuildingMapJson.encode(map)) }.isSuccess
 
     fun load(): BuildingMap? {
         if (!file.exists()) return null

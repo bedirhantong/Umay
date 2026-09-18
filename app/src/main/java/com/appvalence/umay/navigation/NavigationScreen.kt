@@ -69,6 +69,7 @@ import com.appvalence.umay.positioning.engine.PositioningEngine
 import com.appvalence.umay.positioning.pdr.StepDetector
 import com.appvalence.umay.storage.BuildingMapStorage
 import com.appvalence.umay.survey.round1
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.onEach
 import kotlin.math.hypot
 
@@ -118,6 +119,15 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                 icon = Icons.Filled.LocationSearching,
                 title = "İzin gerekiyor",
                 message = "Yönlendirme için kamera, konum ve Bluetooth izni vermen gerekiyor.",
+            )
+            return@Column
+        }
+
+        if (!remember { StepDetector.isAvailable(context) }) {
+            EmptyState(
+                icon = Icons.Filled.LocationSearching,
+                title = "Cihaz desteklenmiyor",
+                message = "Bu cihazda konum takibi için gereken ivmeölçer veya jiroskop sensörü yok, navigasyon kullanılamıyor.",
             )
             return@Column
         }
@@ -297,7 +307,8 @@ private fun ActiveNavigation(
 ) {
     val scanner = remember { BleBeaconScanner(context) }
     val feedback = remember { TtsFeedbackController(context) }
-    val detector = remember { CameraXObstacleDetector(context) }
+    var cameraWarning by remember { mutableStateOf<String?>(null) }
+    val detector = remember { CameraXObstacleDetector(context, onBindFailed = { cameraWarning = it }) }
     val stepDetector = remember { StepDetector(context) }
     val allNodes = remember(buildingMap) { buildingMap.floors.flatMap { it.nodes } }
     val allNodesById = remember(allNodes) { allNodes.associateBy { it.id } }
@@ -362,19 +373,31 @@ private fun ActiveNavigation(
 
     var state by remember { mutableStateOf<NavigationState?>(null) }
     var currentInstruction by remember { mutableStateOf("Yola çıkmaya hazırlanıyor...") }
+    var pipelineError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(orchestrator) {
-        orchestrator.start().collect { newState ->
-            state = newState
-            newState.alerts.firstOrNull { it.id.startsWith("route-guide-") || it.id.startsWith("arrived-") || it.id.startsWith("no-route-") }
-                ?.let { currentInstruction = it.message }
+        try {
+            orchestrator.start().collect { newState ->
+                state = newState
+                newState.alerts.firstOrNull { it.id.startsWith("route-guide-") || it.id.startsWith("arrived-") || it.id.startsWith("no-route-") }
+                    ?.let { currentInstruction = it.message }
 
-            // A STAIRS crossing confirms itself once enough footsteps have piled up
-            // (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap needed,
-            // which matters since a blind user's hands may well be full on a staircase.
-            // Elevators never set autoConfirm, so those still wait for the button below.
-            newState.pendingFloorChange?.let { hint ->
-                if (hint.autoConfirm) confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg)
+                // A STAIRS crossing confirms itself once enough footsteps have piled up
+                // (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap needed,
+                // which matters since a blind user's hands may well be full on a staircase.
+                // Elevators never set autoConfirm, so those still wait for the button below.
+                newState.pendingFloorChange?.let { hint ->
+                    if (hint.autoConfirm) confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg)
+                }
             }
+        } catch (e: CancellationException) {
+            throw e // normal collection teardown (screen left, "Durdur" pressed) — not a failure
+        } catch (e: Exception) {
+            // Last-resort safety net: nothing in this pipeline is expected to throw (every
+            // known failure mode below is already caught and surfaced visibly instead —
+            // BleBeaconScanner's BleScanState.Failed, CameraXObstacleDetector's
+            // onBindFailed, StepDetector.isAvailable gating steps before this even starts)
+            // but an unanticipated one should show a recoverable screen, not crash the app.
+            pipelineError = "Navigasyon durduruldu: ${e.message ?: "beklenmeyen bir hata oluştu"}"
         }
     }
 
@@ -392,12 +415,31 @@ private fun ActiveNavigation(
     }
 
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        if (pipelineError != null) {
+            EmptyState(icon = Icons.Filled.Warning, title = "Bir şeyler ters gitti", message = pipelineError.orEmpty())
+            Button(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), onClick = onStop) {
+                Text("Geri dön")
+            }
+            return@Column
+        }
+
         StatusBanner(status)
 
         if (!hasFingerprintedWaypoints) {
             Text(
                 text = "Bu haritada isimlendirilmiş nokta yok, konum sadece adım sayımıyla tahmin ediliyor ve zamanla sapabilir. " +
                     "Daha güvenilir takip için \"Beacon Tarayıcı\" ekranında yürürken yer isimlendir.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        // Non-fatal: navigation (position, routing, TTS guidance) still works without
+        // obstacle detection, so this is a note, not a blocking EmptyState.
+        cameraWarning?.let {
+            Text(
+                text = "$it — engel algılama olmadan devam ediliyor.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 8.dp),
