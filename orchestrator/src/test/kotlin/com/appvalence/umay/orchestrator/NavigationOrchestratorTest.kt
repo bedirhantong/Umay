@@ -5,6 +5,7 @@ import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.FloorTransition
+import com.appvalence.umay.coremodel.GuidanceCue
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private class FakePositioningEngine(private val positions: List<Position>) : PositioningEngine {
@@ -590,5 +592,110 @@ class NavigationOrchestratorTest {
         val states = orchestrator.start().toList()
 
         assertEquals(false, states.last().pendingFloorChange?.autoConfirm)
+    }
+
+    // --- Guidance cues (what vibration reacts to) and on-demand repeat ---
+
+    private val rightTurnMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(
+            FloorMap(
+                0,
+                listOf(
+                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),
+                    MapNode("B", 0.0, 10.0, NodeType.CORRIDOR, name = "Donus"),
+                    MapNode("C", 10.0, 10.0, NodeType.DESTINATION, name = "C"),
+                ),
+                listOf(
+                    MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+                    MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+                ),
+            ),
+        ),
+    )
+
+    private fun orchestratorFor(map: BuildingMap, positions: List<Position>, feedback: FeedbackController, destination: String) =
+        NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = destination,
+        )
+
+    @Test
+    fun `a new leg that ends in a right turn carries a TURN_RIGHT cue`() = runTest {
+        val feedback = RecordingFeedbackController()
+        orchestratorFor(rightTurnMap, listOf(position(0.0, 0.0)), feedback, "C").start().toList()
+
+        assertEquals(GuidanceCue.TURN_RIGHT, feedback.emitted.single { it.id.startsWith("route-guide-") }.cue)
+    }
+
+    @Test
+    fun `a periodic repeat of the same leg carries no cue`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, timestampMs = 0L),
+            position(0.0, 1.0, timestampMs = NavigationOrchestrator.ROUTE_GUIDANCE_REPEAT_INTERVAL_MS + 1),
+        )
+        orchestratorFor(rightTurnMap, positions, feedback, "C").start().toList()
+
+        val guidance = feedback.emitted.filter { it.id.startsWith("route-guide-") }
+        assertEquals(listOf(GuidanceCue.TURN_RIGHT, GuidanceCue.NONE), guidance.map { it.cue })
+    }
+
+    @Test
+    fun `arrival carries an ARRIVED cue`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(position(0.0, 0.0, timestampMs = 0L), position(0.0, 9.5, timestampMs = 1L), position(9.5, 10.0, timestampMs = 2L))
+        orchestratorFor(rightTurnMap, positions, feedback, "C").start().toList()
+
+        assertEquals(GuidanceCue.ARRIVED, feedback.emitted.single { it.id.startsWith("arrived-") }.cue)
+    }
+
+    @Test
+    fun `a tagged hazard ahead outranks the turn after it`() = runTest {
+        val feedback = RecordingFeedbackController()
+        orchestratorFor(stairsMap, listOf(position(0.0, 0.0)), feedback, "D").start().toList()
+
+        assertEquals(GuidanceCue.HAZARD_AHEAD, feedback.emitted.first { it.id.startsWith("route-guide-") }.cue)
+    }
+
+    @Test
+    fun `the leg that crosses floors carries a FLOOR_CHANGE cue`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(position(0.0, 0.0, timestampMs = 0L), position(0.0, 9.5, timestampMs = 1L))
+        orchestratorFor(stairsMap, positions, feedback, "D").start().toList()
+
+        assertEquals(GuidanceCue.FLOOR_CHANGE, feedback.emitted.filter { it.id.startsWith("route-guide-") }.last().cue)
+    }
+
+    @Test
+    fun `a very close obstacle carries an OBSTACLE_CRITICAL cue`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0)),
+            perception = FakeObstacleDetector(listOf(listOf(personObstacle("p1", distanceMeters = 1.0)))),
+            map = singleNodeMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "A",
+        )
+        orchestrator.start().toList()
+
+        assertEquals(GuidanceCue.OBSTACLE_CRITICAL, feedback.emitted.single { it.id.startsWith("obstacle-") }.cue)
+    }
+
+    @Test
+    fun `currentInstruction rewords the current leg with a fresh distance`() = runTest {
+        val orchestrator = orchestratorFor(rightTurnMap, listOf(position(0.0, 0.0)), RecordingFeedbackController(), "C")
+        assertNull(orchestrator.currentInstruction(position(0.0, 0.0)), "nothing is planned before navigation starts")
+
+        orchestrator.start().toList()
+
+        val instruction = orchestrator.currentInstruction(position(0.0, 6.0))
+        assertTrue(instruction!!.contains("4.0 metre"), instruction)
+        assertTrue(instruction.contains("sağa dön"), instruction)
     }
 }

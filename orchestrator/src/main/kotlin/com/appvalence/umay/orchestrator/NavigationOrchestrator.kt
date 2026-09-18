@@ -4,6 +4,7 @@ import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.FloorMap
+import com.appvalence.umay.coremodel.GuidanceCue
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
@@ -148,6 +149,7 @@ class NavigationOrchestrator(
                     message = obstacleMessage(priority, obstacle),
                     relatedObstacle = obstacle,
                     createdAtMs = obstacle.detectedAtMs,
+                    cue = if (priority == AlertPriority.CRITICAL) GuidanceCue.OBSTACLE_CRITICAL else GuidanceCue.OBSTACLE_WARNING,
                 )
             }
 
@@ -166,9 +168,10 @@ class NavigationOrchestrator(
             return NavigationAlert(
                 id = "no-route-${UUID.randomUUID()}",
                 priority = AlertPriority.WARNING,
-                message = "Bu iki nokta arasında bir rota bulunamadı",
+                message = NO_ROUTE_MESSAGE,
                 relatedObstacle = null,
                 createdAtMs = position.timestampMs,
+                cue = GuidanceCue.NO_ROUTE,
             )
         }
         if (currentRoute.size < 2 || arrivalAnnounced) return null
@@ -212,9 +215,10 @@ class NavigationOrchestrator(
                 return NavigationAlert(
                     id = "arrived-${UUID.randomUUID()}",
                     priority = AlertPriority.INFO,
-                    message = "Hedefe ulaştın",
+                    message = ARRIVED_MESSAGE,
                     relatedObstacle = null,
                     createdAtMs = position.timestampMs,
+                    cue = GuidanceCue.ARRIVED,
                 )
             }
         }
@@ -234,7 +238,41 @@ class NavigationOrchestrator(
             message = legInstruction(routeTargetIndex, position),
             relatedObstacle = null,
             createdAtMs = now,
+            // Only a new leg gets a cue; the periodic repeat of the same leg stays silent
+            // to the touch (see GuidanceCue).
+            cue = if (isNewLeg) legCue(routeTargetIndex) else GuidanceCue.NONE,
         )
+    }
+
+    /**
+     * The instruction for where the user is *right now*, worded exactly like
+     * the spoken guidance but with a fresh distance — for a "repeat that"
+     * request, where replaying the last announcement verbatim would quote a
+     * distance that's already stale. Null before the first position arrives
+     * (nothing planned yet).
+     */
+    fun currentInstruction(position: Position): String? = when {
+        !hasPlannedRoute -> null
+        currentRoute.isEmpty() -> NO_ROUTE_MESSAGE
+        arrivalAnnounced -> ARRIVED_MESSAGE
+        currentRoute.size < 2 -> null
+        else -> legInstruction(routeTargetIndex, position)
+    }
+
+    /** What kind of moment the start of this leg is, mirroring [legInstruction]'s wording choices. */
+    private fun legCue(targetIndex: Int): GuidanceCue {
+        val target = currentRoute[targetIndex]
+        val previous = currentRoute[targetIndex - 1]
+        if (nodeFloor[target.id] != nodeFloor[previous.id]) return GuidanceCue.FLOOR_CHANGE
+        // A tagged hazard right ahead outranks the turn after it: the stairs come first.
+        if (target.type in HAZARD_TYPES) return GuidanceCue.HAZARD_AHEAD
+        val next = currentRoute.getOrNull(targetIndex + 1) ?: return GuidanceCue.CONTINUE
+        if (nodeFloor[next.id] != nodeFloor[target.id]) return GuidanceCue.CONTINUE
+        return when (classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))) {
+            Turn.RIGHT -> GuidanceCue.TURN_RIGHT
+            Turn.LEFT -> GuidanceCue.TURN_LEFT
+            null -> GuidanceCue.CONTINUE
+        }
     }
 
     private fun legInstruction(targetIndex: Int, position: Position): String {
@@ -260,7 +298,11 @@ class NavigationOrchestrator(
         // A turn direction needs both bearings on the same floor as target — if the
         // *next* leg crosses floors, there's nothing meaningful to compare against.
         val turn = if (nodeFloor[next.id] == nodeFloor[target.id]) {
-            classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))
+            when (classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))) {
+                Turn.RIGHT -> "sağa dön"
+                Turn.LEFT -> "sola dön"
+                null -> null
+            }
         } else {
             null
         }
@@ -288,11 +330,13 @@ class NavigationOrchestrator(
     private fun bearingDeg(from: MapNode, to: MapNode): Double =
         (Math.toDegrees(atan2(to.x - from.x, to.y - from.y)) + 360.0) % 360.0
 
-    private fun classifyTurn(incomingBearingDeg: Double, outgoingBearingDeg: Double): String? {
+    private enum class Turn { LEFT, RIGHT }
+
+    private fun classifyTurn(incomingBearingDeg: Double, outgoingBearingDeg: Double): Turn? {
         val turnAngle = ((outgoingBearingDeg - incomingBearingDeg + 540.0) % 360.0) - 180.0
         return when {
-            turnAngle > TURN_ANGLE_THRESHOLD_DEG -> "sağa dön"
-            turnAngle < -TURN_ANGLE_THRESHOLD_DEG -> "sola dön"
+            turnAngle > TURN_ANGLE_THRESHOLD_DEG -> Turn.RIGHT
+            turnAngle < -TURN_ANGLE_THRESHOLD_DEG -> Turn.LEFT
             else -> null
         }
     }
@@ -327,6 +371,7 @@ class NavigationOrchestrator(
             message = "Rota önündeki engel nedeniyle güncellendi",
             relatedObstacle = obstacle,
             createdAtMs = obstacle.detectedAtMs,
+            cue = GuidanceCue.REROUTED,
         )
     }
 
@@ -353,6 +398,10 @@ class NavigationOrchestrator(
     }
 
     companion object {
+        private const val NO_ROUTE_MESSAGE = "Bu iki nokta arasında bir rota bulunamadı"
+        private const val ARRIVED_MESSAGE = "Hedefe ulaştın"
+        private val HAZARD_TYPES = setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)
+
         const val CRITICAL_DISTANCE_METERS = 1.5
         const val WARNING_DISTANCE_METERS = 3.5
         const val MIN_REALERT_INTERVAL_MS = 2_500L

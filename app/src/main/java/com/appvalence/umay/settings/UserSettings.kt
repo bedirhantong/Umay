@@ -2,6 +2,7 @@ package com.appvalence.umay.settings
 
 import android.content.Context
 import androidx.core.content.edit
+import com.appvalence.umay.feedback.TtsFeedbackController
 import com.appvalence.umay.positioning.pdr.StepDetector
 
 /** Per-person, per-device preferences that outlive a single session. */
@@ -19,6 +20,15 @@ class UserSettings(context: Context) {
     val stepLengthMeters: Double
         get() = calibratedStepLengthMeters ?: StepDetector.AVERAGE_STEP_LENGTH_METERS
 
+    /** Vibration cues alongside speech (see HapticPatterns). On by default: they cost nothing and help in noise. */
+    var hapticsEnabled: Boolean
+        get() = preferences.getBoolean(KEY_HAPTICS_ENABLED, true)
+        set(value) = preferences.edit { putBoolean(KEY_HAPTICS_ENABLED, value) }
+
+    var speechRate: Float
+        get() = preferences.getFloat(KEY_SPEECH_RATE, TtsFeedbackController.DEFAULT_SPEECH_RATE)
+        set(value) = preferences.edit { putFloat(KEY_SPEECH_RATE, value) }
+
     var onboardingCompleted: Boolean
         get() = preferences.getBoolean(KEY_ONBOARDING_COMPLETED, false)
         set(value) = preferences.edit { putBoolean(KEY_ONBOARDING_COMPLETED, value) }
@@ -27,5 +37,7 @@ class UserSettings(context: Context) {
         const val PREFERENCES_NAME = "user_settings"
         const val KEY_STEP_LENGTH = "step_length_meters"
         const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
+        const val KEY_HAPTICS_ENABLED = "haptics_enabled"
+        const val KEY_SPEECH_RATE = "speech_rate"
     }
 }

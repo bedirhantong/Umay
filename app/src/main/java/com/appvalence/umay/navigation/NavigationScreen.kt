@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Warning
@@ -73,6 +74,8 @@ import com.appvalence.umay.R
 import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.common.VoiceStatusNotice
 import com.appvalence.umay.common.createSpeechController
+import com.appvalence.umay.feedback.CompositeFeedbackController
+import com.appvalence.umay.feedback.HapticFeedbackController
 import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
@@ -452,7 +455,13 @@ private fun ActiveNavigation(
     onStop: () -> Unit,
 ) {
     val scanner = remember { BleBeaconScanner(context) }
-    val feedback = remember { createSpeechController(context) }
+    val speech = remember { createSpeechController(context) }
+    val haptics = remember { HapticFeedbackController(context) }
+    // Every alert goes out as speech and, unless switched off in Ayarlar, as a vibration
+    // cue too — the vibration still gets through where speech can't be heard.
+    val feedback = remember {
+        CompositeFeedbackController(listOfNotNull(speech, haptics.takeIf { UserSettings(context).hapticsEnabled }))
+    }
     var cameraWarning by remember { mutableStateOf<String?>(null) }
     val detector = remember { CameraXObstacleDetector(context, onBindFailed = { cameraWarning = it }) }
     val stepLengthMeters = remember { UserSettings(context).stepLengthMeters }
@@ -535,7 +544,8 @@ private fun ActiveNavigation(
         onDispose {
             scanner.stop()
             detector.unbind()
-            feedback.shutdown()
+            speech.shutdown()
+            haptics.stop()
             recorder?.record(SessionEndEvent(System.currentTimeMillis(), sessionEnd.reason))
             recorder?.close()
         }
@@ -575,7 +585,7 @@ private fun ActiveNavigation(
                         recorder.record(PositionEvent.of(PositionStream.FUSED, newState.position))
                     }
                     newState.alerts.forEach { alert ->
-                        recorder.record(GuidanceEvent(alert.createdAtMs, alert.id, alert.priority.name, alert.message))
+                        recorder.record(GuidanceEvent(alert.createdAtMs, alert.id, alert.priority.name, alert.message, alert.cue.name))
                     }
                     val hint = newState.pendingFloorChange
                     if (hint != null && hint.targetNodeId != lastPromptedFloorChange) {
@@ -663,7 +673,7 @@ private fun ActiveNavigation(
         }
 
         StatusBanner(status)
-        VoiceStatusNotice(feedback, modifier = Modifier.padding(top = 8.dp))
+        VoiceStatusNotice(speech, modifier = Modifier.padding(top = 8.dp))
 
         if (!hasFingerprintedWaypoints) {
             Text(
@@ -688,8 +698,30 @@ private fun ActiveNavigation(
         Text(
             text = currentInstruction,
             style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(top = 16.dp, bottom = 12.dp),
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
         )
+        // Guidance is spoken once per leg and then only every few seconds; someone who
+        // missed it (a noisy corridor, a conversation) shouldn't have to wait. The repeat
+        // is re-worded from the live position, so the distance in it is current, not the
+        // one from when it was first announced.
+        val remainingSentence = progress
+            ?.takeIf { it.nextNode.id != destinationNode.id }
+            ?.metersToDestination?.roundToInt()
+            ?.let { pluralStringResource(R.plurals.nav_repeat_remaining, it, it) }
+        Button(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(bottom = 12.dp),
+            enabled = currentState != null && status != NavigationStatus.ARRIVED,
+            onClick = {
+                val fresh = currentState?.let { orchestrator.currentInstruction(it.position) }
+                if (fresh != null) currentInstruction = fresh
+                val text = listOfNotNull(fresh ?: currentInstruction, remainingSentence).joinToString(" ")
+                speech.speakNow(text)
+                recorder?.record(GuidanceEvent(System.currentTimeMillis(), "repeat-request", "INFO", text))
+            },
+        ) {
+            Icon(Icons.Filled.Replay, contentDescription = null)
+            Text(stringResource(R.string.nav_repeat), modifier = Modifier.padding(start = 8.dp))
+        }
 
         if (progress != null && status != NavigationStatus.ARRIVED) {
             RouteProgressCard(progress, modifier = Modifier.padding(bottom = 12.dp))

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
 import com.appvalence.umay.feedback.TtsFeedbackController
 import com.appvalence.umay.feedback.VoiceStatus
+import com.appvalence.umay.settings.UserSettings
 import java.util.Locale
 
 /**
@@ -31,8 +32,9 @@ import java.util.Locale
  */
 fun speechLocale(context: Context): Locale = Locale.forLanguageTag(context.getString(R.string.speech_language_tag))
 
-/** Every screen that talks goes through this, so they all speak in the same, right voice. */
-fun createSpeechController(context: Context): TtsFeedbackController = TtsFeedbackController(context, speechLocale(context))
+/** Every screen that talks goes through this, so they all speak in the same, right voice, at the person's chosen pace. */
+fun createSpeechController(context: Context): TtsFeedbackController =
+    TtsFeedbackController(context, speechLocale(context), UserSettings(context).speechRate)
 
 /**
  * Shown when the device can't speak the app's language properly, with a way

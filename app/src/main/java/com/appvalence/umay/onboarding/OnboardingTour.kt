@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +73,7 @@ fun OnboardingTour(onFinish: () -> Unit, modifier: Modifier = Modifier) {
             TourPage(Icons.Filled.Hearing, R.string.onboarding_welcome_title, R.string.onboarding_welcome_body),
             TourPage(Icons.Filled.PhoneAndroid, R.string.onboarding_hold_title, R.string.onboarding_hold_body),
             TourPage(Icons.Filled.Navigation, R.string.onboarding_guidance_title, R.string.onboarding_guidance_body),
+            TourPage(Icons.Filled.Vibration, R.string.onboarding_feel_title, R.string.onboarding_feel_body),
             TourPage(
                 Icons.Filled.Layers,
                 R.string.onboarding_floors_title,

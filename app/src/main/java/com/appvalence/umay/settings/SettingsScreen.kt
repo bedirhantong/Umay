@@ -2,11 +2,14 @@ package com.appvalence.umay.settings
 
 import android.content.Context
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,12 +17,14 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -48,11 +55,15 @@ import com.appvalence.umay.R
 import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.common.VoiceStatusNotice
 import com.appvalence.umay.common.createSpeechController
+import com.appvalence.umay.coremodel.GuidanceCue
+import com.appvalence.umay.feedback.HapticFeedbackController
+import com.appvalence.umay.feedback.HapticPatterns
 import com.appvalence.umay.feedback.VoiceStatus
 import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.pdr.StepDetector
 import com.appvalence.umay.positioning.pdr.StepLengthCalibration
 import kotlin.math.roundToInt
+import java.text.DecimalFormat
 
 @Composable
 fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier) {
@@ -110,7 +121,11 @@ fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier) {
         }
 
         SettingsCard(icon = Icons.Filled.RecordVoiceOver, title = stringResource(R.string.settings_voice_title)) {
-            VoiceSettings()
+            VoiceSettings(settings)
+        }
+
+        SettingsCard(icon = Icons.Filled.Vibration, title = stringResource(R.string.settings_haptics_title)) {
+            HapticSettings(settings)
         }
 
         SettingsCard(icon = Icons.Filled.Hearing, title = stringResource(R.string.settings_tour_title)) {
@@ -138,13 +153,14 @@ private fun SettingsCard(icon: ImageVector, title: String, content: @Composable 
     }
 }
 
-/** Which voice guidance will be spoken in, a way to hear it, and a fix if it's the wrong one. */
+/** Which voice guidance will be spoken in and how fast, a way to hear it, and a fix if it's the wrong voice. */
 @Composable
-private fun VoiceSettings() {
+private fun VoiceSettings(settings: UserSettings) {
     val context = LocalContext.current
     val tts = remember { createSpeechController(context) }
     DisposableEffect(Unit) { onDispose { tts.shutdown() } }
     val status by tts.voiceStatus.collectAsState()
+    var rate by remember { mutableFloatStateOf(settings.speechRate) }
 
     when (status) {
         VoiceStatus.INITIALIZING -> Text(stringResource(R.string.voice_checking), style = MaterialTheme.typography.bodyMedium)
@@ -154,6 +170,97 @@ private fun VoiceSettings() {
     val sample = stringResource(R.string.voice_sample)
     OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), onClick = { tts.speakNow(sample) }) {
         Text(stringResource(R.string.voice_try))
+    }
+
+    // Two plain buttons rather than a slider: each press is one clear step, easy to hit
+    // and to count by touch, and it speaks its new pace right away — the value itself
+    // is spoken as part of the sample, so this works the same with TalkBack on.
+    fun changeRate(step: Int) {
+        val index = (SPEECH_RATE_STEPS.indexOfFirst { it >= rate }.takeIf { it >= 0 } ?: SPEECH_RATE_STEPS.lastIndex) + step
+        rate = SPEECH_RATE_STEPS[index.coerceIn(0, SPEECH_RATE_STEPS.lastIndex)]
+        settings.speechRate = rate
+        tts.speechRate = rate
+        tts.speakNow(context.getString(R.string.settings_rate_sample, formatRate(rate)))
+    }
+    Text(
+        text = stringResource(R.string.settings_rate_label, formatRate(rate)),
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 16.dp),
+    )
+    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(modifier = Modifier.weight(1f), enabled = rate > SPEECH_RATE_STEPS.first(), onClick = { changeRate(-1) }) {
+            Text(stringResource(R.string.settings_rate_slower))
+        }
+        OutlinedButton(modifier = Modifier.weight(1f), enabled = rate < SPEECH_RATE_STEPS.last(), onClick = { changeRate(+1) }) {
+            Text(stringResource(R.string.settings_rate_faster))
+        }
+    }
+}
+
+// From "new to speech output" to "experienced screen-reader user" pace.
+private val SPEECH_RATE_STEPS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
+
+private fun formatRate(rate: Float): String = DecimalFormat("0.##").format(rate)
+
+private val HAPTIC_GUIDE = listOf(
+    GuidanceCue.TURN_RIGHT to R.string.haptic_turn_right,
+    GuidanceCue.TURN_LEFT to R.string.haptic_turn_left,
+    GuidanceCue.CONTINUE to R.string.haptic_continue,
+    GuidanceCue.HAZARD_AHEAD to R.string.haptic_hazard,
+    GuidanceCue.FLOOR_CHANGE to R.string.haptic_floor_change,
+    GuidanceCue.OBSTACLE_WARNING to R.string.haptic_obstacle_warning,
+    GuidanceCue.OBSTACLE_CRITICAL to R.string.haptic_obstacle_critical,
+    GuidanceCue.ARRIVED to R.string.haptic_arrived,
+    GuidanceCue.REROUTED to R.string.haptic_rerouted,
+    GuidanceCue.NO_ROUTE to R.string.haptic_no_route,
+)
+
+/**
+ * On/off for vibration cues, plus a hands-on guide: a pattern is only useful
+ * once someone has learned what it means, and that's learned by feeling it
+ * here — not for the first time mid-corridor.
+ */
+@Composable
+private fun HapticSettings(settings: UserSettings) {
+    val context = LocalContext.current
+    val haptics = remember { HapticFeedbackController(context) }
+    DisposableEffect(Unit) { onDispose { haptics.stop() } }
+    if (!haptics.isAvailable) {
+        Text(stringResource(R.string.settings_haptics_unavailable), style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+    var enabled by remember { mutableStateOf(settings.hapticsEnabled) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = enabled,
+                role = Role.Switch,
+                onValueChange = {
+                    enabled = it
+                    settings.hapticsEnabled = it
+                },
+            ),
+    ) {
+        Text(text = stringResource(R.string.settings_haptics_toggle), style = MaterialTheme.typography.bodyLarge)
+        // Row's toggleable owns the click and the merged accessible name (see BeaconScannerScreen).
+        Switch(checked = enabled, onCheckedChange = null)
+    }
+    Text(
+        text = stringResource(R.string.settings_haptics_learn),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    HAPTIC_GUIDE.forEach { (cue, label) ->
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            onClick = { HapticPatterns.forCue(cue)?.let(haptics::play) },
+        ) {
+            Text(stringResource(label), modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 

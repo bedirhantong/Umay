@@ -45,6 +45,7 @@ enum class VoiceStatus {
 class TtsFeedbackController(
     context: Context,
     private val speechLocale: Locale = Locale.getDefault(),
+    speechRate: Float = DEFAULT_SPEECH_RATE,
 ) : FeedbackController {
 
     private var isReady = false
@@ -55,6 +56,17 @@ class TtsFeedbackController(
 
     private lateinit var tts: TextToSpeech
 
+    /**
+     * 1.0 is the engine's normal pace. Experienced screen-reader users commonly
+     * listen at 2x or faster; someone new to it may want it slower — this is a
+     * personal setting, not something to hardcode.
+     */
+    var speechRate: Float = speechRate
+        set(value) {
+            field = value
+            if (isReady) tts.setSpeechRate(value)
+        }
+
     init {
         tts = TextToSpeech(context.applicationContext) { initStatus ->
             if (initStatus != TextToSpeech.SUCCESS) {
@@ -62,6 +74,7 @@ class TtsFeedbackController(
                 return@TextToSpeech
             }
             status.value = configureVoice()
+            tts.setSpeechRate(speechRate)
             isReady = true
             pendingUtterances.forEach { speak(it) }
             pendingUtterances.clear()
@@ -134,5 +147,9 @@ class TtsFeedbackController(
     fun shutdown() {
         tts.stop()
         tts.shutdown()
+    }
+
+    companion object {
+        const val DEFAULT_SPEECH_RATE = 1.0f
     }
 }

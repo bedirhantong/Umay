@@ -115,6 +115,11 @@
     <string name="nav_floor_change_down">Kat değiştirdim (aşağı, Kat %1$d)</string>
     <string name="nav_floor_change_barometer_hint">Basınç sensörü kat değişimini kendisi algılayacak. Algılamazsa bu düğmeye dokun.</string>
     <string name="nav_stop">Yönlendirmeyi durdur</string>
+    <string name="nav_repeat">Son yönergeyi tekrarla</string>
+    <plurals name="nav_repeat_remaining">
+        <item quantity="one">Hedefe yaklaşık %1$d metre kaldı.</item>
+        <item quantity="other">Hedefe yaklaşık %1$d metre kaldı.</item>
+    </plurals>
     <string name="nav_progress_next">Sonraki</string>
     <string name="nav_progress_destination">Hedefe</string>
     <string name="nav_progress_floor_change">Kat değişimi</string>
@@ -283,6 +288,24 @@
     <string name="settings_floor_barometer">Bu telefonda basınç sensörü var: merdivende de asansörde de kat değiştirdiğin kendiliğinden algılanır.</string>
     <string name="settings_floor_no_barometer">Bu telefonda basınç sensörü yok: merdivende kat değişimi adımlarından anlaşılır, asansörde \"Kat değiştirdim\" düğmesine dokunman gerekir.</string>
     <string name="settings_voice_title">Konuşma sesi</string>
+    <string name="settings_rate_label">Konuşma hızı: %1$s×</string>
+    <string name="settings_rate_slower">Yavaşlat</string>
+    <string name="settings_rate_faster">Hızlandır</string>
+    <string name="settings_rate_sample">Konuşma hızı %1$s. Yönergeleri bu hızda duyacaksın.</string>
+    <string name="settings_haptics_title">Titreşim</string>
+    <string name="settings_haptics_toggle">Yönergelerde titreşim</string>
+    <string name="settings_haptics_unavailable">Bu cihazda titreşim motoru yok.</string>
+    <string name="settings_haptics_learn">Her yönergenin kendine özgü bir titreşimi var. Öğrenmek için birine dokun, hissettirsin:</string>
+    <string name="haptic_turn_right">Sağa dön: eşit aralıklı dört dokunuş</string>
+    <string name="haptic_turn_left">Sola dön: ikişerli üç dokunuş</string>
+    <string name="haptic_continue">Düz devam: tek hafif dokunuş</string>
+    <string name="haptic_hazard">Önünde merdiven, kapı ya da rampa: iki uzun, güçlü</string>
+    <string name="haptic_floor_change">Kat değişimi: uzun, kısa, uzun</string>
+    <string name="haptic_obstacle_warning">Engel yakında: üç orta titreşim</string>
+    <string name="haptic_obstacle_critical">Dur, engel çok yakın: hızlı, güçlü seri</string>
+    <string name="haptic_arrived">Hedefe vardın: uzun, sonra kısa</string>
+    <string name="haptic_rerouted">Rota değişti: kısa, sonra uzun</string>
+    <string name="haptic_no_route">Rota bulunamadı: tek uzun titreşim</string>
     <string name="settings_tour_title">Tanıtım</string>
     <string name="settings_tour_replay">Sesli tanıtımı yeniden dinle</string>
 
@@ -334,6 +357,8 @@
     <string name="onboarding_hold_body">Yürürken telefonu göğüs hizasında, ekranı sana, arka kamerası önüne bakacak şekilde tut. Umay adımlarını sayarak ve binadaki Bluetooth işaretçilerini dinleyerek nerede olduğunu bulur. Kamera da önündeki insanları fark edip seni uyarır.</string>
     <string name="onboarding_guidance_title">Yönlendirme</string>
     <string name="onboarding_guidance_body">Navigasyon sekmesinde nerede olduğunu ve nereye gitmek istediğini seç, sonra Yönlendirmeyi başlat\'a dokun. Umay kaç metre yürüyeceğini, nerede döneceğini, kapı ya da merdiven gibi noktaları sesli söyler. Önüne biri çıkarsa hemen uyarır, hedefe vardığında da haber verir.</string>
+    <string name="onboarding_feel_title">Titreşim ve tekrar</string>
+    <string name="onboarding_feel_body">Her yönergeyi titreşimle de hissedersin, gürültülü bir yerde sesi kaçırsan bile. Sağa dönüş eşit aralıklı dört dokunuş, sola dönüş ikişerli dokunuşlardır. Engel çok yakınsa hızlı ve güçlü bir seri gelir. Bir yönergeyi kaçırırsan navigasyon ekranındaki Son yönergeyi tekrarla düğmesine dokun. Ayarlar sekmesinde her titreşimi deneyip öğrenebilir, konuşma hızını değiştirebilirsin.</string>
     <string name="onboarding_floors_title">Katlar arasında</string>
     <string name="onboarding_floors_body_barometer">Rota merdiven ya da asansörden geçiyorsa Umay bunu önceden söyler. Telefonundaki basınç sensörü sayesinde kat değiştirdiğini kendisi anlar; bir şeye dokunman gerekmez.</string>
     <string name="onboarding_floors_body_no_barometer">Rota merdiven ya da asansörden geçiyorsa Umay bunu önceden söyler. Merdivende kat değiştirdiğini adımlarından anlar. Asansörde ise indiğinde ekrandaki \"Kat değiştirdim\" düğmesine dokunman gerekir.</string>

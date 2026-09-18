@@ -96,6 +96,8 @@ data class GuidanceEvent(
     val alertId: String,
     val priority: String,
     val message: String,
+    /** The vibration cue that accompanied it (GuidanceCue name), "NONE" if silent to the touch. */
+    val cue: String = "NONE",
 ) : FieldLogEvent()
 
 /** The top-level status the screen showed changed (searching, on route, arrived, ...). */
@@ -181,7 +183,7 @@ data class SessionEndEvent(
 
 object FieldLogJson {
     /** Bump whenever an event's shape changes incompatibly, so offline tooling can tell logs apart. */
-    const val SCHEMA_VERSION = 2
+    const val SCHEMA_VERSION = 3
 
     private val json = Json {
         classDiscriminator = "type"
