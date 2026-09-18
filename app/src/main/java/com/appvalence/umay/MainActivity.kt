@@ -48,6 +48,7 @@ private const val MIN_ANNOUNCEMENT_INTERVAL_MS = 2_500L
 private enum class Screen(val label: String) {
     OBSTACLE_WATCH("Engel Algılama"),
     BEACON_SCANNER("Beacon Tarayıcı"),
+    NAVIGATION("Navigasyon"),
 }
 
 class MainActivity : ComponentActivity() {
@@ -71,6 +72,7 @@ class MainActivity : ComponentActivity() {
                         when (selectedScreen) {
                             Screen.OBSTACLE_WATCH -> ObstacleWatchScreen(modifier = Modifier.weight(1f))
                             Screen.BEACON_SCANNER -> BeaconScannerScreen(modifier = Modifier.weight(1f))
+                            Screen.NAVIGATION -> NavigationScreen(modifier = Modifier.weight(1f))
                         }
                     }
                 }

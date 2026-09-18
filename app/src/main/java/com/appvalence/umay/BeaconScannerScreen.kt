@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.Position
+import com.appvalence.umay.positioning.BeaconMapBuilder
 import com.appvalence.umay.positioning.BeaconSurveyResult
 import com.appvalence.umay.positioning.BeaconSurveySolver
 import com.appvalence.umay.positioning.BleBeaconScanner
@@ -213,6 +214,31 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         }
 
         item {
+            var saveMessage by remember { mutableStateOf<String?>(null) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    enabled = BeaconSurveyLog.results.isNotEmpty(),
+                    onClick = {
+                        val map = BeaconMapBuilder.build(buildingId = "umay-building", results = BeaconSurveyLog.results)
+                        BuildingMapStorage(context).save(map)
+                        val anchorCount = map.floors.sumOf { it.nodes.size }
+                        val edgeCount = map.floors.sumOf { it.edges.size }
+                        saveMessage = "Kaydedildi: $anchorCount beacon, $edgeCount bağlantı, ${map.floors.size} kat."
+                    },
+                ) {
+                    Text("Haritayı kaydet")
+                }
+                saveMessage?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+            Text(
+                text = "Bu, çözülen beacon konumlarını (yakındaki beacon'ları birbirine bağlayan basit bir ağ olarak) \"Navigasyon\" ekranının kullanacağı harita dosyasına kaydeder.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        item {
             DiscoveredHeader(
                 discoveredCount = discoveredBeacons.size,
                 onCopyAll = {
@@ -361,7 +387,7 @@ private fun BleBeaconReading.toSurveyLine(): String {
 private fun BeaconSurveyResult.toSurveyLine(): String =
     "beaconId=$beaconId kat=$floor x=${x.round1()} y=${y.round1()} okuma=$observationCount"
 
-private fun Double.round1(): Double = (this * 10).roundToInt() / 10.0
+internal fun Double.round1(): Double = (this * 10).roundToInt() / 10.0
 
 @Composable
 private fun BeaconRow(beacon: BleBeaconReading) {
