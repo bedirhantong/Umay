@@ -1,0 +1,45 @@
+# Gradle
+.gradle/
+**/build/
+.kotlin/
+
+# Local configuration (device/user specific, never commit)
+local.properties
+**/local.properties
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+!.idea/copyright/
+!.idea/icon.png
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+.externalNativeBuild/
+.cxx/
+/app/release/
+/app/debug/
+
+# Keystores and signing secrets — never commit these
+*.jks
+*.keystore
+key.properties
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Kotlin/Java compiled artifacts outside build/
+*.class
+*.hprof
+
+# Test / lint output already excluded via **/build/, kept explicit for clarity
+**/build/reports/
+**/build/test-results/
