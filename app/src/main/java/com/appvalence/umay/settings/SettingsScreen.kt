@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.Button
@@ -126,6 +127,33 @@ fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier) {
 
         SettingsCard(icon = Icons.Filled.Vibration, title = stringResource(R.string.settings_haptics_title)) {
             HapticSettings(settings)
+        }
+
+        SettingsCard(icon = Icons.Filled.LightMode, title = stringResource(R.string.settings_screen_title)) {
+            var keepScreenOn by remember { mutableStateOf(settings.keepScreenOnDuringNavigation) }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = keepScreenOn,
+                        role = Role.Switch,
+                        onValueChange = {
+                            keepScreenOn = it
+                            settings.keepScreenOnDuringNavigation = it
+                        },
+                    ),
+            ) {
+                Text(text = stringResource(R.string.settings_keep_screen_on), style = MaterialTheme.typography.bodyLarge)
+                Switch(checked = keepScreenOn, onCheckedChange = null)
+            }
+            Text(
+                text = stringResource(R.string.settings_keep_screen_on_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
 
         SettingsCard(icon = Icons.Filled.Hearing, title = stringResource(R.string.settings_tour_title)) {

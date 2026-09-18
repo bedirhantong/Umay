@@ -79,7 +79,7 @@
     <string name="tab_settings">Ayarlar</string>
 
     <!-- Navigation: setup -->
-    <string name="nav_permission_message">Nerede olduğunu bulmak için konum ve Bluetooth\'a, önündeki engelleri görmek için kameraya ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.</string>
+    <string name="nav_permission_message">Nerede olduğunu bulmak için konum ve Bluetooth\'a, önündeki engelleri görmek için kameraya ihtiyacım var. Yönlendirme sürerken bir bildirim de gösteririm; ekran kapalıyken çalışmaya devam edebilmem bununla mümkün. Bu bilgiler cihazından dışarı çıkmaz.</string>
     <string name="nav_permission_denied_title">İzin verilmedi</string>
     <string name="nav_permission_denied_message">Yönlendirme için kamera, konum ve Bluetooth izni gerekiyor.</string>
     <string name="nav_unsupported_title">Cihaz desteklenmiyor</string>
@@ -115,6 +115,15 @@
     <string name="nav_floor_change_down">Kat değiştirdim (aşağı, Kat %1$d)</string>
     <string name="nav_floor_change_barometer_hint">Basınç sensörü kat değişimini kendisi algılayacak. Algılamazsa bu düğmeye dokun.</string>
     <string name="nav_stop">Yönlendirmeyi durdur</string>
+    <string name="nav_camera_paused_first">Engel algılama duraklatıldı, çünkü ekran kapalıyken kamera çalışamaz. Konum ve yönergeler devam ediyor. Engel algılamanın da sürmesi için Ayarlar\'dan ekranı açık tutmayı seçebilirsin.</string>
+    <string name="nav_camera_paused">Engel algılama duraklatıldı. Konum ve yönergeler devam ediyor.</string>
+    <string name="nav_camera_resumed">Engel algılama yeniden açık.</string>
+    <string name="nav_radio_lost">Bluetooth ya da konum kapalı. Konumunu şimdilik sadece adımlarından takip ediyorum, zamanla sapabilir. İkisini de açarsan kendiliğinden düzeltmeye devam ederim.</string>
+    <string name="nav_radio_back">Bluetooth ve konum açık, konum düzeltmesi devam ediyor.</string>
+    <string name="notification_channel_name">Yönlendirme</string>
+    <string name="notification_channel_description">Yönlendirme sürerken gösterilir; ekran kapalıyken de devam etmesini sağlar.</string>
+    <string name="notification_title">Umay yönlendiriyor</string>
+    <string name="notification_stop">Durdur</string>
     <string name="nav_repeat">Son yönergeyi tekrarla</string>
     <plurals name="nav_repeat_remaining">
         <item quantity="one">Hedefe yaklaşık %1$d metre kaldı.</item>
@@ -250,6 +259,12 @@
         <item quantity="other">%1$d saha kaydı kalıcı olarak silinecek.</item>
     </plurals>
 
+    <string name="files_crashes_title">Çökme kayıtları</string>
+    <string name="files_crashes_body">Uygulama beklenmedik şekilde kapandıysa ayrıntıları buraya kaydedildi. Sorunun çözülmesi için paylaşabilirsin; kendiliğinden hiçbir yere gönderilmez.</string>
+    <string name="files_crash_chooser">Çökme kaydını paylaş</string>
+    <string name="files_crash_share_description">Bu çökme kaydını paylaş</string>
+    <string name="files_crash_delete_description">Bu çökme kaydını sil</string>
+
     <!-- Building import -->
     <string name="import_success_title">İçe aktarıldı</string>
     <string name="import_success_body">\'%1$s\' haritası eklendi (%2$s).</string>
@@ -306,6 +321,9 @@
     <string name="haptic_arrived">Hedefe vardın: uzun, sonra kısa</string>
     <string name="haptic_rerouted">Rota değişti: kısa, sonra uzun</string>
     <string name="haptic_no_route">Rota bulunamadı: tek uzun titreşim</string>
+    <string name="settings_screen_title">Yönlendirme sırasında</string>
+    <string name="settings_keep_screen_on">Ekranı açık tut</string>
+    <string name="settings_keep_screen_on_body">Ekran kapansa da konum ve yönergeler devam eder, ama kamera durur ve engel algılanmaz. Ekranı açık tutarsan engel algılama da sürer; pil daha çok harcanır. TalkBack açıkken pil için ekran en düşük parlaklığa indirilir.</string>
     <string name="settings_tour_title">Tanıtım</string>
     <string name="settings_tour_replay">Sesli tanıtımı yeniden dinle</string>
 
@@ -354,7 +372,7 @@
     <string name="onboarding_welcome_title">Umay\'a hoş geldin</string>
     <string name="onboarding_welcome_body">Umay, bina içinde seni sesli yönergelerle gitmek istediğin yere götüren bir yardımcı. Bu kısa tanıtımı dinleyebilir ya da istediğin an atlayabilirsin. Devam etmek için ekranın en altındaki sağ düğmeye, geri dönmek için soldakine dokun.</string>
     <string name="onboarding_hold_title">Telefonu nasıl tutmalı</string>
-    <string name="onboarding_hold_body">Yürürken telefonu göğüs hizasında, ekranı sana, arka kamerası önüne bakacak şekilde tut. Umay adımlarını sayarak ve binadaki Bluetooth işaretçilerini dinleyerek nerede olduğunu bulur. Kamera da önündeki insanları fark edip seni uyarır.</string>
+    <string name="onboarding_hold_body">Yürürken telefonu göğüs hizasında, ekranı sana, arka kamerası önüne bakacak şekilde tut. Umay adımlarını sayarak ve binadaki Bluetooth işaretçilerini dinleyerek nerede olduğunu bulur. Kamera da önündeki insanları fark edip seni uyarır. Yönlendirme sürerken ekranı kilitleyebilirsin; yönergeler devam eder, ama engel algılama için ekranın açık olması gerekir.</string>
     <string name="onboarding_guidance_title">Yönlendirme</string>
     <string name="onboarding_guidance_body">Navigasyon sekmesinde nerede olduğunu ve nereye gitmek istediğini seç, sonra Yönlendirmeyi başlat\'a dokun. Umay kaç metre yürüyeceğini, nerede döneceğini, kapı ya da merdiven gibi noktaları sesli söyler. Önüne biri çıkarsa hemen uyarır, hedefe vardığında da haber verir.</string>
     <string name="onboarding_feel_title">Titreşim ve tekrar</string>

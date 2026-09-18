@@ -29,6 +29,15 @@ class UserSettings(context: Context) {
         get() = preferences.getFloat(KEY_SPEECH_RATE, TtsFeedbackController.DEFAULT_SPEECH_RATE)
         set(value) = preferences.edit { putFloat(KEY_SPEECH_RATE, value) }
 
+    /**
+     * Off by default: with the screen off, positioning and guidance carry on (see
+     * NavigationSession) but the camera can't, so obstacle detection pauses. On keeps
+     * the screen awake for the whole walk so it doesn't — at a real battery cost.
+     */
+    var keepScreenOnDuringNavigation: Boolean
+        get() = preferences.getBoolean(KEY_KEEP_SCREEN_ON, false)
+        set(value) = preferences.edit { putBoolean(KEY_KEEP_SCREEN_ON, value) }
+
     var onboardingCompleted: Boolean
         get() = preferences.getBoolean(KEY_ONBOARDING_COMPLETED, false)
         set(value) = preferences.edit { putBoolean(KEY_ONBOARDING_COMPLETED, value) }
@@ -39,5 +48,6 @@ class UserSettings(context: Context) {
         const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         const val KEY_HAPTICS_ENABLED = "haptics_enabled"
         const val KEY_SPEECH_RATE = "speech_rate"
+        const val KEY_KEEP_SCREEN_ON = "keep_screen_on_during_navigation"
     }
 }
