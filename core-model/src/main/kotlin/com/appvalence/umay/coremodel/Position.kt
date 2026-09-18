@@ -1,6 +1,6 @@
 package com.appvalence.umay.coremodel
 
-enum class PositionSource { UWB_TRILATERATION, BLE_TRILATERATION, PEDESTRIAN_DEAD_RECKONING, MAP_MATCHED, FUSED }
+enum class PositionSource { UWB_TRILATERATION, BLE_TRILATERATION, RADIO_FINGERPRINT, PEDESTRIAN_DEAD_RECKONING, MAP_MATCHED, FUSED }
 
 data class Position(
     val x: Double,

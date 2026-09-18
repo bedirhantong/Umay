@@ -14,7 +14,7 @@ import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.feedback.FeedbackController
 import com.appvalence.umay.perception.ObstacleDetector
-import com.appvalence.umay.positioning.PositioningEngine
+import com.appvalence.umay.positioning.engine.PositioningEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.toList
@@ -174,5 +174,150 @@ class NavigationOrchestratorTest {
         // since they're already past A) — not from the original start node.
         assertEquals(listOf("B", "D", "C"), states.last().route.map { it.id })
         assertTrue(feedback.emitted.any { it.priority == AlertPriority.INFO })
+    }
+
+    @Test
+    fun `announces the first leg instruction on the first position update`() = runTest {
+        val nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "Giris"),
+            MapNode("B", 0.0, 10.0, NodeType.CORRIDOR, name = "Koridor"),
+            MapNode("C", 0.0, 20.0, NodeType.DESTINATION, name = "Hedef"),
+        )
+        val edges = listOf(
+            MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+            MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+        )
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, edges)))
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0, timestampMs = 0L)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+        )
+
+        orchestrator.start().toList()
+
+        val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
+        assertTrue(guidance.message.contains("Koridor"))
+        assertTrue(guidance.message.contains("10"))
+    }
+
+    @Test
+    fun `includes a right turn when the route bends east after heading north`() = runTest {
+        val nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),
+            MapNode("B", 0.0, 10.0, NodeType.CORRIDOR, name = "Donus"),
+            MapNode("C", 10.0, 10.0, NodeType.DESTINATION, name = "C"),
+        )
+        val edges = listOf(
+            MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+            MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+        )
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, edges)))
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+        )
+
+        orchestrator.start().toList()
+
+        val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
+        assertTrue(guidance.message.contains("sağa dön"))
+    }
+
+    @Test
+    fun `advances through the route and announces arrival exactly once`() = runTest {
+        val nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),
+            MapNode("B", 0.0, 10.0, NodeType.CORRIDOR, name = "B"),
+            MapNode("C", 0.0, 20.0, NodeType.DESTINATION, name = "C"),
+        )
+        val edges = listOf(
+            MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+            MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+        )
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, edges)))
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, timestampMs = 0L),
+            position(0.0, 9.0, timestampMs = 1_000L), // within waypoint-arrival radius of B
+            position(0.0, 19.5, timestampMs = 2_000L), // within arrival radius of destination C
+            position(0.0, 19.9, timestampMs = 3_000L), // still near C, must not re-announce
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+        )
+
+        orchestrator.start().toList()
+
+        val arrivals = feedback.emitted.filter { it.id.startsWith("arrived-") }
+        assertEquals(1, arrivals.size)
+        assertEquals("Hedefe ulaştın", arrivals.single().message)
+    }
+
+    @Test
+    fun `repeats the current leg instruction after the guidance repeat interval elapses`() = runTest {
+        val nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),
+            MapNode("B", 0.0, 100.0, NodeType.DESTINATION, name = "B"),
+        )
+        val edges = listOf(MapEdge("A", "B", accessible = true, distanceMeters = 100.0))
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, edges)))
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, timestampMs = 0L),
+            position(0.0, 0.0, timestampMs = 1_000L), // inside the 8s repeat interval, no repeat
+            position(0.0, 0.0, timestampMs = 9_000L), // past the repeat interval, repeats
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "B",
+        )
+
+        orchestrator.start().toList()
+
+        val guidanceMessages = feedback.emitted.filter { it.id.startsWith("route-guide-") }
+        assertEquals(2, guidanceMessages.size)
+    }
+
+    @Test
+    fun `announces once when no route exists between start and destination`() = runTest {
+        val nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),
+            MapNode("B", 100.0, 100.0, NodeType.DESTINATION, name = "B"),
+        )
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, edges = emptyList())))
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(position(0.0, 0.0, timestampMs = 0L), position(0.0, 0.0, timestampMs = 1_000L))
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "B",
+        )
+
+        orchestrator.start().toList()
+
+        val noRouteAlerts = feedback.emitted.filter { it.id.startsWith("no-route-") }
+        assertEquals(1, noRouteAlerts.size)
     }
 }

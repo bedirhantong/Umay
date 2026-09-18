@@ -3,7 +3,7 @@ package com.appvalence.umay.coremodel
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class NodeType { CORRIDOR, DOOR, STAIRS, ELEVATOR, RAMP, DESTINATION, UWB_ANCHOR, BLE_ANCHOR }
+enum class NodeType { CORRIDOR, DOOR, STAIRS, ELEVATOR, RAMP, DESTINATION, UWB_ANCHOR, BLE_ANCHOR, WAYPOINT }
 
 @Serializable
 data class MapNode(
@@ -15,6 +15,10 @@ data class MapNode(
     // stable technical key (a beacon UUID-major-minor, say) used for routing
     // joins and is rarely fit to show a person.
     val name: String = id,
+    // RSSI signature captured at this node's location (only set for
+    // NodeType.WAYPOINT), used to match live RSSI vectors against named
+    // places instead of converting RSSI to a distance.
+    val fingerprint: List<RadioFingerprint> = emptyList(),
 )
 
 @Serializable

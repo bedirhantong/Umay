@@ -48,7 +48,25 @@ class CameraXObstacleDetector(
 
     override fun obstacleUpdates(): SharedFlow<List<DetectedObstacle>> = obstacles.asSharedFlow()
 
+    /**
+     * Binds with a visible camera preview (e.g. the "Engel Algılama" debug screen, where
+     * seeing what the model sees has real value). Detection itself runs on [ImageAnalysis]
+     * frames, entirely independent of this preview.
+     */
     fun bind(lifecycleOwner: LifecycleOwner, surfaceProvider: Preview.SurfaceProvider) {
+        bindInternal(lifecycleOwner, Preview.Builder().build().also { it.setSurfaceProvider(surfaceProvider) })
+    }
+
+    /**
+     * Binds for detection only, with no [Preview] use case and nothing to render — for
+     * screens (like live navigation) where a raw camera feed isn't shown to the user and
+     * would only be a pointless passthrough view to lay out around.
+     */
+    fun bind(lifecycleOwner: LifecycleOwner) {
+        bindInternal(lifecycleOwner, preview = null)
+    }
+
+    private fun bindInternal(lifecycleOwner: LifecycleOwner, preview: Preview?) {
         val detector = ObjectDetector.createFromFileAndOptions(
             context,
             MODEL_ASSET_NAME,
@@ -63,7 +81,6 @@ class CameraXObstacleDetector(
         val executor = Executors.newSingleThreadExecutor()
         analyzerExecutor = executor
 
-        val preview = Preview.Builder().build().also { it.setSurfaceProvider(surfaceProvider) }
         val imageAnalysis = ImageAnalysis.Builder()
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -78,7 +95,8 @@ class CameraXObstacleDetector(
                 val provider = cameraProviderFuture.get()
                 cameraProvider = provider
                 provider.unbindAll()
-                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
+                val useCases = listOfNotNull(preview, imageAnalysis).toTypedArray()
+                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, *useCases)
             },
             ContextCompat.getMainExecutor(context),
         )
