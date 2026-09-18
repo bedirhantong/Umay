@@ -1,7 +1,7 @@
 # Unit tests + Android lint on every push, so nothing broken reaches main unnoticed.
 # Results for a branch's head commit also show up on its pull request, which is why
 # there's no separate pull_request trigger (it would just run everything twice).
-# Never builds or installs an APK: device testing is done by hand on real hardware.
+# Device testing is done by hand on real hardware; nothing here installs or runs the app.
 name: CI
 
 on:
@@ -57,6 +57,15 @@ jobs:
           ./gradlew --stacktrace
           -Porg.gradle.java.installations.fromEnv=JAVA_HOME_11_X64
           :app:lintDebug
+
+      # R8 fails the build on missing classes / broken keep rules, which only a release
+      # build exercises. No signing credentials exist in CI, so the result is unsigned
+      # and thrown away — this step is a check, not a distribution.
+      - name: Release build (R8, unsigned)
+        run: >
+          ./gradlew --stacktrace
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_11_X64
+          :app:assembleRelease
 
       - name: Upload test and lint reports
         if: failure()
