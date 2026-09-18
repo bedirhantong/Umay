@@ -28,6 +28,8 @@ captures/
 *.jks
 *.keystore
 key.properties
+keystore.properties
+signing.properties
 
 # Logs
 *.log

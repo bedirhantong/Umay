@@ -1,6 +1,7 @@
 package com.appvalence.umay.settings
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Hearing
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -52,6 +54,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import com.appvalence.umay.R
 import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.common.VoiceStatusNotice
@@ -160,6 +163,10 @@ fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier) {
             OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onReplayTour) {
                 Text(stringResource(R.string.settings_tour_replay))
             }
+        }
+
+        SettingsCard(icon = Icons.Filled.Info, title = stringResource(R.string.settings_about_title)) {
+            AboutSection()
         }
     }
 }
@@ -290,6 +297,41 @@ private fun HapticSettings(settings: UserSettings) {
             Text(stringResource(label), modifier = Modifier.fillMaxWidth())
         }
     }
+}
+
+/**
+ * Version, the safety disclaimer, and — since Umay is GPL-licensed — where its
+ * source code is and what that license lets people do with it.
+ */
+@Composable
+private fun AboutSection() {
+    val context = LocalContext.current
+    val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?" }
+    val sourceUrl = stringResource(R.string.source_code_url)
+    Text(stringResource(R.string.settings_about_version, version), style = MaterialTheme.typography.bodyLarge)
+    Text(
+        text = stringResource(R.string.onboarding_safety_body),
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    Text(
+        text = stringResource(R.string.settings_about_license),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    OutlinedButton(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, sourceUrl.toUri())) } },
+    ) {
+        Text(stringResource(R.string.settings_about_source))
+    }
+    Text(
+        text = stringResource(R.string.settings_about_third_party),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
 }
 
 private enum class CalibrationPhase { SETUP, WALKING, RESULT }

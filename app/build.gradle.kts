@@ -1,7 +1,31 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Release signing credentials never live in this repository — it's public. They come
+// from, in order:
+//   1. environment variables (for CI): UMAY_KEYSTORE_FILE, UMAY_KEYSTORE_PASSWORD,
+//      UMAY_KEY_ALIAS, UMAY_KEY_PASSWORD
+//   2. a properties file outside the repo: ~/.umay-signing/keystore.properties by
+//      default, or wherever the Gradle property "umay.signing.properties" points
+//      (storeFile, storePassword, keyAlias, keyPassword)
+// With neither, release builds are simply left unsigned, so anyone can clone and build.
+val releaseSigning: Properties? = System.getenv("UMAY_KEYSTORE_FILE")
+    ?.let { storeFile ->
+        Properties().apply {
+            setProperty("storeFile", storeFile)
+            setProperty("storePassword", System.getenv("UMAY_KEYSTORE_PASSWORD").orEmpty())
+            setProperty("keyAlias", System.getenv("UMAY_KEY_ALIAS").orEmpty())
+            setProperty("keyPassword", System.getenv("UMAY_KEY_PASSWORD").orEmpty())
+        }
+    }
+    ?: (findProperty("umay.signing.properties") as String? ?: "${System.getProperty("user.home")}/.umay-signing/keystore.properties")
+        .let(::file)
+        .takeIf { it.isFile }
+        ?.let { propertiesFile -> Properties().apply { propertiesFile.inputStream().use(::load) } }
 
 android {
     namespace = "com.appvalence.umay"
@@ -19,9 +43,22 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseSigning != null) {
+            create("release") {
+                storeFile = file(releaseSigning.getProperty("storeFile"))
+                storePassword = releaseSigning.getProperty("storePassword")
+                keyAlias = releaseSigning.getProperty("keyAlias")
+                keyPassword = releaseSigning.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
