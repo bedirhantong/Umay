@@ -53,9 +53,9 @@ class BleBeaconScanner(private val context: Context) {
 
     // BLE RSSI fast-fades by roughly +/-4-6dB from multipath even when both
     // ends are stationary; a single raw sample makes the distance formula's
-    // exponential term swing wildly. Smoothing with an EMA per beacon trades a
-    // little responsiveness for a much more stable reading.
-    private val smoothedRssi = mutableMapOf<String, Double>()
+    // exponential term swing wildly. A per-beacon Kalman filter smooths this
+    // optimally (see KalmanFilter1D) instead of a fixed-ratio EMA.
+    private val rssiFilters = mutableMapOf<String, KalmanFilter1D>()
 
     fun beaconUpdates(): Flow<List<BleBeaconReading>> =
         sightings.map { it.values.sortedByDescending { reading -> reading.rssi } }
@@ -130,7 +130,7 @@ class BleBeaconScanner(private val context: Context) {
         isScanning = false
         state.value = BleScanState.Idle
         sightings.value = emptyMap()
-        smoothedRssi.clear()
+        rssiFilters.clear()
     }
 
     private fun ScanResult.toBeaconReading(): BleBeaconReading? {
@@ -145,14 +145,8 @@ class BleBeaconScanner(private val context: Context) {
         val txPower = iBeacon?.txPowerAtOneMeter
         val beaconId = iBeacon?.let { "${it.uuid}-${it.major}-${it.minor}" } ?: macAddress
 
-        val previousSmoothed = smoothedRssi[beaconId]
-        val smoothed = if (previousSmoothed == null) {
-            rssi.toDouble()
-        } else {
-            RSSI_EMA_ALPHA * rssi + (1 - RSSI_EMA_ALPHA) * previousSmoothed
-        }
-        smoothedRssi[beaconId] = smoothed
-        val smoothedRssiInt = smoothed.roundToInt()
+        val filter = rssiFilters.getOrPut(beaconId) { KalmanFilter1D() }
+        val smoothedRssiInt = filter.update(rssi.toDouble()).roundToInt()
 
         return BleBeaconReading(
             beaconId = beaconId,
@@ -195,6 +189,5 @@ class BleBeaconScanner(private val context: Context) {
         private const val IBEACON_PAYLOAD_LENGTH = 23
         private val UUID_DASH_POSITIONS = setOf(4, 6, 8, 10)
         private const val STALE_THRESHOLD_MS = 15_000L
-        private const val RSSI_EMA_ALPHA = 0.35
     }
 }

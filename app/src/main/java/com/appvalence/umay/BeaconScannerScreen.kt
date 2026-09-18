@@ -57,6 +57,7 @@ import kotlin.math.roundToInt
  * can't afford. This is throwaway survey tooling; delete this object and its
  * call sites once the on-site beacon survey is done.
  */
+
 private object BeaconSurveyLog {
     val discovered = mutableStateMapOf<String, BleBeaconReading>()
     val trajectory = mutableStateListOf<Position>()
@@ -201,6 +202,13 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                     BeaconSurveyLog.hasSolved = false
                     BeaconSurveyLog.currentFloor = 0
                 },
+            )
+        }
+
+        item {
+            SurveyMapCanvas(
+                trajectory = trajectory.filter { it.floor == BeaconSurveyLog.currentFloor },
+                results = BeaconSurveyLog.results.filter { it.floor == BeaconSurveyLog.currentFloor },
             )
         }
 
