@@ -226,6 +226,8 @@
     <string name="survey_floor_down">Bir alt kat</string>
     <string name="survey_floor_up">Bir üst kat</string>
     <string name="survey_floor_hint">Merdiven/asansörden önce güncelle</string>
+    <string name="survey_floor_hint_auto">Kat değişimi basınçtan algılanıyor, gerekirse düzelt</string>
+    <string name="survey_floor_auto">Kat değişimi algılandı, şimdi %1$s.</string>
     <string name="survey_stop">Kaydı durdur</string>
     <string name="survey_type_door">Kapı</string>
     <string name="survey_type_stairs">Merdiven</string>

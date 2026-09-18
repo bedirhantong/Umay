@@ -41,18 +41,27 @@ private const val MAX_IMPORT_BYTES = 20 * 1024 * 1024
 private val IMPORT_MIME_TYPES = arrayOf("application/json", "application/octet-stream", "text/plain")
 
 /**
- * Lets someone pick a building map file exported from another device (see
- * [BuildingMapStorage.exportCopy]) and adds it to this device's buildings.
- * Returns the action that opens the file picker; the validation-failure,
- * overwrite-confirmation and success dialogs are rendered wherever this is
- * called from.
+ * Adds a building map exported from another device (see
+ * [BuildingMapStorage.exportCopy]) to this one — picked in the system file
+ * picker ([pickFile]) or handed over by another app, e.g. a `.umay.json`
+ * tapped in WhatsApp or a file manager ([importFrom]). Both go through the
+ * same validation and dialogs.
+ */
+class BuildingImporter internal constructor(
+    val pickFile: () -> Unit,
+    val importFrom: (Uri) -> Unit,
+)
+
+/**
+ * The validation-failure, overwrite-confirmation and success dialogs are
+ * rendered wherever this is called from.
  *
  * Importing a building whose name already exists here asks before replacing
  * it — a re-survey on another phone is a legitimate reason to overwrite, but
  * losing a local survey by accident is not something to do silently.
  */
 @Composable
-fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): () -> Unit {
+fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): BuildingImporter {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingOverwrite by remember { mutableStateOf<BuildingMap?>(null) }
@@ -68,8 +77,7 @@ fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): () -> Unit {
         }
     }
 
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    fun importFrom(uri: Uri) {
         scope.launch {
             when (val read = readBuildingMap(context, uri)) {
                 is ImportRead.Rejected -> message = context.getString(R.string.import_failed_title) to read.reason
@@ -77,6 +85,10 @@ fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): () -> Unit {
                     if (BuildingMapStorage(context).exists(read.map.id)) pendingOverwrite = read.map else save(read.map)
             }
         }
+    }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) importFrom(uri)
     }
 
     pendingOverwrite?.let { map ->
@@ -103,7 +115,7 @@ fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): () -> Unit {
         )
     }
 
-    return { launcher.launch(IMPORT_MIME_TYPES) }
+    return remember(launcher) { BuildingImporter(pickFile = { launcher.launch(IMPORT_MIME_TYPES) }, importFrom = ::importFrom) }
 }
 
 private suspend fun readBuildingMap(context: Context, uri: Uri): ImportRead = withContext(Dispatchers.IO) {
