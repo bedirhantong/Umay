@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Hearing
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
@@ -71,6 +72,9 @@ fun OnboardingTour(onFinish: () -> Unit, modifier: Modifier = Modifier) {
     val pages = remember(hasBarometer) {
         listOf(
             TourPage(Icons.Filled.Hearing, R.string.onboarding_welcome_title, R.string.onboarding_welcome_body),
+            // Right after the welcome, before anything that could build overconfidence:
+            // what Umay can't do matters as much as what it can.
+            TourPage(Icons.Filled.HealthAndSafety, R.string.onboarding_safety_title, R.string.onboarding_safety_body),
             TourPage(Icons.Filled.PhoneAndroid, R.string.onboarding_hold_title, R.string.onboarding_hold_body),
             TourPage(Icons.Filled.Navigation, R.string.onboarding_guidance_title, R.string.onboarding_guidance_body),
             TourPage(Icons.Filled.Vibration, R.string.onboarding_feel_title, R.string.onboarding_feel_body),
