@@ -1,131 +1,105 @@
 # Umay
 
-Umay is an Android indoor-navigation assistant for blind and visually impaired
-people. It guides someone through a building with spoken turn-by-turn
-instructions and distinct vibration patterns, warns about people directly
-ahead using the camera, and works across floors, including stairs and
-elevators. It keeps working with the screen off and the phone in a pocket.
+Umay, görme engelli kişiler için geliştirilmiş, bina içinde yol gösteren bir
+Android uygulamasıdır. Kişiyi gitmek istediği yere sesli yönergeler ve her
+biri farklı titreşim desenleriyle götürür. Kamerayla hemen önündeki insanlara
+karşı uyarır. Merdiven ve asansör dahil katlar arasında da çalışır. Ekran
+kapalıyken ve telefon cepteyken de yönlendirmeye devam eder.
 
-The app is Turkish-first (UI and speech), and every user-facing string is a
-resource ready for translation.
+Uygulamanın arayüzü ve sesli yönergeleri Türkçedir. Kullanıcının gördüğü ve
+duyduğu tüm metinler kaynak dosyalarındadır, başka dillere çevrilmeye hazırdır.
 
-> **Safety:** Umay is an aid, not a mobility tool. It does **not** replace a
-> white cane or a guide dog. The camera only detects people. Stairs, doors and
-> ramps are known only where whoever mapped the building tagged them, and the
-> estimated position can drift by a few meters.
+> **Güvenlik:** Umay bir yardımcıdır, bir hareket aracı değildir. Beyaz baston
+> ya da rehber köpeğin **yerini tutmaz**. Kamera yalnızca insanları algılar.
+> Merdiven, kapı ve rampalar yalnızca binanın haritasını çıkaran kişi onları
+> işaretlediyse bilinir. Konum tahmini birkaç metre sapabilir.
 
-## How it works
+## Nasıl çalışır
 
-There is no GPS indoors, so position comes from two complementary sources:
+Bina içinde GPS çalışmaz. Konum, birbirini tamamlayan iki kaynaktan bulunur:
 
-- **Pedestrian dead reckoning (PDR):** steps from the accelerometer and a
-  gyroscope-only heading. The magnetometer is deliberately not used, because
-  steel and wiring distort it differently in every corridor. Stride length is
-  calibrated per person.
-- **BLE fingerprinting:** named places record the signal strengths of nearby
-  Bluetooth beacons during mapping. While navigating, a confident match
-  snaps the position back to that place and corrects PDR drift.
+- **Adım sayarak konum takibi (PDR):** Adımlar ivmeölçerden, yön yalnızca
+  jiroskoptan alınır. Pusula (manyetometre) bilerek kullanılmaz, çünkü
+  binadaki çelik ve kablolar onu her koridorda farklı biçimde saptırır. Adım
+  uzunluğu her kişi için ayrıca ölçülür.
+- **Bluetooth parmak izi:** Harita çıkarılırken isim verilen her noktada
+  çevredeki Bluetooth işaretçilerinin (beacon) sinyal güçleri kaydedilir.
+  Yönlendirme sırasında güvenilir bir eşleşme olunca konum o noktaya
+  düzeltilir, böylece adım saymanın zamanla biriken sapması giderilir.
 
-A building is mapped once by walking it with the **Beacon Tarayıcı** screen:
-record, name places as you pass them, and tag doors, stairs, elevators and
-ramps. Maps can be exported and imported between devices as `.umay.json`
-files.
+Bir binanın haritası bir kez, **Beacon Tarayıcı** ekranıyla binada yürüyerek
+çıkarılır: kayıt başlatılır, geçilen yerlere isim verilir, kapılar,
+merdivenler, asansörler ve rampalar işaretlenir. Haritalar `.umay.json`
+dosyası olarak cihazlar arasında dışa ve içe aktarılabilir.
 
-Floor changes are confirmed from barometric pressure when the phone has a
-barometer (stairs and elevators alike), otherwise from footsteps on stairs or
-a button press.
+Telefonda basınç sensörü (barometre) varsa kat değişimi merdivende de
+asansörde de hava basıncından kendiliğinden algılanır. Yoksa merdivende
+adımlardan anlaşılır, asansörde bir düğmeyle onaylanır.
 
-### Modules
+### Modüller
 
-| Module | Contents |
+| Modül | İçerik |
 |---|---|
-| `core-model` | Plain-Kotlin data model: building maps, positions, alerts, field-log events, JSON |
-| `positioning` | Step detection, PDR, BLE scanning and fingerprint matching, position fusion, barometer |
-| `perception` | CameraX + TensorFlow Lite (EfficientDet-Lite0) person detection with distance/bearing |
-| `orchestrator` | A* routing across floors, turn-by-turn guidance, obstacle alerts, rerouting |
-| `feedback` | Text-to-speech (voice selection, audio focus) and haptic patterns |
-| `app` | Compose UI, the foreground navigation session, storage, field logging |
+| `core-model` | Saf Kotlin veri modeli: bina haritaları, konumlar, uyarılar, saha kaydı olayları, JSON |
+| `positioning` | Adım algılama, adım sayarak konum takibi, Bluetooth tarama ve parmak izi eşleştirme, konum birleştirme, barometre |
+| `perception` | CameraX ve TensorFlow Lite (EfficientDet-Lite0) ile insan algılama, mesafe ve yön tahmini |
+| `orchestrator` | Katlar arası A* rota bulma, adım adım yönergeler, engel uyarıları, rotayı yeniden hesaplama |
+| `feedback` | Metin okuma (ses seçimi, ses odağı yönetimi) ve titreşim desenleri |
+| `app` | Compose arayüzü, arka planda çalışan navigasyon oturumu, kayıt, saha kaydı |
 
-## Building
+## Derleme
 
-Requirements: JDK 17 or newer (JDK 11 is also used as a toolchain for
-`core-model`), and the Android SDK with platform 36.
+Gereksinimler: JDK 17 ya da daha yeni bir sürüm (`core-model` için JDK 11 de
+kullanılır) ve 36 platformu yüklü Android SDK.
 
 ```sh
 ./gradlew :app:assembleDebug          # debug APK
-./gradlew :app:installDebug           # install on a connected device
+./gradlew :app:installDebug           # bağlı cihaza yükle
 ```
 
-Tests and lint:
+Testler ve lint:
 
 ```sh
 ./gradlew :core-model:test :positioning:test :perception:test \
           :feedback:test :orchestrator:test :app:testDebugUnitTest :app:lintDebug
 ```
 
-The app needs real hardware to be useful (sensors, Bluetooth, camera). An
-emulator can only show the UI.
+Uygulamanın işe yaraması için gerçek bir cihaz gerekir: sensörler, Bluetooth
+ve kamera. Emülatörde yalnızca arayüz görülebilir.
 
-### Release builds and signing
+## Saha testi
 
-Release builds are shrunk and optimized with R8. They are not obfuscated,
-because the source is public anyway and readable crash stack traces matter
-more.
+**Dosyalar → Navigasyon sırasında kayıt tut** açıkken her yönlendirme bir
+JSON Lines dosyasına kaydedilir. Dosyada şunlar bulunur:
 
-Signing credentials are never stored in this repository. If none are found,
-`./gradlew :app:assembleRelease` produces an unsigned build, so anyone can
-build from source. Maintainers provide credentials in one of two ways:
+- harita ve tüm ayar değerleri,
+- adım sayma, parmak izi ve birleştirilmiş konumlar,
+- beacon sinyal güçleri ve hava basıncı,
+- okunan yönergeler ve kat değişimleri,
+- "Buradayım" işaretleri: gerçek konum hatasını ölçmek için.
 
-- **Environment variables:** `UMAY_KEYSTORE_FILE`, `UMAY_KEYSTORE_PASSWORD`,
-  `UMAY_KEY_ALIAS`, `UMAY_KEY_PASSWORD`.
-- **A properties file outside the repository:** by default
-  `~/.umay-signing/keystore.properties`, or any path passed as the Gradle
-  property `umay.signing.properties`. The file contains `storeFile`,
-  `storePassword`, `keyAlias` and `keyPassword`.
+Tahmine dayanan ayar değerleri bu kayıtlarla gerçek yürüyüşlere göre
+ayarlanır. Çökme kayıtları da cihazda tutulur. Kullanıcı paylaşmadıkça hiçbir
+veri cihazdan çıkmaz.
 
-## Field testing
+## Katkıda bulunmak
 
-With **Dosyalar → Navigasyon sırasında kayıt tut** enabled, every navigation
-session is written to a JSON Lines file containing:
+Hata bildirimleri (issue) ve pull request'ler memnuniyetle karşılanır. Pull
+request açmadan önce lütfen testleri ve lint'i çalıştırın. Yönergelerin
+davranışını değiştiren bir değişiklikte, gerçek bir cihazda nasıl test
+ettiğinizi de anlatın.
 
-- the map and all tuning constants,
-- positions from PDR, fingerprinting and fusion,
-- beacon signal strengths and barometric pressure,
-- spoken instructions and floor changes,
-- "Buradayım" ground-truth marks, which measure the real position error.
+## Lisans
 
-These logs are how the guessed constants get calibrated against real walks.
-Crash reports are also written locally. Nothing leaves the device unless the
-user shares it.
+Umay özgür yazılımdır ve **GNU Genel Kamu Lisansı sürüm 3 (GPL-3.0)** ile
+dağıtılır ([LICENSE](LICENSE)). Yazılımı kullanabilir, inceleyebilir,
+değiştirebilir ve yeniden dağıtabilirsiniz. Dağıtılan her türev de aynı
+lisansla ve kaynak koduyla birlikte yayınlanmalıdır.
 
-## Contributing
+Üçüncü taraf bileşenler kendi lisanslarını korur. Hepsi GPL-3.0 ile
+uyumludur:
 
-Issues and pull requests are welcome. Please run the tests and lint before
-opening a pull request. For anything that changes how guidance behaves,
-describe how you tested it on a real device.
-
-## License
-
-Umay is free software, licensed under the **GNU General Public License v3.0**
-([LICENSE](LICENSE)): you may use, study, modify and redistribute it, and any
-distributed derivative must be released under the same license with its
-source code.
-
-Third-party components keep their own licenses, all compatible with GPLv3:
-
-- **Apache License 2.0:** AndroidX and Jetpack Compose, CameraX,
-  TensorFlow Lite and its Task Library, the EfficientDet-Lite0 model
-  (`perception/src/main/assets/`), kotlinx.coroutines and
+- **Apache Lisansı 2.0:** AndroidX ve Jetpack Compose, CameraX,
+  TensorFlow Lite ve Task Library, EfficientDet-Lite0 modeli
+  (`perception/src/main/assets/`), kotlinx.coroutines ve
   kotlinx.serialization.
-
----
-
-## Türkçe
-
-Umay, görme engelli kişilerin bina içinde sesli yönergeler ve titreşimlerle
-gitmek istedikleri yere ulaşmasına yardım eden açık kaynaklı bir Android
-uygulamasıdır.
-
-**Umay bir yardımcıdır; beyaz baston ya da rehber köpeğin yerini tutmaz.**
-
-Kaynak kodu GNU GPL v3 lisansıyla yayınlanmaktadır.
