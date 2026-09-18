@@ -31,6 +31,10 @@ data class FloorChangeHint(
  * multiple floors, replanned around any obstacle blocking it — see
  * [NavigationOrchestrator]), any alerts derived from them against the static
  * building map, and whether the route is currently waiting on a floor change.
+ *
+ * [nextRouteIndex] is the index into [route] of the node the user is currently
+ * walking toward — everything before it is already behind them, which is what
+ * lets a map draw the traveled part of the route differently from what's left.
  */
 data class NavigationState(
     val position: Position,
@@ -38,4 +42,5 @@ data class NavigationState(
     val alerts: List<NavigationAlert>,
     val route: List<MapNode>,
     val pendingFloorChange: FloorChangeHint? = null,
+    val nextRouteIndex: Int = 1,
 )

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.trilateration.BeaconSurveyResult
+import kotlin.math.min
 
 /**
  * Live top-down view of the on-site survey for the current floor: the
@@ -74,16 +75,18 @@ fun SurveyMapCanvas(
             val spanY = (maxY - minY).coerceAtLeast(MIN_SPAN_METERS)
             val padding = CANVAS_PADDING_PX
 
-            fun toOffset(x: Double, y: Double): Offset {
-                val normalizedX = ((x - minX) / spanX).toFloat()
-                val normalizedY = ((y - minY) / spanY).toFloat()
-                return Offset(
-                    x = padding + normalizedX * (size.width - 2 * padding),
-                    // Flip y so "up" on screen matches increasing y in the survey's
-                    // coordinate convention (see BeaconScannerScreen's field notes).
-                    y = size.height - padding - normalizedY * (size.height - 2 * padding),
-                )
-            }
+            // One scale for both axes, so a square room stays square — stretching x and y
+            // independently to fill the canvas distorts every corridor's proportions.
+            val scale = min((size.width - 2 * padding) / spanX, (size.height - 2 * padding) / spanY)
+            val centerX = (minX + maxX) / 2
+            val centerY = (minY + maxY) / 2
+
+            fun toOffset(x: Double, y: Double): Offset = Offset(
+                x = (size.width / 2 + (x - centerX) * scale).toFloat(),
+                // Flip y so "up" on screen matches increasing y in the survey's
+                // coordinate convention (see BeaconScannerScreen's field notes).
+                y = (size.height / 2 - (y - centerY) * scale).toFloat(),
+            )
 
             if (trajectory.size >= 2) {
                 val path = Path().apply {

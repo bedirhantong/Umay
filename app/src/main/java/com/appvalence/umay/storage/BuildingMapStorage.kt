@@ -13,9 +13,11 @@ import java.io.File
  */
 class BuildingMapStorage(context: Context) {
     private val directory = File(context.filesDir, DIRECTORY_NAME).apply { mkdirs() }
+    private val exportDirectory = File(context.cacheDir, EXPORT_DIRECTORY_NAME)
 
     init {
         migrateLegacySingleFile(context)
+        migrateUnhashedFileNames()
     }
 
     /** Returns true on success; false (never throws) if the disk write failed — e.g. storage full. */
@@ -28,6 +30,8 @@ class BuildingMapStorage(context: Context) {
         return runCatching { BuildingMapJson.decode(file.readText()) }.getOrNull()
     }
 
+    fun exists(buildingId: String): Boolean = fileFor(buildingId).exists()
+
     fun delete(buildingId: String): Boolean = fileFor(buildingId).delete()
 
     fun listBuildings(): List<BuildingMap> =
@@ -36,7 +40,27 @@ class BuildingMapStorage(context: Context) {
             ?.sortedBy { it.id }
             .orEmpty()
 
-    private fun fileFor(buildingId: String): File = File(directory, "${sanitizeFileName(buildingId)}.json")
+    /**
+     * Writes [map] to a shareable copy named after the building itself (not the
+     * internal hashed file name), for handing to another device via
+     * [shareFiles]. Lives in the cache directory: it's a throwaway copy, the
+     * real one stays in [directory]. Null if the write failed.
+     */
+    fun exportCopy(map: BuildingMap): File? = runCatching {
+        exportDirectory.mkdirs()
+        File(exportDirectory, "${sanitizeFileName(map.id)}$EXPORT_SUFFIX").apply {
+            writeText(BuildingMapJson.encode(map))
+        }
+    }.getOrNull()
+
+    // The sanitized name alone isn't unique: it replaces every non-ASCII letter with
+    // "_", so "Şube" and "Çube" would land on the same file and one silently overwrite
+    // the other. A short hash of the exact id keeps distinct names in distinct files
+    // (String.hashCode is specified by the language, so this is stable across runs).
+    private fun fileFor(buildingId: String): File = File(directory, fileNameFor(buildingId))
+
+    private fun fileNameFor(buildingId: String): String =
+        "${sanitizeFileName(buildingId)}-${"%08x".format(buildingId.hashCode())}.json"
 
     private fun sanitizeFileName(id: String): String = id.replace(UNSAFE_FILENAME_CHARS, "_").ifBlank { "building" }
 
@@ -54,9 +78,23 @@ class BuildingMapStorage(context: Context) {
         legacyFile.delete()
     }
 
+    // Files saved before the hash suffix existed (see fileFor) are renamed once, so
+    // load/exists/delete by id keep finding them.
+    private fun migrateUnhashedFileNames() {
+        directory.listFiles { file -> file.extension == "json" && !HASHED_FILE_NAME.matches(file.name) }
+            ?.forEach { file ->
+                val map = runCatching { BuildingMapJson.decode(file.readText()) }.getOrNull() ?: return@forEach
+                val target = fileFor(map.id)
+                if (!target.exists()) file.renameTo(target) else file.delete()
+            }
+    }
+
     companion object {
         private const val DIRECTORY_NAME = "buildings"
+        private const val EXPORT_DIRECTORY_NAME = "exports"
+        private const val EXPORT_SUFFIX = ".umay.json"
         private const val LEGACY_FILE_NAME = "building_map.json"
         private val UNSAFE_FILENAME_CHARS = Regex("[^A-Za-z0-9_-]")
+        private val HASHED_FILE_NAME = Regex(".*-[0-9a-f]{8}\\.json")
     }
 }

@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -20,6 +23,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.Map
@@ -40,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,8 +69,24 @@ import androidx.lifecycle.LifecycleOwner
 import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.coremodel.FieldLogEvent
+import com.appvalence.umay.coremodel.FloorChangeEvent
+import com.appvalence.umay.coremodel.FloorChangePhase
+import com.appvalence.umay.coremodel.GroundTruthEvent
+import com.appvalence.umay.coremodel.GuidanceEvent
+import com.appvalence.umay.coremodel.PositionEvent
+import com.appvalence.umay.coremodel.PositionStream
+import com.appvalence.umay.coremodel.RssiEvent
+import com.appvalence.umay.coremodel.SessionEndEvent
+import com.appvalence.umay.coremodel.SessionStartEvent
+import com.appvalence.umay.coremodel.StatusEvent
 import com.appvalence.umay.coremodel.MapNode
+import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.feedback.TtsFeedbackController
+import com.appvalence.umay.fieldlog.FieldLogRecorder
+import com.appvalence.umay.fieldlog.FieldLogStore
+import com.appvalence.umay.files.rememberBuildingImporter
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
 import com.appvalence.umay.perception.CameraXObstacleDetector
@@ -72,12 +95,16 @@ import com.appvalence.umay.positioning.engine.FingerprintPositioningEngine
 import com.appvalence.umay.positioning.engine.PdrPositioningEngine
 import com.appvalence.umay.positioning.engine.PositionFusionEngine
 import com.appvalence.umay.positioning.engine.PositioningEngine
+import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
+import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import com.appvalence.umay.positioning.pdr.StepDetector
+import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
 import com.appvalence.umay.storage.BuildingMapStorage
 import com.appvalence.umay.survey.round1
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.onEach
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 
 private val NAVIGATION_PERMISSIONS = buildList {
     add(Manifest.permission.CAMERA)
@@ -117,6 +144,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
 
     var buildings by remember { mutableStateOf(BuildingMapStorage(context).listBuildings()) }
     var selectedBuildingId by remember { mutableStateOf<String?>(null) }
+    val importBuilding = rememberBuildingImporter(onImported = { buildings = BuildingMapStorage(context).listBuildings() })
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         if (!hasPermissions) {
@@ -157,10 +185,16 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             EmptyState(
                 icon = Icons.Filled.Map,
                 title = "Henüz bir harita yok",
-                message = "Önce \"Beacon Tarayıcı\" ekranında bir saha kaydı yapıp haritayı kaydet, sonra buraya dön.",
+                message = "Önce \"Beacon Tarayıcı\" ekranında bir saha kaydı yapıp haritayı kaydet, " +
+                    "ya da başka bir cihazdan dışa aktarılmış bir haritayı içe aktar.",
+                modifier = Modifier.weight(1f),
             )
+            Button(modifier = Modifier.fillMaxWidth(), onClick = importBuilding) {
+                Icon(Icons.Filled.FileOpen, contentDescription = null)
+                Text("Haritayı içe aktar", modifier = Modifier.padding(start = 8.dp))
+            }
             TextButton(
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 onClick = { buildings = BuildingMapStorage(context).listBuildings() },
             ) {
                 Text("Yeniden dene")
@@ -211,6 +245,12 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                 onDestinationChange = { destinationIndex = it },
                 onBegin = { isNavigating = true },
             )
+            if (remember { FieldLogStore(context).isRecordingEnabled }) {
+                RecordingIndicator(
+                    text = "Saha kaydı açık: bu yönlendirme kaydedilecek. \"Dosyalar\" sekmesinden kapatabilir ya da paylaşabilirsin.",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
         } else {
             ActiveNavigation(
                 context = context,
@@ -413,6 +453,19 @@ private fun ActiveNavigation(
 
     var fingerprintCorrectionCount by remember { mutableIntStateOf(0) }
 
+    // Field-test log for this one session (see FieldLogRecorder) — null unless recording
+    // was switched on in "Dosyalar". Everything below records through `recorder?.`, so
+    // with recording off none of this costs anything.
+    val recorder = remember {
+        val store = FieldLogStore(context)
+        if (store.isRecordingEnabled) FieldLogRecorder(store.newSessionFile(buildingMap.id)) else null
+    }
+    val sessionEnd = remember { SessionEndReason() }
+    // Only beacons the map actually fingerprinted matter for calibration; every phone,
+    // watch and headset advertising nearby would otherwise bury them. With no
+    // fingerprints yet, keep iBeacons — likely what the next survey will use.
+    val fingerprintBeaconIds = remember(allNodes) { allNodes.flatMap { it.fingerprint }.map { it.beaconId }.toSet() }
+
     // Hoisted out of the orchestrator's own remember block so the "Kat değiştirdim"
     // button below can reset it directly when the user confirms a floor crossing —
     // there's no barometer to detect that automatically (see NavigationOrchestrator's
@@ -436,8 +489,11 @@ private fun ActiveNavigation(
         val fusion = PositionFusionEngine(pdrResettable = pdrEngine)
         val fusedPositioning = object : PositioningEngine {
             override fun positionUpdates() = fusion.fuse(
-                fingerprintEngine.positionUpdates().onEach { fingerprintCorrectionCount++ },
-                pdrEngine.positionUpdates(),
+                fingerprintEngine.positionUpdates().onEach {
+                    fingerprintCorrectionCount++
+                    recorder?.record(PositionEvent.of(PositionStream.FINGERPRINT, it))
+                },
+                pdrEngine.positionUpdates().onEach { recorder?.record(PositionEvent.of(PositionStream.PDR, it)) },
             )
         }
         NavigationOrchestrator(
@@ -451,6 +507,7 @@ private fun ActiveNavigation(
     }
 
     DisposableEffect(Unit) {
+        recorder?.record(sessionStartEvent(context, buildingMap, startNodeId, destinationNode.id))
         scanner.start()
         // No preview surface — nothing to show for a raw camera feed here, and CameraX's
         // preview surface (SurfaceView-backed) can visually paint over other content on
@@ -460,30 +517,62 @@ private fun ActiveNavigation(
             scanner.stop()
             detector.unbind()
             feedback.shutdown()
+            recorder?.record(SessionEndEvent(System.currentTimeMillis(), sessionEnd.reason))
+            recorder?.close()
         }
     }
 
-    fun confirmFloorChange(targetNodeId: String, targetFloor: Int, headingDeg: Double) {
+    if (recorder != null) {
+        LaunchedEffect(recorder) {
+            scanner.rawReadingUpdates().collect { reading ->
+                val relevant = if (fingerprintBeaconIds.isEmpty()) reading.uuid != null else reading.beaconId in fingerprintBeaconIds
+                if (relevant) recorder.record(RssiEvent(reading.timestampMs, reading.beaconId, reading.rssi))
+            }
+        }
+    }
+
+    fun confirmFloorChange(targetNodeId: String, targetFloor: Int, headingDeg: Double, phase: FloorChangePhase) {
         val targetNode = allNodesById[targetNodeId] ?: return
         pdrEngine.changeFloor(newFloor = targetFloor, x = targetNode.x, y = targetNode.y, headingDeg = headingDeg)
+        recorder?.record(FloorChangeEvent(System.currentTimeMillis(), phase, targetNodeId, targetFloor))
     }
 
     var state by remember { mutableStateOf<NavigationState?>(null) }
     var currentInstruction by remember { mutableStateOf("Yola çıkmaya hazırlanıyor...") }
     var pipelineError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(orchestrator) {
+        var lastLoggedPositionMs = -1L
+        var lastPromptedFloorChange: String? = null
         try {
             orchestrator.start().collect { newState ->
                 state = newState
                 newState.alerts.firstOrNull { it.id.startsWith("route-guide-") || it.id.startsWith("arrived-") || it.id.startsWith("no-route-") }
                     ?.let { currentInstruction = it.message }
 
+                if (recorder != null) {
+                    // combine() re-emits on every camera frame with the same position; log each position once.
+                    if (newState.position.timestampMs != lastLoggedPositionMs) {
+                        lastLoggedPositionMs = newState.position.timestampMs
+                        recorder.record(PositionEvent.of(PositionStream.FUSED, newState.position))
+                    }
+                    newState.alerts.forEach { alert ->
+                        recorder.record(GuidanceEvent(alert.createdAtMs, alert.id, alert.priority.name, alert.message))
+                    }
+                    val hint = newState.pendingFloorChange
+                    if (hint != null && hint.targetNodeId != lastPromptedFloorChange) {
+                        recorder.record(FloorChangeEvent(System.currentTimeMillis(), FloorChangePhase.PROMPTED, hint.targetNodeId, hint.targetFloor))
+                    }
+                    lastPromptedFloorChange = hint?.targetNodeId
+                }
+
                 // A STAIRS crossing confirms itself once enough footsteps have piled up
                 // (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap needed,
                 // which matters since a blind user's hands may well be full on a staircase.
                 // Elevators never set autoConfirm, so those still wait for the button below.
                 newState.pendingFloorChange?.let { hint ->
-                    if (hint.autoConfirm) confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg)
+                    if (hint.autoConfirm) {
+                        confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg, FloorChangePhase.CONFIRMED_AUTOMATICALLY)
+                    }
                 }
             }
         } catch (e: CancellationException) {
@@ -495,6 +584,7 @@ private fun ActiveNavigation(
             // onBindFailed, StepDetector.isAvailable gating steps before this even starts)
             // but an unanticipated one should show a recoverable screen, not crash the app.
             pipelineError = "Navigasyon durduruldu: ${e.message ?: "beklenmeyen bir hata oluştu"}"
+            sessionEnd.reason = "error: ${e.message}"
         }
     }
 
@@ -502,19 +592,26 @@ private fun ActiveNavigation(
     val destinationFloor = remember { nodeFloor[destinationNode.id] ?: 0 }
     val status = currentState.toNavigationStatus(destinationNode, destinationFloor)
     val hasFingerprintedWaypoints = remember(allNodes) { allNodes.any { it.fingerprint.isNotEmpty() } }
+    if (recorder != null) {
+        LaunchedEffect(status) { recorder.record(StatusEvent(System.currentTimeMillis(), status.name)) }
+    }
 
     val currentFloorIndex = currentState?.position?.floor ?: startFloorIndex
     val currentFloorMap = remember(buildingMap, currentFloorIndex) {
         buildingMap.floors.firstOrNull { it.floorIndex == currentFloorIndex } ?: buildingMap.floors.first()
     }
-    val routeOnCurrentFloor = remember(currentState?.route, currentFloorIndex) {
-        currentState?.route.orEmpty().filter { nodeFloor[it.id] == currentFloorIndex }
+    val progress = currentState?.let {
+        routeProgress(it.route, it.nextRouteIndex, it.position, nodeFloor, buildingMap.floorTransitions)
+    }
+    val stop = {
+        sessionEnd.reason = if (status == NavigationStatus.ARRIVED) "arrived" else "stopped"
+        onStop()
     }
 
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         if (pipelineError != null) {
             EmptyState(icon = Icons.Filled.Warning, title = "Bir şeyler ters gitti", message = pipelineError.orEmpty())
-            Button(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), onClick = onStop) {
+            Button(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), onClick = stop) {
                 Text("Geri dön")
             }
             return@Column
@@ -546,8 +643,12 @@ private fun ActiveNavigation(
         Text(
             text = currentInstruction,
             style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(top = 16.dp, bottom = 16.dp),
+            modifier = Modifier.padding(top = 16.dp, bottom = 12.dp),
         )
+
+        if (progress != null && status != NavigationStatus.ARRIVED) {
+            RouteProgressCard(progress, modifier = Modifier.padding(bottom = 12.dp))
+        }
 
         val pendingFloorChange = currentState?.pendingFloorChange
         if (pendingFloorChange != null) {
@@ -555,7 +656,12 @@ private fun ActiveNavigation(
             Button(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 onClick = {
-                    confirmFloorChange(pendingFloorChange.targetNodeId, pendingFloorChange.targetFloor, currentState.position.headingDeg)
+                    confirmFloorChange(
+                        pendingFloorChange.targetNodeId,
+                        pendingFloorChange.targetFloor,
+                        currentState.position.headingDeg,
+                        FloorChangePhase.CONFIRMED_MANUALLY,
+                    )
                 },
             ) {
                 Icon(Icons.Filled.SwapVert, contentDescription = null)
@@ -565,40 +671,216 @@ private fun ActiveNavigation(
 
         Button(
             modifier = Modifier.fillMaxWidth(),
-            onClick = onStop,
+            onClick = stop,
         ) {
             Icon(Icons.Filled.Stop, contentDescription = null)
             Text(text = "Yönlendirmeyi durdur", modifier = Modifier.padding(start = 8.dp))
         }
 
+        if (recorder != null) {
+            GroundTruthControls(
+                recorder = recorder,
+                currentFloorIndex = currentFloorIndex,
+                buildingMap = buildingMap,
+                nodeFloor = nodeFloor,
+                estimate = currentState?.position,
+            )
+        }
+
         NavigationMapCanvas(
             floorMap = currentFloorMap,
-            route = routeOnCurrentFloor,
+            floorLabel = "Kat ${currentFloorMap.floorIndex}",
+            route = currentState?.route.orEmpty(),
+            nextRouteIndex = currentState?.nextRouteIndex ?: 1,
+            nodeFloor = nodeFloor,
             position = currentState?.position,
             obstacles = currentState?.obstacles ?: emptyList(),
+            description = mapDescription(currentFloorMap.floorIndex, progress, destinationNode, currentState?.obstacles?.size ?: 0),
             modifier = Modifier.padding(top = 16.dp),
-        )
-        Text(
-            text = "⚪ bina grafı (Kat $currentFloorIndex)   🔵 rota   🟠 hedef   🟢 senin konumun   🔴 algılanan engel",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
         )
 
         if (currentState != null) {
-            Text(
-                text = "Rota: " + currentState.route.joinToString(" → ") { allNodesById[it.id]?.name ?: it.name },
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                text = "Teknik: x=${currentState.position.x.round1()} y=${currentState.position.y.round1()} " +
+            TechnicalDetails(
+                routeText = currentState.route.joinToString(" → ") { allNodesById[it.id]?.name ?: it.name },
+                technicalText = "x=${currentState.position.x.round1()} y=${currentState.position.y.round1()} " +
                     "kat=${currentState.position.floor} doğruluk≈${currentState.position.accuracyMeters.round1()}m " +
                     "kaynak=${currentState.position.source} fingerprint düzeltmesi=$fingerprintCorrectionCount",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/** Why a field-log session ended — set by whatever ends it, read once when the screen is disposed. */
+private class SessionEndReason {
+    var reason: String = "left_screen"
+}
+
+private fun sessionStartEvent(context: Context, map: BuildingMap, startNodeId: String, destinationNodeId: String): FieldLogEvent {
+    val appVersion = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+    return SessionStartEvent(
+        t = System.currentTimeMillis(),
+        appVersion = appVersion ?: "?",
+        device = "${Build.MANUFACTURER} ${Build.MODEL}",
+        androidSdk = Build.VERSION.SDK_INT,
+        buildingId = map.id,
+        startNodeId = startNodeId,
+        destinationNodeId = destinationNodeId,
+        // Everything that was guessed rather than measured, so offline analysis knows
+        // exactly which values produced this walk.
+        constants = mapOf(
+            "StepDetector.AVERAGE_STEP_LENGTH_METERS" to StepDetector.AVERAGE_STEP_LENGTH_METERS,
+            "StepDetector.STEP_RISE_THRESHOLD_MPS2" to StepDetector.STEP_RISE_THRESHOLD_MPS2,
+            "StepDetector.STEP_FALL_THRESHOLD_MPS2" to StepDetector.STEP_FALL_THRESHOLD_MPS2,
+            "StepDetector.MIN_STEP_INTERVAL_MS" to StepDetector.MIN_STEP_INTERVAL_MS.toDouble(),
+            "StepDetector.BASELINE_TIME_CONSTANT_SECONDS" to StepDetector.BASELINE_TIME_CONSTANT_SECONDS,
+            "PdrIntegrator.DEFAULT_DRIFT_PER_STEP_METERS" to PdrIntegrator.DEFAULT_DRIFT_PER_STEP_METERS,
+            "FingerprintMatcher.MIN_SHARED_BEACONS" to FingerprintMatcher.MIN_SHARED_BEACONS.toDouble(),
+            "FingerprintMatcher.MAX_MATCH_DISTANCE" to FingerprintMatcher.MAX_MATCH_DISTANCE,
+            "FingerprintMatcher.AMBIGUITY_MARGIN" to FingerprintMatcher.AMBIGUITY_MARGIN,
+            "FingerprintMatcher.MISSING_BEACON_RSSI" to FingerprintMatcher.MISSING_BEACON_RSSI,
+            "FingerprintPositioningEngine.ASSUMED_ACCURACY_METERS" to FingerprintPositioningEngine.ASSUMED_ACCURACY_METERS,
+            "NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS" to NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS,
+            "NavigationOrchestrator.ARRIVAL_DISTANCE_METERS" to NavigationOrchestrator.ARRIVAL_DISTANCE_METERS,
+            "NavigationOrchestrator.TURN_ANGLE_THRESHOLD_DEG" to NavigationOrchestrator.TURN_ANGLE_THRESHOLD_DEG,
+            "NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT" to NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT.toDouble(),
+            "NavigationOrchestrator.CRITICAL_DISTANCE_METERS" to NavigationOrchestrator.CRITICAL_DISTANCE_METERS,
+            "NavigationOrchestrator.WARNING_DISTANCE_METERS" to NavigationOrchestrator.WARNING_DISTANCE_METERS,
+            "BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS" to BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS,
+        ),
+        map = map,
+    )
+}
+
+@Composable
+private fun RecordingIndicator(text: String, modifier: Modifier = Modifier) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        Icon(
+            Icons.Filled.FiberManualRecord,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(12.dp),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp),
+        )
+    }
+}
+
+/** "Sonraki: Kapı · 8 m" / "Hedefe ~34 m · yaklaşık 1 dakika" — the two numbers people actually ask. */
+@Composable
+private fun RouteProgressCard(progress: RouteProgress, modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Sonraki", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(progress.nextNode.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = progress.metersToNext?.let { "${it.roundToInt()} m" } ?: "Kat değişimi",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("Hedefe", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("~${progress.metersToDestination.roundToInt()} m", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = if (progress.minutesToDestination <= 1) "1 dakikadan az" else "yaklaşık ${progress.minutesToDestination} dakika",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
+}
+
+private fun mapDescription(floorIndex: Int, progress: RouteProgress?, destination: MapNode, obstacleCount: Int): String = buildString {
+    append("Kat $floorIndex haritası. ")
+    if (progress != null) {
+        append("Sonraki nokta ${progress.nextNode.name}")
+        progress.metersToNext?.let { append(", ${it.roundToInt()} metre") }
+        append(". ${destination.name} hedefine yaklaşık ${progress.metersToDestination.roundToInt()} metre. ")
+    }
+    if (obstacleCount > 0) append("$obstacleCount engel görünüyor.")
+}
+
+/**
+ * Field-test ground truth: the tester taps this the moment they're physically
+ * standing at a named place, and the log gets where they *really* were next to
+ * where the app thought they were (see GroundTruthEvent). A handful of these
+ * per walk is what makes the position error measurable rather than a feeling.
+ */
+@Composable
+private fun GroundTruthControls(
+    recorder: FieldLogRecorder,
+    currentFloorIndex: Int,
+    buildingMap: BuildingMap,
+    nodeFloor: Map<String, Int>,
+    estimate: Position?,
+) {
+    var choosing by remember { mutableStateOf(false) }
+    var lastMark by remember { mutableStateOf<String?>(null) }
+
+    Column(modifier = Modifier.padding(top = 12.dp)) {
+        RecordingIndicator(
+            text = if (recorder.failed) "Saha kaydı yazılamadı (depolama dolu olabilir), kayıt durdu." else "Saha kaydı alınıyor",
+        )
+        OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), onClick = { choosing = true }) {
+            Icon(Icons.Filled.PinDrop, contentDescription = null)
+            Text("Buradayım: gerçek konumu işaretle", modifier = Modifier.padding(start = 8.dp))
+        }
+        lastMark?.let {
+            Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+
+    if (choosing) {
+        // Current floor first — that's almost always where the tester is — but every
+        // floor stays reachable, since floor tracking being wrong is itself worth logging.
+        val nodes = remember(buildingMap, currentFloorIndex) {
+            buildingMap.floors
+                .sortedBy { if (it.floorIndex == currentFloorIndex) Int.MIN_VALUE else it.floorIndex }
+                .flatMap { floor -> floor.nodes.filter { it.type != NodeType.BLE_ANCHOR }.sortedBy { it.name } }
+        }
+        AlertDialog(
+            onDismissRequest = { choosing = false },
+            title = { Text("Şu an neredesin?") },
+            text = {
+                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                    items(nodes, key = { it.id }) { node ->
+                        val floor = nodeFloor[node.id] ?: 0
+                        Text(
+                            text = if (buildingMap.floors.size > 1) "${node.name} (Kat $floor)" else node.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val event = GroundTruthEvent.of(System.currentTimeMillis(), node, floor, estimate)
+                                    recorder.record(event)
+                                    lastMark = "✓ ${node.name} işaretlendi" +
+                                        (event.errorMeters?.let { " — tahmin ${it.round1()} m uzaktaydı" } ?: " — tahmin başka bir kattaydı")
+                                    choosing = false
+                                }
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { choosing = false }) { Text("Vazgeç") } },
+        )
+    }
+}
+
+@Composable
+private fun TechnicalDetails(routeText: String, technicalText: String) {
+    var expanded by remember { mutableStateOf(false) }
+    TextButton(modifier = Modifier.padding(top = 8.dp), onClick = { expanded = !expanded }) {
+        Text(if (expanded) "Teknik ayrıntıları gizle" else "Teknik ayrıntıları göster")
+    }
+    if (expanded) {
+        Text(text = "Rota: $routeText", style = MaterialTheme.typography.bodySmall)
+        Text(text = technicalText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

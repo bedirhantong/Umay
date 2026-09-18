@@ -279,6 +279,37 @@ class NavigationOrchestratorTest {
     }
 
     @Test
+    fun `nextRouteIndex tracks which route node the user is walking toward`() = runTest {
+        val nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),
+            MapNode("B", 0.0, 10.0, NodeType.CORRIDOR, name = "B"),
+            MapNode("C", 0.0, 20.0, NodeType.DESTINATION, name = "C"),
+        )
+        val edges = listOf(
+            MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+            MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+        )
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, edges)))
+        val positions = listOf(
+            position(0.0, 0.0, timestampMs = 0L),
+            position(0.0, 9.0, timestampMs = 1_000L), // within waypoint-arrival radius of B
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = map,
+            feedback = RecordingFeedbackController(),
+            startNodeId = "A",
+            destinationNodeId = "C",
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(1, states.first().nextRouteIndex)
+        assertEquals(2, states.last().nextRouteIndex)
+    }
+
+    @Test
     fun `repeats the current leg instruction after the guidance repeat interval elapses`() = runTest {
         val nodes = listOf(
             MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),

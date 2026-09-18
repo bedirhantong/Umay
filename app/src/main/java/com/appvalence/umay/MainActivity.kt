@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.Icon
@@ -21,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.appvalence.umay.files.FilesScreen
 import com.appvalence.umay.navigation.NavigationScreen
 import com.appvalence.umay.survey.BeaconScannerScreen
 import com.appvalence.umay.ui.theme.UmayTheme
@@ -28,6 +30,7 @@ import com.appvalence.umay.ui.theme.UmayTheme
 private enum class Screen(val label: String, val icon: ImageVector) {
     NAVIGATION("Navigasyon", Icons.Filled.Navigation),
     BEACON_SCANNER("Beacon Tarayıcı", Icons.Filled.Sensors),
+    FILES("Dosyalar", Icons.Filled.Folder),
 }
 
 class MainActivity : ComponentActivity() {
@@ -64,6 +67,7 @@ class MainActivity : ComponentActivity() {
                         when (selectedScreen) {
                             Screen.BEACON_SCANNER -> BeaconScannerScreen(modifier = Modifier.weight(1f))
                             Screen.NAVIGATION -> NavigationScreen(modifier = Modifier.weight(1f))
+                            Screen.FILES -> FilesScreen(modifier = Modifier.weight(1f))
                         }
                     }
                 }

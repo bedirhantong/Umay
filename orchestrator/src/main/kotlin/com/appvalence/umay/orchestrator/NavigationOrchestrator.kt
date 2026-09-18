@@ -96,6 +96,7 @@ class NavigationOrchestrator(
                 alerts = alerts,
                 route = currentRoute,
                 pendingFloorChange = pendingFloorChange,
+                nextRouteIndex = routeTargetIndex,
             )
         }.onEach { state ->
             state.alerts.forEach(feedback::emit)
