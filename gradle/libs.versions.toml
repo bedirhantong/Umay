@@ -11,7 +11,6 @@ composeBom = "2024.09.00"
 coroutines = "1.9.0"
 cameraX = "1.5.1"
 tfliteTaskVision = "0.4.4"
-uwb = "1.0.0"
 kotlinxSerialization = "1.8.1"
 
 [libraries]
@@ -39,7 +38,6 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 tensorflow-lite-task-vision = { group = "org.tensorflow", name = "tensorflow-lite-task-vision", version.ref = "tfliteTaskVision" }
-androidx-core-uwb = { group = "androidx.core.uwb", name = "uwb", version.ref = "uwb" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 
 [plugins]

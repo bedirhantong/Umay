@@ -21,7 +21,6 @@ android {
 
 dependencies {
     api(project(":core-model"))
-    implementation(libs.androidx.core.uwb)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
 

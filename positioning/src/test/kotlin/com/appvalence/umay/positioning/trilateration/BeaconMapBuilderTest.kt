@@ -125,6 +125,20 @@ class BeaconMapBuilderTest {
     }
 
     @Test
+    fun `buildFromWaypoints preserves a tagged hazard type instead of forcing WAYPOINT`() {
+        val waypoints = listOf(
+            TaggedWaypoint("Ana Giris", x = 0.0, y = 0.0, floor = 0, fingerprint = emptyList()),
+            TaggedWaypoint("Merdiven", x = 1.0, y = 1.0, floor = 0, fingerprint = emptyList(), type = NodeType.STAIRS),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("test-building", waypoints)
+
+        val floor = map.floors.single()
+        assertEquals(NodeType.WAYPOINT, floor.nodes.single { it.name == "Ana Giris" }.type)
+        assertEquals(NodeType.STAIRS, floor.nodes.single { it.name == "Merdiven" }.type)
+    }
+
+    @Test
     fun `buildFromWaypoints produces no transitions when every tag stays on the same floor`() {
         val waypoints = listOf(
             TaggedWaypoint("A", x = 0.0, y = 0.0, floor = 0, fingerprint = emptyList()),

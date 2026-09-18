@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -31,6 +33,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +62,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.appvalence.umay.coremodel.BleBeaconReading
+import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.coremodel.TaggedWaypoint
@@ -239,11 +243,11 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
             item {
                 WaypointTaggingSection(
                     taggedWaypoints = BeaconSurveyLog.taggedWaypoints,
-                    onTag = { name ->
+                    onTag = { name, type ->
                         val position = trajectory.lastOrNull { it.floor == BeaconSurveyLog.currentFloor }
                         if (position != null) {
                             val fingerprint = beacons.filter { it.uuid != null }.map { RadioFingerprint(it.beaconId, it.rssi.toDouble()) }
-                            BeaconSurveyLog.taggedWaypoints.add(TaggedWaypoint(name, position.x, position.y, position.floor, fingerprint))
+                            BeaconSurveyLog.taggedWaypoints.add(TaggedWaypoint(name, position.x, position.y, position.floor, fingerprint, type))
                         }
                     },
                     onDelete = { index -> BeaconSurveyLog.taggedWaypoints.removeAt(index) },
@@ -426,13 +430,23 @@ private fun RecordingCard(
     }
 }
 
+// The types worth offering at tagging time — plain WAYPOINT is the default and not
+// listed as its own chip (deselecting a hazard chip already means "just a point").
+private val TAGGABLE_HAZARD_TYPES = listOf(
+    NodeType.DOOR to "Kapı",
+    NodeType.STAIRS to "Merdiven",
+    NodeType.ELEVATOR to "Asansör",
+    NodeType.RAMP to "Rampa",
+)
+
 @Composable
 private fun WaypointTaggingSection(
     taggedWaypoints: List<TaggedWaypoint>,
-    onTag: (String) -> Unit,
+    onTag: (String, NodeType) -> Unit,
     onDelete: (Int) -> Unit,
 ) {
     var nameInput by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf(NodeType.WAYPOINT) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -440,10 +454,24 @@ private fun WaypointTaggingSection(
                 Text(text = "Bulunduğun yeri isimlendir", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
             }
             Text(
-                text = "\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle.",
+                text = "\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. " +
+                    "Kapı/merdiven/asansör/rampa gibi bir tehlike ya da kat geçişiyse türünü de seç — kamera bunları göremez, " +
+                    "navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir.",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp),
             )
+            Row(
+                modifier = Modifier.padding(top = 12.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TAGGABLE_HAZARD_TYPES.forEach { (type, label) ->
+                    FilterChip(
+                        selected = selectedType == type,
+                        onClick = { selectedType = if (selectedType == type) NodeType.WAYPOINT else type },
+                        label = { Text(label) },
+                    )
+                }
+            }
             Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = nameInput,
@@ -456,8 +484,9 @@ private fun WaypointTaggingSection(
                     modifier = Modifier.padding(start = 8.dp),
                     enabled = nameInput.isNotBlank(),
                     onClick = {
-                        onTag(nameInput.trim())
+                        onTag(nameInput.trim(), selectedType)
                         nameInput = ""
+                        selectedType = NodeType.WAYPOINT
                     },
                 ) {
                     Text("İşaretle")
@@ -469,7 +498,9 @@ private fun WaypointTaggingSection(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(text = "${waypoint.name} (kat ${waypoint.floor})", style = MaterialTheme.typography.bodyMedium)
+                    val typeLabel = TAGGABLE_HAZARD_TYPES.firstOrNull { it.first == waypoint.type }?.second
+                    val label = if (typeLabel != null) "${waypoint.name} ($typeLabel, kat ${waypoint.floor})" else "${waypoint.name} (kat ${waypoint.floor})"
+                    Text(text = label, style = MaterialTheme.typography.bodyMedium)
                     IconButton(onClick = { onDelete(index) }) {
                         Icon(Icons.Filled.DeleteOutline, contentDescription = "Sil")
                     }

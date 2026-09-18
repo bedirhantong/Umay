@@ -9,8 +9,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
 
 /**
- * Sparse corrective fix stream (FR-1 fallback where there's no UWB): matches
- * the live RSSI vector against named [MapNode]s' recorded fingerprints
+ * Sparse corrective fix stream (FR-1): matches the live RSSI vector against
+ * named [MapNode]s' recorded fingerprints
  * instead of converting RSSI to a distance and trilaterating (see
  * [FingerprintMatcher]). Emits nothing when there's no confident match —
  * same "prefer visible not-sure over a bad guess" principle as
@@ -40,7 +40,7 @@ class FingerprintPositioningEngine(
 
     companion object {
         // A fingerprint match narrows you to "near this named place", not a
-        // precise fix — this is deliberately coarser than UWB's ~0.3m.
+        // precise fix — deliberately coarse to reflect that real uncertainty.
         const val ASSUMED_ACCURACY_METERS = 3.0
     }
 }

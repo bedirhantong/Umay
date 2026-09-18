@@ -355,6 +355,11 @@ private fun ActiveNavigation(
         }
     }
 
+    fun confirmFloorChange(targetNodeId: String, targetFloor: Int, headingDeg: Double) {
+        val targetNode = allNodesById[targetNodeId] ?: return
+        pdrEngine.changeFloor(newFloor = targetFloor, x = targetNode.x, y = targetNode.y, headingDeg = headingDeg)
+    }
+
     var state by remember { mutableStateOf<NavigationState?>(null) }
     var currentInstruction by remember { mutableStateOf("Yola çıkmaya hazırlanıyor...") }
     LaunchedEffect(orchestrator) {
@@ -362,6 +367,14 @@ private fun ActiveNavigation(
             state = newState
             newState.alerts.firstOrNull { it.id.startsWith("route-guide-") || it.id.startsWith("arrived-") || it.id.startsWith("no-route-") }
                 ?.let { currentInstruction = it.message }
+
+            // A STAIRS crossing confirms itself once enough footsteps have piled up
+            // (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap needed,
+            // which matters since a blind user's hands may well be full on a staircase.
+            // Elevators never set autoConfirm, so those still wait for the button below.
+            newState.pendingFloorChange?.let { hint ->
+                if (hint.autoConfirm) confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg)
+            }
         }
     }
 
@@ -403,13 +416,7 @@ private fun ActiveNavigation(
             Button(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 onClick = {
-                    val targetNode = allNodesById[pendingFloorChange.targetNodeId] ?: return@Button
-                    pdrEngine.changeFloor(
-                        newFloor = pendingFloorChange.targetFloor,
-                        x = targetNode.x,
-                        y = targetNode.y,
-                        headingDeg = currentState.position.headingDeg,
-                    )
+                    confirmFloorChange(pendingFloorChange.targetNodeId, pendingFloorChange.targetFloor, currentState.position.headingDeg)
                 },
             ) {
                 Icon(Icons.Filled.SwapVert, contentDescription = null)

@@ -108,7 +108,7 @@ object BeaconMapBuilder {
                 id = waypointNodeIds[i],
                 x = waypoint.x,
                 y = waypoint.y,
-                type = NodeType.WAYPOINT,
+                type = waypoint.type,
                 name = waypoint.name,
                 fingerprint = waypoint.fingerprint,
             )
@@ -158,6 +158,9 @@ object BeaconMapBuilder {
 
     // A fixed penalty, not a measured distance — stairs/elevators cost real time and
     // effort A* should weigh against a same-floor detour, but there's no PDR distance
-    // to measure across a floor change (see FloorTransition).
+    // to measure across a floor change (see FloorTransition). Rough starting point:
+    // ~15m of walking-equivalent effort, in the ballpark of a flight of stairs
+    // (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT, similarly a guess).
+    // Both are field-tunable once real crossings have actually been timed/counted.
     const val FLOOR_TRANSITION_COST_METERS = 15.0
 }

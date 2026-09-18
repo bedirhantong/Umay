@@ -8,7 +8,7 @@ import kotlin.math.tan
  * Distance uses the pinhole camera model with an assumed average adult
  * height, since Faz 1 does not yet have per-device camera calibration
  * (intrinsics vary by phone). This is intentionally approximate — accuracy
- * is expected to improve once UWB-radar (FR-9) or calibrated intrinsics are
+ * is expected to improve once calibrated per-device intrinsics are
  * available in a later phase.
  */
 object ObstacleGeometry {

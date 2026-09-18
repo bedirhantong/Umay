@@ -11,11 +11,18 @@ import com.appvalence.umay.coremodel.Position
  * has taken the stairs/elevator — the UI shows a "kat değiştirdim" control
  * whenever this is non-null, and confirming it is what actually moves
  * tracking onto [targetFloor] (see [com.appvalence.umay.positioning.pdr.PdrIntegrator.changeFloor]).
+ *
+ * [autoConfirm] is true once enough footsteps have been taken on a STAIRS
+ * crossing that the orchestrator infers the user has arrived without an
+ * explicit tap — the UI should apply the same confirmation automatically
+ * rather than wait for one. It never becomes true for an elevator crossing
+ * (standing in an elevator produces no footsteps), so those stay manual-only.
  */
 data class FloorChangeHint(
     val targetNodeId: String,
     val targetNodeName: String,
     val targetFloor: Int,
+    val autoConfirm: Boolean = false,
 )
 
 /**

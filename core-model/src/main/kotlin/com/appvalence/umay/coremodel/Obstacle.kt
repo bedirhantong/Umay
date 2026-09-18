@@ -2,7 +2,7 @@ package com.appvalence.umay.coremodel
 
 enum class ObstacleType { PERSON, STATIC_OBJECT, OPEN_DOOR, UNKNOWN }
 
-enum class ObstacleSensorSource { CAMERA_ML, UWB_RADAR, FUSED }
+enum class ObstacleSensorSource { CAMERA_ML, FUSED }
 
 data class DetectedObstacle(
     val id: String,

@@ -3,18 +3,15 @@ package com.appvalence.umay.positioning.trilateration
 import kotlin.math.abs
 
 /**
- * Least-squares multilateration, shared by both ranging directions the app
- * needs:
- *  - UWB (FR-1): anchors are at known surveyed positions, the phone's
- *    distance to each is measured, solve for the phone's (x, y).
- *  - BLE on-site survey: the *operator* stands at known measured positions
- *    and records their distance to an unidentified beacon, solve for the
- *    beacon's (x, y).
+ * Least-squares multilateration: used by the BLE on-site survey, where the
+ * *operator* stands at known measured positions and records their distance
+ * to an unidentified beacon, solving for the beacon's (x, y).
  *
- * Both are the same problem — N circles of known center and radius, solve
- * for the one unknown point common to all of them — so [AnchorReading] just
- * means "a known point that measured this distance to the unknown point,"
- * regardless of which side is physically the anchor.
+ * This is N circles of known center and radius, solved for the one unknown
+ * point common to all of them — [AnchorReading] just means "a known point
+ * that measured this distance to the unknown point," regardless of which
+ * side is physically the anchor, so the same solver would equally serve a
+ * ranging-hardware-based positioning source (e.g. UWB) if one is ever added.
  *
  * Method: each circle equation (x-xi)^2+(y-yi)^2=di^2 is subtracted from one
  * reference circle to eliminate the quadratic terms, leaving a linear

@@ -7,6 +7,7 @@ import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
+import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.ObstacleType
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.feedback.FeedbackController
@@ -76,6 +77,14 @@ class NavigationOrchestrator(
     private var noRouteAnnounced = false
     private var pendingFloorChange: FloorChangeHint? = null
 
+    // Steps taken while a STAIRS crossing is pending — there's no barometer, but a
+    // flight of stairs reliably produces footsteps, so once enough of them have piled
+    // up without the user having explicitly confirmed, it's safe to assume they made
+    // it (see deriveRouteGuidance). Elevators produce no footsteps while waiting, so
+    // this only ever applies to NodeType.STAIRS targets; elevators stay manual-only.
+    private var pendingFloorChangeStepCount = 0
+    private var lastCountedPositionTimestampMs = -1L
+
     fun start(): Flow<NavigationState> =
         combine(positioning.positionUpdates(), perception.obstacleUpdates()) { position, obstacles ->
             ensureRoute()
@@ -109,6 +118,8 @@ class NavigationOrchestrator(
         arrivalAnnounced = false
         noRouteAnnounced = false
         pendingFloorChange = null
+        pendingFloorChangeStepCount = 0
+        lastCountedPositionTimestampMs = -1L
     }
 
     private fun deriveAlerts(position: Position, obstacles: List<DetectedObstacle>, floorMap: FloorMap?): List<NavigationAlert> {
@@ -178,8 +189,18 @@ class NavigationOrchestrator(
         val target = currentRoute[routeTargetIndex]
         val targetFloor = nodeFloor[target.id]
         pendingFloorChange = if (targetFloor != null && targetFloor != position.floor) {
-            FloorChangeHint(target.id, target.name, targetFloor)
+            // Only count a step once per distinct position sample — this combine()
+            // block also re-runs on every obstacle-detector frame reusing the same
+            // stale position, which must not inflate the count.
+            if (position.timestampMs != lastCountedPositionTimestampMs) {
+                lastCountedPositionTimestampMs = position.timestampMs
+                pendingFloorChangeStepCount++
+            }
+            val autoConfirm = target.type == NodeType.STAIRS && pendingFloorChangeStepCount >= AUTO_FLOOR_CHANGE_STEP_COUNT
+            FloorChangeHint(target.id, target.name, targetFloor, autoConfirm)
         } else {
+            pendingFloorChangeStepCount = 0
+            lastCountedPositionTimestampMs = -1L
             null
         }
 
@@ -206,7 +227,9 @@ class NavigationOrchestrator(
         lastLegAnnouncedAtMs = now
         return NavigationAlert(
             id = "route-guide-$routeTargetIndex-$now",
-            priority = AlertPriority.INFO,
+            // Stairs are a real fall risk underfoot, so that leg gets the same urgency
+            // as a nearby obstacle instead of blending in with ordinary INFO guidance.
+            priority = if (target.type == NodeType.STAIRS) AlertPriority.WARNING else AlertPriority.INFO,
             message = legInstruction(routeTargetIndex, position),
             relatedObstacle = null,
             createdAtMs = now,
@@ -218,12 +241,18 @@ class NavigationOrchestrator(
         val previous = currentRoute[targetIndex - 1]
 
         if (nodeFloor[target.id] != nodeFloor[previous.id]) {
-            return "${target.name}'a git, sonra merdiven veya asansörle kat değiştir"
+            val method = when (target.type) {
+                NodeType.STAIRS -> "merdivenden"
+                NodeType.ELEVATOR -> "asansörle"
+                else -> "merdiven veya asansörle"
+            }
+            return "${target.name}'a git, sonra $method kat değiştir"
         }
 
+        val hazard = hazardPrefix(target.type)
         val distanceRounded = (hypot(target.x - position.x, target.y - position.y) * 10).roundToInt() / 10.0
         if (targetIndex == currentRoute.lastIndex) {
-            return "Hedefe yaklaşık $distanceRounded metre kaldı"
+            return "${hazard}Hedefe yaklaşık $distanceRounded metre kaldı"
         }
 
         val next = currentRoute[targetIndex + 1]
@@ -235,10 +264,21 @@ class NavigationOrchestrator(
             null
         }
         return if (turn == null) {
-            "${target.name}'a doğru yaklaşık $distanceRounded metre ilerle"
+            "${hazard}${target.name}'a doğru yaklaşık $distanceRounded metre ilerle"
         } else {
-            "${target.name}'a yaklaşık $distanceRounded metre ilerle, sonra $turn"
+            "${hazard}${target.name}'a yaklaşık $distanceRounded metre ilerle, sonra $turn"
         }
+    }
+
+    // The camera only ever detects people, never static structure — this is the only
+    // source of "there's a door/stairs/ramp right here" awareness in the app, and it
+    // only exists where the survey operator explicitly tagged one (see TaggedWaypoint).
+    private fun hazardPrefix(type: NodeType): String = when (type) {
+        NodeType.STAIRS -> "Dikkat, merdiven var. "
+        NodeType.DOOR -> "Önünde bir kapı var. "
+        NodeType.RAMP -> "Önünde bir rampa var. "
+        NodeType.ELEVATOR -> "Önünde asansör var. "
+        else -> ""
     }
 
     // Compass bearing (0 = north/+y, 90 = east/+x, clockwise) — matches PdrIntegrator's
@@ -320,5 +360,10 @@ class NavigationOrchestrator(
         const val ARRIVAL_DISTANCE_METERS = 1.5
         const val TURN_ANGLE_THRESHOLD_DEG = 25.0
         const val ROUTE_GUIDANCE_REPEAT_INTERVAL_MS = 8_000L
+
+        // A rough single flight of stairs — no real building has been measured yet, so
+        // this is a starting guess (see BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS,
+        // similarly unset from field data) to retune once it has been.
+        const val AUTO_FLOOR_CHANGE_STEP_COUNT = 14
     }
 }

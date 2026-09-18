@@ -10,7 +10,7 @@ import kotlin.math.sin
  * Dead-reckons a 2D position by integrating [StepEvent]s (FR-2). Heading is
  * measured clockwise from north (0 = north, 90 = east). Accuracy degrades by
  * a fixed amount per step to model drift, and can be corrected via [resetTo]
- * whenever a fresh UWB fix is available (see [PositionFusionEngine]).
+ * whenever a fresh corrective fix is available (see [PositionFusionEngine]).
  */
 class PdrIntegrator(
     startX: Double = 0.0,

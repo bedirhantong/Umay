@@ -446,4 +446,118 @@ class NavigationOrchestratorTest {
         assertEquals("C", states.last().pendingFloorChange?.targetNodeId)
         assertEquals(listOf("A", "B", "C", "D"), states.last().route.map { it.id })
     }
+
+    // Same layout as twoFloorMap, but the transition's endpoints are tagged STAIRS —
+    // this is what the survey operator would actually do at a stairwell.
+    private val stairsMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(
+            FloorMap(
+                floorIndex = 0,
+                nodes = listOf(
+                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "Giris"),
+                    MapNode("B", 0.0, 10.0, NodeType.STAIRS, name = "Merdiven Alt"),
+                ),
+                edges = listOf(MapEdge("A", "B", accessible = true, distanceMeters = 10.0)),
+            ),
+            FloorMap(
+                floorIndex = 1,
+                nodes = listOf(
+                    MapNode("C", 0.0, 0.0, NodeType.STAIRS, name = "Merdiven Ust"),
+                    MapNode("D", 0.0, 10.0, NodeType.DESTINATION, name = "Ofis"),
+                ),
+                edges = listOf(MapEdge("C", "D", accessible = true, distanceMeters = 10.0)),
+            ),
+        ),
+        floorTransitions = listOf(FloorTransition(fromNodeId = "B", fromFloorIndex = 0, toNodeId = "C", toFloorIndex = 1, costMeters = 15.0)),
+    )
+
+    @Test
+    fun `approaching a STAIRS-tagged node gets a hazard prefix and WARNING priority`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0, floor = 0, timestampMs = 0L)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = stairsMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+        )
+
+        orchestrator.start().toList()
+
+        val guidance = feedback.emitted.first { it.id.startsWith("route-guide-") }
+        assertTrue(guidance.message.startsWith("Dikkat, merdiven var."))
+        assertEquals(AlertPriority.WARNING, guidance.priority)
+    }
+
+    @Test
+    fun `the floor-crossing instruction for a STAIRS target names the method as merdivenden`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, floor = 0, timestampMs = 0L),
+            position(0.0, 9.0, floor = 0, timestampMs = 1_000L), // reaches B
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = stairsMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+        )
+
+        orchestrator.start().toList()
+
+        val guidance = feedback.emitted.last { it.id.startsWith("route-guide-") }
+        assertTrue(guidance.message.contains("merdivenden"))
+    }
+
+    @Test
+    fun `pendingFloorChange auto-confirms after enough steps on a STAIRS crossing`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = buildList {
+            add(position(0.0, 0.0, floor = 0, timestampMs = 0L))
+            add(position(0.0, 9.0, floor = 0, timestampMs = 1_000L)) // reaches B, pending
+            // Footsteps while climbing (still reporting floor 0 — no barometer): enough
+            // of them should flip autoConfirm without an explicit tap.
+            repeat(NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) { i ->
+                add(position(0.0, 9.0, floor = 0, timestampMs = 2_000L + i * 100L))
+            }
+        }
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = stairsMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(true, states.last().pendingFloorChange?.autoConfirm)
+    }
+
+    @Test
+    fun `pendingFloorChange never auto-confirms on a non-STAIRS crossing regardless of step count`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = buildList {
+            add(position(0.0, 0.0, floor = 0, timestampMs = 0L))
+            add(position(0.0, 9.0, floor = 0, timestampMs = 1_000L))
+            repeat(30) { i -> add(position(0.0, 9.0, floor = 0, timestampMs = 2_000L + i * 100L)) }
+        }
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = twoFloorMap, // transition endpoints are plain CORRIDOR here, not STAIRS
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(false, states.last().pendingFloorChange?.autoConfirm)
+    }
 }

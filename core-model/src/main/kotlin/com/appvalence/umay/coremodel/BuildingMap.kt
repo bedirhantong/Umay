@@ -3,7 +3,7 @@ package com.appvalence.umay.coremodel
 import kotlinx.serialization.Serializable
 
 @Serializable
-enum class NodeType { CORRIDOR, DOOR, STAIRS, ELEVATOR, RAMP, DESTINATION, UWB_ANCHOR, BLE_ANCHOR, WAYPOINT }
+enum class NodeType { CORRIDOR, DOOR, STAIRS, ELEVATOR, RAMP, DESTINATION, BLE_ANCHOR, WAYPOINT }
 
 @Serializable
 data class MapNode(

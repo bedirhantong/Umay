@@ -1,6 +1,6 @@
 package com.appvalence.umay.coremodel
 
-enum class PositionSource { UWB_TRILATERATION, BLE_TRILATERATION, RADIO_FINGERPRINT, PEDESTRIAN_DEAD_RECKONING, MAP_MATCHED, FUSED }
+enum class PositionSource { BLE_TRILATERATION, RADIO_FINGERPRINT, PEDESTRIAN_DEAD_RECKONING, MAP_MATCHED, FUSED }
 
 data class Position(
     val x: Double,
@@ -12,14 +12,6 @@ data class Position(
     val timestampMs: Long,
 )
 
-data class UwbRangeReading(
-    val anchorId: String,
-    val distanceMeters: Double,
-    val distanceStdDevMeters: Double,
-    val lineOfSight: Boolean,
-    val timestampMs: Long,
-)
-
 data class StepEvent(
     val stepLengthMeters: Double,
     val headingDeltaDeg: Double,
@@ -27,11 +19,11 @@ data class StepEvent(
 )
 
 /**
- * A raw BLE beacon sighting (NFR-6 fallback when no UWB anchors are available).
- * [beaconId] is a stable key ("uuid-major-minor", or the MAC address for
- * non-iBeacon advertisers) so a future trilateration engine can look it up
- * against a surveyed [MapNode] of type [NodeType.BLE_ANCHOR] once the
- * building's beacons have been mapped to physical coordinates on-site.
+ * A raw BLE beacon sighting. [beaconId] is a stable key ("uuid-major-minor",
+ * or the MAC address for non-iBeacon advertisers) so a trilateration or
+ * fingerprint-matching engine can look it up against a surveyed [MapNode] of
+ * type [NodeType.BLE_ANCHOR] or [NodeType.WAYPOINT] once the building's
+ * beacons have been mapped to physical coordinates on-site.
  */
 data class BleBeaconReading(
     val beaconId: String,
