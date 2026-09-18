@@ -34,7 +34,18 @@ object BeaconMapBuilder {
     }
 
     private fun buildFloor(floorIndex: Int, results: List<BeaconSurveyResult>, maxEdgeDistanceMeters: Double): FloorMap {
-        val nodes = results.map { MapNode(id = it.beaconId, x = it.x, y = it.y, type = NodeType.BLE_ANCHOR) }
+        // A raw beaconId ("uuid-major-minor") is meaningless to a person picking a
+        // destination in the UI — "Nokta 1" on the floor they're standing on isn't
+        // pretty either, but at least it's something a human can read and choose.
+        val nodes = results.mapIndexed { index, result ->
+            MapNode(
+                id = result.beaconId,
+                x = result.x,
+                y = result.y,
+                type = NodeType.BLE_ANCHOR,
+                name = "Kat $floorIndex, Nokta ${index + 1}",
+            )
+        }
 
         val edges = mutableListOf<MapEdge>()
         for (i in nodes.indices) {

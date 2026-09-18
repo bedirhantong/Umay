@@ -11,6 +11,10 @@ data class MapNode(
     val x: Double,
     val y: Double,
     val type: NodeType,
+    // Human-readable label for UI (e.g. "Nokta 1", "Ana Giriş"); [id] stays the
+    // stable technical key (a beacon UUID-major-minor, say) used for routing
+    // joins and is rarely fit to show a person.
+    val name: String = id,
 )
 
 @Serializable
