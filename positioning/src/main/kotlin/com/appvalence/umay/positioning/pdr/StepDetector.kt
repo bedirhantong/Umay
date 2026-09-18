@@ -12,8 +12,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlin.math.sqrt
 
 /**
- * Detects footsteps from the accelerometer and tracks heading from the
- * rotation vector sensor, emitting a [StepEvent] per detected step (FR-2).
+ * Detects footsteps from the accelerometer and tracks heading from a
+ * gyroscope-based rotation sensor, emitting a [StepEvent] per detected step
+ * (FR-2).
  *
  * This intentionally does NOT use the platform's [Sensor.TYPE_STEP_DETECTOR]:
  * on-device testing showed it delivers events unreliably on real hardware
@@ -25,13 +26,23 @@ import kotlin.math.sqrt
  * step can register) specifically so shaking the phone — which crosses a
  * naive one-sided threshold repeatedly — doesn't get counted as steps.
  *
+ * Heading comes from [Sensor.TYPE_GAME_ROTATION_VECTOR] (accelerometer +
+ * gyroscope), not [Sensor.TYPE_ROTATION_VECTOR] (which also fuses the
+ * magnetometer): real buildings distort magnetic north by tens of degrees
+ * near rebar, steel framing, and electrical wiring, and that distortion
+ * varies by exactly where in the building you're standing — the opposite of
+ * what a PDR system needs, which is a *consistent* heading reference across
+ * one walk. Gyro-only heading has no such spatial bias, only a slow drift
+ * over time (gyro bias), which is far smaller than magnetic distortion error
+ * over a single indoor walking session.
+ *
  * This talks to real hardware sensors and is not unit-testable on the JVM;
  * the dead-reckoning math it feeds lives in [PdrIntegrator] instead, which is.
  */
 class StepDetector(context: Context) {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    private val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+    private val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
 
     fun stepEvents(): Flow<StepEvent> = callbackFlow {
         var lastStepTimestampMs = 0L
@@ -44,7 +55,7 @@ class StepDetector(context: Context) {
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 when (event.sensor.type) {
-                    Sensor.TYPE_ROTATION_VECTOR -> {
+                    Sensor.TYPE_GAME_ROTATION_VECTOR -> {
                         val rotationMatrix = FloatArray(9)
                         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
                         val orientation = FloatArray(3)

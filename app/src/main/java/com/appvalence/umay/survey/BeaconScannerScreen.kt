@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -53,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -303,9 +305,20 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(text = "${visibleBeacons.size} / ${beacons.size} cihaz", style = MaterialTheme.typography.titleMedium)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.toggleable(
+                            value = showOnlyIBeacon,
+                            role = Role.Switch,
+                            onValueChange = { showOnlyIBeacon = it },
+                        ),
+                    ) {
                         Text(text = "Sadece iBeacon", style = MaterialTheme.typography.bodySmall)
-                        Switch(checked = showOnlyIBeacon, onCheckedChange = { showOnlyIBeacon = it })
+                        // The Row's toggleable modifier owns the click handling and merged
+                        // accessible name ("Sadece iBeacon, açık/kapalı") — the Switch itself
+                        // must not also be independently focusable, or TalkBack sees two
+                        // controls (an unlabeled switch and a plain text) instead of one.
+                        Switch(checked = showOnlyIBeacon, onCheckedChange = null)
                     }
                 }
             }
@@ -383,10 +396,14 @@ private fun RecordingCard(
                 )
                 Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "Kat $currentFloor", style = MaterialTheme.typography.bodyMedium)
-                    IconButton(modifier = Modifier.size(36.dp), onClick = { onFloorChange(-1) }) {
+                    // No explicit size here: IconButton's Material3 default already
+                    // reserves a full 48dp touch target even though the icon itself is
+                    // smaller — pinning this to 36dp would shrink the tappable area below
+                    // the accessible minimum.
+                    IconButton(onClick = { onFloorChange(-1) }) {
                         Icon(Icons.Filled.Remove, contentDescription = "Bir alt kat")
                     }
-                    IconButton(modifier = Modifier.size(36.dp), onClick = { onFloorChange(1) }) {
+                    IconButton(onClick = { onFloorChange(1) }) {
                         Icon(Icons.Filled.Add, contentDescription = "Bir üst kat")
                     }
                     Text(

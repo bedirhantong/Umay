@@ -49,7 +49,11 @@ class MainActivity : ComponentActivity() {
                                 NavigationBarItem(
                                     selected = selectedScreen == screen,
                                     onClick = { selectedScreen = screen },
-                                    icon = { Icon(screen.icon, contentDescription = screen.label) },
+                                    // null, not screen.label: the visible label below already
+                                    // provides the accessible name, and a screen reader merges
+                                    // this item's icon and label into one stop — repeating the
+                                    // same text on both would read it twice.
+                                    icon = { Icon(screen.icon, contentDescription = null) },
                                     label = { Text(screen.label) },
                                 )
                             }
