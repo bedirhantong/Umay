@@ -35,7 +35,13 @@ jobs:
             11
             17
 
+      # Only accepts SDK licenses (so AGP can fetch the compileSdk platform itself) and
+      # installs platform-tools: the action's default package list still includes the
+      # long-removed "tools" package, which makes sdkmanager fail.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
 
       # Caches Gradle dependencies/build outputs and validates the wrapper jar.
       - uses: gradle/actions/setup-gradle@v4
