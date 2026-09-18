@@ -183,7 +183,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                 message = stringResource(R.string.nav_no_map_message),
                 modifier = Modifier.weight(1f),
             )
-            Button(modifier = Modifier.fillMaxWidth(), onClick = importBuilding) {
+            Button(modifier = Modifier.fillMaxWidth(), onClick = importBuilding.pickFile) {
                 Icon(Icons.Filled.FileOpen, contentDescription = null)
                 Text(stringResource(R.string.common_import_building), modifier = Modifier.padding(start = 8.dp))
             }
