@@ -52,4 +52,8 @@ data class BuildingMap(
     val id: String,
     val floors: List<FloorMap>,
     val floorTransitions: List<FloorTransition> = emptyList(),
+    // The surveyor's stride when this map was recorded (null for maps saved before
+    // this was tracked). Every coordinate is steps × stride, so this is what would
+    // let a map surveyed with an uncalibrated stride be rescaled to true meters later.
+    val surveyStepLengthMeters: Double? = null,
 )

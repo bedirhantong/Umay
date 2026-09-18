@@ -38,8 +38,13 @@ import kotlin.math.sqrt
  *
  * This talks to real hardware sensors and is not unit-testable on the JVM;
  * the dead-reckoning math it feeds lives in [PdrIntegrator] instead, which is.
+ *
+ * [stepLengthMeters] is this person's calibrated stride (see
+ * [StepLengthCalibration]); the population average is only a fallback — a
+ * wrong stride scales every distance walked, which is the single largest
+ * source of dead-reckoning drift.
  */
-class StepDetector(context: Context) {
+class StepDetector(context: Context, private val stepLengthMeters: Double = AVERAGE_STEP_LENGTH_METERS) {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val rotationVector: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
@@ -118,7 +123,7 @@ class StepDetector(context: Context) {
                                 lastHeadingDeg = currentHeadingDeg
                                 trySend(
                                     StepEvent(
-                                        stepLengthMeters = AVERAGE_STEP_LENGTH_METERS,
+                                        stepLengthMeters = stepLengthMeters,
                                         headingDeltaDeg = headingDelta.toDouble(),
                                         timestampMs = now,
                                     ),

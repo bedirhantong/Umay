@@ -26,7 +26,8 @@ class FieldLogJsonTest {
             StatusEvent(5L, "ON_ROUTE"),
             FloorChangeEvent(6L, FloorChangePhase.CONFIRMED_AUTOMATICALLY, "S1", 1),
             GroundTruthEvent(7L, "A", "Giriş", 0, 0.0, 0.0, 3.0, 4.0, 0, 5.0),
-            SessionEndEvent(8L, "stopped"),
+            PressureEvent(8L, 1008.4),
+            SessionEndEvent(9L, "stopped"),
         )
 
         events.forEach { event -> assertEquals(event, FieldLogJson.decode(FieldLogJson.encode(event))) }
@@ -38,6 +39,13 @@ class FieldLogJsonTest {
 
         assertFalse(line.contains('\n'))
         assertTrue(line.contains("\"type\":\"rssi\""))
+    }
+
+    @Test
+    fun `a non-finite value is encoded instead of throwing`() {
+        val line = FieldLogJson.encode(PressureEvent(1L, Double.NaN))
+
+        assertTrue(line.contains("NaN"))
     }
 
     @Test

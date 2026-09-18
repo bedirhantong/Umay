@@ -1,3 +1,342 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Umay</string>
+    <!-- BCP 47 tag of the language the strings in THIS file are written in; the voice
+         that reads them aloud is chosen by it (not by the device language). A
+         translation must set its own. -->
+    <string name="speech_language_tag">tr-TR</string>
+
+    <!-- Speech voice -->
+    <string name="voice_missing_data">Türkçe konuşma sesi bu cihazda henüz indirilmemiş. Yönergeler yabancı aksanlı bir sesle okunabilir. Doğal bir Türkçe ses için ses paketini yükle.</string>
+    <string name="voice_not_supported">Bu cihazın konuşma motoru Türkçe desteklemiyor, yönergeler yabancı aksanlı okunabilir. Ayarlardan Türkçe destekleyen bir motor (örneğin Google Konuşma Hizmetleri) seçip Türkçe sesi yükle.</string>
+    <string name="voice_engine_unavailable">Bu cihazda çalışan bir metin okuma (konuşma) motoru bulunamadı, sesli yönergeler verilemiyor. Ayarlardan bir konuşma motoru etkinleştir.</string>
+    <string name="voice_install">Türkçe sesi yükle</string>
+    <string name="voice_ready">Türkçe ses hazır.</string>
+    <string name="voice_checking">Konuşma sesi kontrol ediliyor…</string>
+    <string name="voice_sample">Merhaba, ben Umay. Yönergeleri bu sesle duyacaksın.</string>
+    <string name="voice_try">Sesi dene</string>
+
+    <!-- Shared -->
+    <string name="common_back">Geri dön</string>
+    <string name="common_cancel">Vazgeç</string>
+    <string name="common_ok">Tamam</string>
+    <string name="common_delete">Sil</string>
+    <string name="common_save">Kaydet</string>
+    <string name="common_retry">Tekrar dene</string>
+    <string name="common_reload">Yeniden dene</string>
+    <string name="common_continue">Devam et</string>
+    <string name="common_error_title">Bir sorun oluştu</string>
+    <string name="common_permission_needed">İzin gerekiyor</string>
+    <string name="common_floor">Kat %1$d</string>
+    <string name="common_node_with_floor">%1$s (Kat %2$d)</string>
+    <string name="common_building_summary">%1$s, %2$s</string>
+    <string name="common_meters_short">%1$d m</string>
+    <string name="common_delete_building_description">%1$s binasını sil</string>
+    <string name="common_delete_building_title">\'%1$s\' silinsin mi?</string>
+    <string name="common_import_building">Haritayı içe aktar</string>
+
+    <!-- Counts, combined into longer sentences via %s placeholders -->
+    <plurals name="count_floors">
+        <item quantity="one">%d kat</item>
+        <item quantity="other">%d kat</item>
+    </plurals>
+    <plurals name="count_points">
+        <item quantity="one">%d nokta</item>
+        <item quantity="other">%d nokta</item>
+    </plurals>
+    <plurals name="count_steps">
+        <item quantity="one">%d adım</item>
+        <item quantity="other">%d adım</item>
+    </plurals>
+    <plurals name="count_named_places">
+        <item quantity="one">%d isimlendirilmiş yer</item>
+        <item quantity="other">%d isimlendirilmiş yer</item>
+    </plurals>
+    <plurals name="count_beacon_readings">
+        <item quantity="one">%d beacon okuması</item>
+        <item quantity="other">%d beacon okuması</item>
+    </plurals>
+    <plurals name="count_connections">
+        <item quantity="one">%d bağlantı</item>
+        <item quantity="other">%d bağlantı</item>
+    </plurals>
+    <plurals name="count_located_beacons">
+        <item quantity="one">%d konumlandırılan beacon</item>
+        <item quantity="other">%d konumlandırılan beacon</item>
+    </plurals>
+    <plurals name="count_minors">
+        <item quantity="one">%d farklı minor</item>
+        <item quantity="other">%d farklı minor</item>
+    </plurals>
+    <plurals name="count_readings">
+        <item quantity="one">%d okuma</item>
+        <item quantity="other">%d okuma</item>
+    </plurals>
+
+    <!-- Bottom navigation -->
+    <string name="tab_navigation">Navigasyon</string>
+    <string name="tab_survey">Beacon</string>
+    <string name="tab_files">Dosyalar</string>
+    <string name="tab_settings">Ayarlar</string>
+
+    <!-- Navigation: setup -->
+    <string name="nav_permission_message">Nerede olduğunu bulmak için konum ve Bluetooth\'a, önündeki engelleri görmek için kameraya ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.</string>
+    <string name="nav_permission_denied_title">İzin verilmedi</string>
+    <string name="nav_permission_denied_message">Yönlendirme için kamera, konum ve Bluetooth izni gerekiyor.</string>
+    <string name="nav_unsupported_title">Cihaz desteklenmiyor</string>
+    <string name="nav_unsupported_message">Bu cihazda konum takibi için gereken ivmeölçer veya jiroskop sensörü yok, navigasyon kullanılamıyor.</string>
+    <string name="nav_no_map_title">Henüz bir harita yok</string>
+    <string name="nav_no_map_message">Önce \"Beacon Tarayıcı\" ekranında bir saha kaydı yapıp haritayı kaydet, ya da başka bir cihazdan dışa aktarılmış bir haritayı içe aktar.</string>
+    <string name="nav_empty_map_title">Harita boş</string>
+    <string name="nav_empty_map_message">Kaydedilmiş haritada hiç nokta yok.</string>
+    <string name="nav_change_building">Bina değiştir (şu an: %1$s)</string>
+    <string name="nav_recording_on_hint">Saha kaydı açık: bu yönlendirme kaydedilecek. \"Dosyalar\" sekmesinden kapatabilir ya da paylaşabilirsin.</string>
+    <string name="nav_pick_building_title">Hangi binada gitmek istiyorsun?</string>
+    <string name="nav_pick_building_subtitle">Birden fazla saha kaydın var, birini seç.</string>
+    <string name="nav_delete_building_body">Bu binanın haritası kalıcı olarak silinecek. Bu işlem geri alınamaz.</string>
+    <string name="nav_pick_route_title">Nereye gitmek istiyorsun?</string>
+    <string name="nav_pick_route_subtitle">Bulunduğun noktayı ve gitmek istediğin yeri seç.</string>
+    <string name="nav_start_label">Bulunduğum yer</string>
+    <string name="nav_destination_label">Gitmek istediğim yer</string>
+    <string name="nav_begin">Yönlendirmeyi başlat</string>
+
+    <!-- Navigation: active -->
+    <string name="nav_status_searching">Konumun aranıyor…</string>
+    <string name="nav_status_on_route">Yoldasın</string>
+    <string name="nav_status_warning">Dikkat, yakında bir engel var</string>
+    <string name="nav_status_critical">DUR! Hemen önünde bir engel var</string>
+    <string name="nav_status_arrived">Hedefe ulaştın</string>
+    <string name="nav_preparing">Yola çıkmaya hazırlanıyor…</string>
+    <string name="nav_pipeline_error">Navigasyon durduruldu: %1$s</string>
+    <string name="nav_pipeline_error_unknown">beklenmeyen bir hata oluştu</string>
+    <string name="nav_error_title">Bir şeyler ters gitti</string>
+    <string name="nav_no_fingerprints_warning">Bu haritada isimlendirilmiş nokta yok, konum sadece adım sayımıyla tahmin ediliyor ve zamanla sapabilir. Daha güvenilir takip için \"Beacon Tarayıcı\" ekranında yürürken yer isimlendir.</string>
+    <string name="nav_camera_warning">%1$s. Engel algılama olmadan devam ediliyor.</string>
+    <string name="nav_floor_change_up">Kat değiştirdim (yukarı, Kat %1$d)</string>
+    <string name="nav_floor_change_down">Kat değiştirdim (aşağı, Kat %1$d)</string>
+    <string name="nav_floor_change_barometer_hint">Basınç sensörü kat değişimini kendisi algılayacak. Algılamazsa bu düğmeye dokun.</string>
+    <string name="nav_stop">Yönlendirmeyi durdur</string>
+    <string name="nav_progress_next">Sonraki</string>
+    <string name="nav_progress_destination">Hedefe</string>
+    <string name="nav_progress_floor_change">Kat değişimi</string>
+    <string name="nav_progress_remaining_meters">~%1$d m</string>
+    <string name="nav_progress_under_a_minute">1 dakikadan az</string>
+    <plurals name="nav_progress_minutes">
+        <item quantity="one">yaklaşık %1$d dakika</item>
+        <item quantity="other">yaklaşık %1$d dakika</item>
+    </plurals>
+    <string name="nav_map_description_floor" tools:ignore="PluralsCandidate">Kat %1$d haritası.</string>
+    <string name="nav_map_description_next">Sonraki nokta %1$s.</string>
+    <plurals name="nav_map_description_next_distance">
+        <item quantity="one">Sonraki nokta %1$s, %2$d metre.</item>
+        <item quantity="other">Sonraki nokta %1$s, %2$d metre.</item>
+    </plurals>
+    <plurals name="nav_map_description_destination">
+        <item quantity="one">%1$s hedefine yaklaşık %2$d metre.</item>
+        <item quantity="other">%1$s hedefine yaklaşık %2$d metre.</item>
+    </plurals>
+    <plurals name="nav_map_description_obstacles">
+        <item quantity="one">%1$d engel görünüyor.</item>
+        <item quantity="other">%1$d engel görünüyor.</item>
+    </plurals>
+    <string name="nav_recording_active">Saha kaydı alınıyor</string>
+    <string name="nav_recording_failed">Saha kaydı yazılamadı (depolama dolu olabilir), kayıt durdu.</string>
+    <string name="nav_ground_truth_button">Buradayım: gerçek konumu işaretle</string>
+    <string name="nav_ground_truth_title">Şu an neredesin?</string>
+    <string name="nav_ground_truth_marked_error">✓ %1$s işaretlendi. Tahmin %2$s m uzaktaydı.</string>
+    <string name="nav_ground_truth_marked_other_floor">✓ %1$s işaretlendi. Tahmin başka bir kattaydı.</string>
+    <string name="nav_technical_show">Teknik ayrıntıları göster</string>
+    <string name="nav_technical_hide">Teknik ayrıntıları gizle</string>
+    <string name="nav_technical_route">Rota: %1$s</string>
+    <string name="nav_technical_details" tools:ignore="PluralsCandidate">x=%1$s y=%2$s kat=%3$d doğruluk≈%4$s m kaynak=%5$s fingerprint düzeltmesi=%6$d basınç Δ=%7$s</string>
+    <string name="nav_map_show_all">Tüm katı göster</string>
+    <string name="nav_map_follow_me">Konumuma odaklan</string>
+
+    <!-- Survey (Beacon Tarayıcı) -->
+    <string name="survey_permission_message">Binadaki beacon\'ları bulmak için konum ve Bluetooth\'a ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.</string>
+    <string name="survey_permission_denied">Beacon taraması için konum ve Bluetooth izni gerekiyor.</string>
+    <string name="survey_unsupported">Bu cihazda konum takibi için gereken ivmeölçer veya jiroskop sensörü yok, saha kaydı kullanılamıyor.</string>
+    <string name="survey_scan_failed">Tarama başlatılamadı: %1$s</string>
+    <string name="survey_advanced_show">Gelişmiş bilgileri göster (ham beacon listesi, UUID grupları)</string>
+    <string name="survey_advanced_hide">Gelişmiş bilgileri gizle</string>
+    <plurals name="survey_device_count">
+        <item quantity="one">%1$d / %2$d cihaz</item>
+        <item quantity="other">%1$d / %2$d cihaz</item>
+    </plurals>
+    <string name="survey_only_ibeacon">Sadece iBeacon</string>
+    <string name="survey_new_area_title">Yeni bir alan haritala</string>
+    <string name="survey_new_area_body">Kaydı başlat, binada normal şekilde yürü, önemli yerlere isim ver, bitince durdur. Elle konum girmene gerek yok, telefon adım sayarak kendi hesaplar.</string>
+    <string name="survey_calibrate_hint">Adım uzunluğun henüz ölçülmedi. Haritanın mesafeleri doğru olsun diye önce \"Ayarlar\" sekmesinden adımını kalibre etmeni öneririm.</string>
+    <string name="survey_unfinished">Bitmemiş bir kayıt var: %1$s, %2$s.</string>
+    <string name="survey_resume">Kayda devam et</string>
+    <string name="survey_start">Haritalamayı başlat</string>
+    <string name="survey_clear">Kaydı sil ve baştan başla</string>
+    <string name="survey_recording">Kaydediliyor…</string>
+    <string name="survey_recording_stats">%1$s · %2$s · %3$s</string>
+    <string name="survey_floor_down">Bir alt kat</string>
+    <string name="survey_floor_up">Bir üst kat</string>
+    <string name="survey_floor_hint">Merdiven/asansörden önce güncelle</string>
+    <string name="survey_stop">Kaydı durdur</string>
+    <string name="survey_type_door">Kapı</string>
+    <string name="survey_type_stairs">Merdiven</string>
+    <string name="survey_type_elevator">Asansör</string>
+    <string name="survey_type_ramp">Rampa</string>
+    <string name="survey_tag_title">Bulunduğun yeri isimlendir</string>
+    <string name="survey_tag_body">\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. Kapı, merdiven, asansör ya da rampa gibi bir tehlike veya kat geçişiyse türünü de seç: kamera bunları göremez, navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir.</string>
+    <string name="survey_tag_name_label">Yer adı</string>
+    <string name="survey_tag_button">İşaretle</string>
+    <string name="survey_tagged_with_type">%1$s (%2$s, kat %3$d)</string>
+    <string name="survey_tagged">%1$s (kat %2$d)</string>
+    <string name="survey_delete_waypoint">%1$s sil</string>
+    <plurals name="survey_nothing_mapped">
+        <item quantity="one">Hiçbir yer haritalanamadı: en az bir yere isim vermen veya her beacon\'ın en az %1$d farklı noktadan görülmesi gerekiyor. %2$d adım kaydedildi. Bu sayı çok azsa (örneğin tek haneli), adım sayımı çalışmamış olabilir; daha uzun ve yavaş yürüyerek tekrar dene.</item>
+        <item quantity="other">Hiçbir yer haritalanamadı: en az bir yere isim vermen veya her beacon\'ın en az %1$d farklı noktadan görülmesi gerekiyor. %2$d adım kaydedildi. Bu sayı çok azsa (örneğin tek haneli), adım sayımı çalışmamış olabilir; daha uzun ve yavaş yürüyerek tekrar dene.</item>
+    </plurals>
+    <string name="survey_map_ready">Harita hazır</string>
+    <string name="survey_map_ready_stats">%1$s, %2$s.</string>
+    <string name="survey_building_name">Bina adı</string>
+    <string name="survey_building_name_hint">Aynı isimde kayıtlı bir bina varsa haritası bununla güncellenir.</string>
+    <string name="survey_saved">Kaydedildi: %1$s, %2$s, %3$s.</string>
+    <string name="survey_save_failed">Kaydedilemedi, cihazda yer kalmamış olabilir. Tekrar dene.</string>
+    <string name="survey_save">Haritayı kaydet</string>
+    <plurals name="survey_discovered">
+        <item quantity="one">%1$d keşfedilen iBeacon</item>
+        <item quantity="other">%1$d keşfedilen iBeacon</item>
+    </plurals>
+    <string name="survey_copy">Kopyala</string>
+    <string name="survey_clear_list">Temizle</string>
+    <string name="survey_discovered_hint">Bir kayıt sırasında görülen HER beacon burada birikir (bazıları eski okumalarla). Hangi beacon\'ların kurumun ağına ait olduğunu bulmak için kullan.</string>
+    <string name="survey_uuid_groups_title">UUID grupları (aynı UUID + farklı minor = muhtemelen kurumun beacon ağı):</string>
+    <string name="survey_uuid_group_network">muhtemel kurum ağı</string>
+    <string name="survey_uuid_group_single">tek cihaz, muhtemelen kişisel</string>
+    <string name="survey_uuid_group_line">%1$s: %2$s, %3$s (%4$s)</string>
+    <string name="survey_unknown">bilinmiyor</string>
+    <string name="survey_unknown_device">Bilinmeyen cihaz</string>
+    <string name="survey_distance_uncalibrated">%1$s m (kalibre edilmemiş)</string>
+    <string name="survey_rssi_line">RSSI: %1$d dBm, tahmini mesafe: %2$s</string>
+    <string name="survey_preview_title">Harita önizleme (bu kat)</string>
+    <string name="survey_preview_empty">Henüz veri yok. Kaydı başlatıp yürümeye başla.</string>
+    <string name="survey_preview_legend">🔵 yürüdüğün yol   🔴 konumlanan beacon   🟠 isimlendirilen yer   🟢 son konum</string>
+
+    <!-- Files (Dosyalar) -->
+    <string name="files_buildings_title">Binalar</string>
+    <string name="files_buildings_body">Bir cihazda taranan haritayı dışa aktarıp başka bir cihazda içe aktarabilirsin.</string>
+    <string name="files_no_buildings">Henüz kayıtlı bina yok.</string>
+    <string name="files_export_building_description">%1$s haritasını dışa aktar</string>
+    <string name="files_export_chooser">Haritayı paylaş</string>
+    <string name="files_export_failed">Harita dışa aktarılamadı.</string>
+    <string name="files_delete_building_body">Bu binanın haritası kalıcı olarak silinecek. Önce dışa aktarmadıysan geri alınamaz.</string>
+    <string name="files_logs_title">Saha kayıtları</string>
+    <string name="files_logs_body">Açıkken her yönlendirme; konum, adım, sinyal gücü ve verilen yönergelerle birlikte bir dosyaya kaydedilir. Bu dosyalar paylaşılana kadar cihazından çıkmaz.</string>
+    <string name="files_logs_toggle">Navigasyon sırasında kayıt tut</string>
+    <string name="files_no_logs">Henüz saha kaydı yok.</string>
+    <string name="files_share_all">Tümünü paylaş (%1$d)</string>
+    <string name="files_delete_all">Tümünü sil</string>
+    <string name="files_logs_chooser">Saha kayıtlarını paylaş</string>
+    <string name="files_log_chooser">Saha kaydını paylaş</string>
+    <string name="files_logs_share_failed">Kayıtlar paylaşılamadı.</string>
+    <string name="files_log_share_failed">Kayıt paylaşılamadı.</string>
+    <string name="files_log_share_description">Bu kaydı paylaş</string>
+    <string name="files_log_delete_description">Bu kaydı sil</string>
+    <string name="files_log_delete_title">Kayıt silinsin mi?</string>
+    <string name="files_log_delete_body">%1$s kalıcı olarak silinecek.</string>
+    <string name="files_logs_delete_all_title">Tüm kayıtlar silinsin mi?</string>
+    <plurals name="files_logs_delete_all_body">
+        <item quantity="one">%1$d saha kaydı kalıcı olarak silinecek.</item>
+        <item quantity="other">%1$d saha kaydı kalıcı olarak silinecek.</item>
+    </plurals>
+
+    <!-- Building import -->
+    <string name="import_success_title">İçe aktarıldı</string>
+    <string name="import_success_body">\'%1$s\' haritası eklendi (%2$s).</string>
+    <string name="import_save_failed_title">Kaydedilemedi</string>
+    <string name="import_save_failed_body">Harita cihaza yazılamadı. Depolama alanı dolu olabilir.</string>
+    <string name="import_failed_title">İçe aktarılamadı</string>
+    <string name="import_exists_title">\'%1$s\' zaten var</string>
+    <string name="import_exists_body">Bu cihazda aynı adla bir bina var. İçe aktarılan harita onun yerine geçsin mi? Bu işlem geri alınamaz.</string>
+    <string name="import_overwrite">Üzerine yaz</string>
+    <string name="import_unreadable">Dosya okunamadı.</string>
+    <string name="import_too_large">Dosya okunamadı ya da bir harita dosyası için fazla büyük.</string>
+    <string name="import_not_a_map">Bu dosya bir Umay haritası değil.</string>
+    <string name="import_corrupt">Harita bozuk görünüyor: %1$s.</string>
+    <string name="import_problem_blank_name">binanın adı yok</string>
+    <string name="import_problem_no_nodes">haritada hiç nokta yok</string>
+    <string name="import_problem_duplicate_nodes">aynı kimliğe sahip birden fazla nokta var</string>
+    <string name="import_problem_duplicate_floors">aynı kat birden fazla kez tanımlanmış</string>
+    <plurals name="import_problem_dangling_edges">
+        <item quantity="one">%1$d bağlantı var olmayan bir noktayı gösteriyor</item>
+        <item quantity="other">%1$d bağlantı var olmayan bir noktayı gösteriyor</item>
+    </plurals>
+    <plurals name="import_problem_dangling_transitions">
+        <item quantity="one">%1$d kat geçişi var olmayan bir noktayı gösteriyor</item>
+        <item quantity="other">%1$d kat geçişi var olmayan bir noktayı gösteriyor</item>
+    </plurals>
+
+    <!-- Settings (Ayarlar) -->
+    <string name="settings_step_title">Adım uzunluğu</string>
+    <string name="settings_step_calibrated">Ölçülen adım uzunluğun: %1$d cm</string>
+    <string name="settings_step_default">Henüz ölçülmedi. Ortalama değer (%1$d cm) kullanılıyor.</string>
+    <string name="settings_step_explanation">Umay mesafeyi adımlarını sayarak hesaplar. Adım uzunluğun ortalamadan farklıysa her metrede biraz sapma birikir; bir kez ölçmek bu sapmayı en çok azaltan şeydir. Haritayı çıkaran kişi de kendi adımını ölçmeli.</string>
+    <string name="settings_step_calibrate">Adımımı ölç</string>
+    <string name="settings_step_recalibrate">Yeniden ölç</string>
+    <string name="settings_step_reset">Ortalama değere dön</string>
+    <string name="settings_floor_title">Kat algılama</string>
+    <string name="settings_floor_barometer">Bu telefonda basınç sensörü var: merdivende de asansörde de kat değiştirdiğin kendiliğinden algılanır.</string>
+    <string name="settings_floor_no_barometer">Bu telefonda basınç sensörü yok: merdivende kat değişimi adımlarından anlaşılır, asansörde \"Kat değiştirdim\" düğmesine dokunman gerekir.</string>
+    <string name="settings_voice_title">Konuşma sesi</string>
+    <string name="settings_tour_title">Tanıtım</string>
+    <string name="settings_tour_replay">Sesli tanıtımı yeniden dinle</string>
+
+    <!-- Step-length calibration -->
+    <string name="calibration_title">Adım uzunluğunu ölç</string>
+    <string name="calibration_no_sensors">Bu cihazda adım sayımı için gereken sensörler yok.</string>
+    <string name="calibration_instructions">Uzunluğunu bildiğin düz bir yol seç: ölçülmüş bir koridor ya da boyu bilinen yer karolarının sayısı gibi. Başlangıç noktasında dur, telefonu yürürken tuttuğun gibi tut, Başla\'ya dokun ve normal hızında yürü. Bitiş noktasına varınca ekrandaki büyük düğmeye dokun.</string>
+    <string name="calibration_distance_label">Yürüyeceğin mesafe (metre)</string>
+    <plurals name="calibration_distance_hint">
+        <item quantity="one">En az %1$d metre. Ne kadar uzun olursa ölçüm o kadar isabetli olur.</item>
+        <item quantity="other">En az %1$d metre. Ne kadar uzun olursa ölçüm o kadar isabetli olur.</item>
+    </plurals>
+    <string name="calibration_start">Başla</string>
+    <string name="calibration_walking">Normal hızında yürü. Bitiş noktasına varınca aşağıdaki büyük düğmeye dokun.</string>
+    <string name="calibration_walking_spoken">Yürümeye başla. Bitiş noktasına varınca ekranın ortasındaki büyük düğmeye dokun.</string>
+    <string name="calibration_done">Vardım</string>
+    <plurals name="calibration_step_count">
+        <item quantity="one">%1$d adım</item>
+        <item quantity="other">%1$d adım</item>
+    </plurals>
+    <string name="calibration_retry">Yeniden ölç</string>
+    <plurals name="calibration_result_success">
+        <item quantity="one">Adım uzunluğun %1$d santimetre olarak ölçüldü. Kaydetmek için Kaydet\'e dokun.</item>
+        <item quantity="other">Adım uzunluğun %1$d santimetre olarak ölçüldü. Kaydetmek için Kaydet\'e dokun.</item>
+    </plurals>
+    <plurals name="calibration_result_too_short">
+        <item quantity="one">Mesafe çok kısa. Daha isabetli bir ölçüm için en az %1$d metre yürü.</item>
+        <item quantity="other">Mesafe çok kısa. Daha isabetli bir ölçüm için en az %1$d metre yürü.</item>
+    </plurals>
+    <plurals name="calibration_result_too_few_steps">
+        <item quantity="one">Sadece %1$d adım sayıldı; en az %2$d gerekiyor. Telefonu yürürken tuttuğun gibi tutarak yeniden dene.</item>
+        <item quantity="other">Sadece %1$d adım sayıldı; en az %2$d gerekiyor. Telefonu yürürken tuttuğun gibi tutarak yeniden dene.</item>
+    </plurals>
+    <plurals name="calibration_result_implausible">
+        <item quantity="one">%1$d santimetre, bir adım için olağan dışı. Adımlar eksik ya da fazla sayılmış olabilir, yeniden dene.</item>
+        <item quantity="other">%1$d santimetre, bir adım için olağan dışı. Adımlar eksik ya da fazla sayılmış olabilir, yeniden dene.</item>
+    </plurals>
+
+    <!-- Onboarding tour -->
+    <string name="onboarding_progress">Adım %1$d / %2$d</string>
+    <string name="onboarding_skip">Atla</string>
+    <string name="onboarding_back">Geri</string>
+    <string name="onboarding_next">Devam</string>
+    <string name="onboarding_start">Başla</string>
+    <string name="onboarding_replay">Tekrar dinle</string>
+    <string name="onboarding_welcome_title">Umay\'a hoş geldin</string>
+    <string name="onboarding_welcome_body">Umay, bina içinde seni sesli yönergelerle gitmek istediğin yere götüren bir yardımcı. Bu kısa tanıtımı dinleyebilir ya da istediğin an atlayabilirsin. Devam etmek için ekranın en altındaki sağ düğmeye, geri dönmek için soldakine dokun.</string>
+    <string name="onboarding_hold_title">Telefonu nasıl tutmalı</string>
+    <string name="onboarding_hold_body">Yürürken telefonu göğüs hizasında, ekranı sana, arka kamerası önüne bakacak şekilde tut. Umay adımlarını sayarak ve binadaki Bluetooth işaretçilerini dinleyerek nerede olduğunu bulur. Kamera da önündeki insanları fark edip seni uyarır.</string>
+    <string name="onboarding_guidance_title">Yönlendirme</string>
+    <string name="onboarding_guidance_body">Navigasyon sekmesinde nerede olduğunu ve nereye gitmek istediğini seç, sonra Yönlendirmeyi başlat\'a dokun. Umay kaç metre yürüyeceğini, nerede döneceğini, kapı ya da merdiven gibi noktaları sesli söyler. Önüne biri çıkarsa hemen uyarır, hedefe vardığında da haber verir.</string>
+    <string name="onboarding_floors_title">Katlar arasında</string>
+    <string name="onboarding_floors_body_barometer">Rota merdiven ya da asansörden geçiyorsa Umay bunu önceden söyler. Telefonundaki basınç sensörü sayesinde kat değiştirdiğini kendisi anlar; bir şeye dokunman gerekmez.</string>
+    <string name="onboarding_floors_body_no_barometer">Rota merdiven ya da asansörden geçiyorsa Umay bunu önceden söyler. Merdivende kat değiştirdiğini adımlarından anlar. Asansörde ise indiğinde ekrandaki \"Kat değiştirdim\" düğmesine dokunman gerekir.</string>
+    <string name="onboarding_setup_title">Başlamadan önce</string>
+    <string name="onboarding_setup_body">Bir binada yönlendirme için önce o binanın haritası gerekir. Haritayı binayı tanıyan biri Beacon Tarayıcı sekmesinde yürüyerek çıkarır ya da başka bir cihazdan Dosyalar sekmesiyle içe aktarılır. Daha isabetli takip için Ayarlar sekmesinden adım uzunluğunu bir kez ölçmeni öneririm. Bu tanıtımı Ayarlar\'dan istediğin zaman yeniden dinleyebilirsin.</string>
 </resources>

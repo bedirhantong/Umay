@@ -58,10 +58,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.appvalence.umay.R
 import com.appvalence.umay.common.PermissionRationale
+import com.appvalence.umay.common.countText
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
@@ -74,6 +78,7 @@ import com.appvalence.umay.positioning.pdr.StepDetector
 import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
 import com.appvalence.umay.positioning.trilateration.BeaconSurveyResult
 import com.appvalence.umay.positioning.trilateration.BeaconSurveySolver
+import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.storage.BuildingMapStorage
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -139,8 +144,8 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         if (!rationaleShown) {
             PermissionRationale(
                 icon = Icons.Filled.LocationOn,
-                title = "İzin gerekiyor",
-                message = "Binadaki beacon'ları bulmak için konum ve Bluetooth'a ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.",
+                title = stringResource(R.string.common_permission_needed),
+                message = stringResource(R.string.survey_permission_message),
                 onContinue = {
                     rationaleShown = true
                     permissionLauncher.launch(REQUIRED_BLE_PERMISSIONS)
@@ -150,14 +155,14 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         } else {
             Column(modifier = modifier.padding(16.dp)) {
                 Text(
-                    text = "Beacon taraması için konum ve Bluetooth izni gerekiyor.",
+                    text = stringResource(R.string.survey_permission_denied),
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 TextButton(
                     modifier = Modifier.padding(top = 8.dp),
                     onClick = { permissionLauncher.launch(REQUIRED_BLE_PERMISSIONS) },
                 ) {
-                    Text("Tekrar dene")
+                    Text(stringResource(R.string.common_retry))
                 }
             }
         }
@@ -166,7 +171,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
 
     if (!remember { StepDetector.isAvailable(context) }) {
         Text(
-            text = "Bu cihazda konum takibi için gereken ivmeölçer veya jiroskop sensörü yok, saha kaydı kullanılamıyor.",
+            text = stringResource(R.string.survey_unsupported),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.error,
             modifier = modifier.padding(16.dp),
@@ -192,7 +197,11 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
     }
     val clipboardManager = LocalClipboardManager.current
 
-    val stepDetector = remember { StepDetector(context) }
+    // The surveyor's own stride: every coordinate on the map is steps × stride, so an
+    // uncalibrated stride stretches or shrinks the whole map (see UserSettings).
+    val stepLengthMeters = remember { UserSettings(context).stepLengthMeters }
+    val strideCalibrated = remember { UserSettings(context).calibratedStepLengthMeters != null }
+    val stepDetector = remember { StepDetector(context, stepLengthMeters) }
     val trajectory = BeaconSurveyLog.trajectory
     val rawReadings = BeaconSurveyLog.rawReadings
     LaunchedEffect(BeaconSurveyLog.isRecording) {
@@ -231,7 +240,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         if (scanState is BleScanState.Failed) {
             item {
                 Text(
-                    text = "Tarama başlatılamadı: ${(scanState as BleScanState.Failed).reason}",
+                    text = stringResource(R.string.survey_scan_failed, (scanState as BleScanState.Failed).reason),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -249,6 +258,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                 rawReadingCount = rawReadings.size,
                 taggedWaypointCount = BeaconSurveyLog.taggedWaypoints.size,
                 currentFloor = BeaconSurveyLog.currentFloor,
+                strideCalibrated = strideCalibrated,
                 onStart = { BeaconSurveyLog.isRecording = true },
                 onStop = {
                     BeaconSurveyLog.isRecording = false
@@ -299,6 +309,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                     results = BeaconSurveyLog.results,
                     taggedWaypoints = BeaconSurveyLog.taggedWaypoints,
                     trajectoryPointCount = trajectory.size,
+                    stepLengthMeters = stepLengthMeters,
                 )
             }
         }
@@ -307,7 +318,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
             TextButton(onClick = { showAdvanced = !showAdvanced }) {
                 Icon(if (showAdvanced) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null)
                 Text(
-                    text = if (showAdvanced) "Gelişmiş bilgileri gizle" else "Gelişmiş bilgileri göster (ham beacon listesi, UUID grupları)",
+                    text = stringResource(if (showAdvanced) R.string.survey_advanced_hide else R.string.survey_advanced_show),
                     modifier = Modifier.padding(start = 4.dp),
                 )
             }
@@ -337,7 +348,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(text = "${visibleBeacons.size} / ${beacons.size} cihaz", style = MaterialTheme.typography.titleMedium)
+                    Text(text = pluralStringResource(R.plurals.survey_device_count, beacons.size, visibleBeacons.size, beacons.size), style = MaterialTheme.typography.titleMedium)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.toggleable(
@@ -346,7 +357,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                             onValueChange = { showOnlyIBeacon = it },
                         ),
                     ) {
-                        Text(text = "Sadece iBeacon", style = MaterialTheme.typography.bodySmall)
+                        Text(text = stringResource(R.string.survey_only_ibeacon), style = MaterialTheme.typography.bodySmall)
                         // The Row's toggleable modifier owns the click handling and merged
                         // accessible name ("Sadece iBeacon, açık/kapalı") — the Switch itself
                         // must not also be independently focusable, or TalkBack sees two
@@ -368,6 +379,7 @@ private fun RecordingCard(
     rawReadingCount: Int,
     taggedWaypointCount: Int,
     currentFloor: Int,
+    strideCalibrated: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onFloorChange: (Int) -> Unit,
@@ -383,16 +395,27 @@ private fun RecordingCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             if (!isRecording) {
-                Text(text = "Yeni bir alan haritala", style = MaterialTheme.typography.titleMedium)
+                Text(text = stringResource(R.string.survey_new_area_title), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = "Kaydı başlat, binada normal şekilde yürü, önemli yerlere isim ver, bitince durdur. " +
-                        "Elle konum girmene gerek yok, telefon adım sayarak kendi hesaplar.",
+                    text = stringResource(R.string.survey_new_area_body),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                if (!strideCalibrated) {
+                    Text(
+                        text = stringResource(R.string.survey_calibrate_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 if (trajectoryPointCount > 0) {
                     Text(
-                        text = "Bitmemiş bir kayıt var: $trajectoryPointCount adım, $taggedWaypointCount isimlendirilmiş yer.",
+                        text = stringResource(
+                            R.string.survey_unfinished,
+                            countText(R.plurals.count_steps, trajectoryPointCount),
+                            countText(R.plurals.count_named_places, taggedWaypointCount),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
@@ -404,43 +427,48 @@ private fun RecordingCard(
                 ) {
                     Icon(Icons.Filled.FiberManualRecord, contentDescription = null)
                     Text(
-                        text = if (trajectoryPointCount > 0) "Kayda devam et" else "Haritalamayı başlat",
+                        text = stringResource(if (trajectoryPointCount > 0) R.string.survey_resume else R.string.survey_start),
                         modifier = Modifier.padding(start = 8.dp),
                     )
                 }
                 if (trajectoryPointCount > 0) {
                     TextButton(modifier = Modifier.padding(top = 4.dp), onClick = onClear) {
-                        Text("Kaydı sil ve baştan başla")
+                        Text(stringResource(R.string.survey_clear))
                     }
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.FiberManualRecord, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Text(
-                        text = "Kaydediliyor...",
+                        text = stringResource(R.string.survey_recording),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(start = 8.dp),
                     )
                 }
                 Text(
-                    text = "$trajectoryPointCount adım · $rawReadingCount beacon okuması · $taggedWaypointCount isimlendirilmiş yer",
+                    text = stringResource(
+                        R.string.survey_recording_stats,
+                        countText(R.plurals.count_steps, trajectoryPointCount),
+                        countText(R.plurals.count_beacon_readings, rawReadingCount),
+                        countText(R.plurals.count_named_places, taggedWaypointCount),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp),
                 )
                 Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "Kat $currentFloor", style = MaterialTheme.typography.bodyMedium)
+                    Text(text = stringResource(R.string.common_floor, currentFloor), style = MaterialTheme.typography.bodyMedium)
                     // No explicit size here: IconButton's Material3 default already
                     // reserves a full 48dp touch target even though the icon itself is
                     // smaller — pinning this to 36dp would shrink the tappable area below
                     // the accessible minimum.
                     IconButton(onClick = { onFloorChange(-1) }) {
-                        Icon(Icons.Filled.Remove, contentDescription = "Bir alt kat")
+                        Icon(Icons.Filled.Remove, contentDescription = stringResource(R.string.survey_floor_down))
                     }
                     IconButton(onClick = { onFloorChange(1) }) {
-                        Icon(Icons.Filled.Add, contentDescription = "Bir üst kat")
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.survey_floor_up))
                     }
                     Text(
-                        text = "Merdiven/asansörden önce güncelle",
+                        text = stringResource(R.string.survey_floor_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 4.dp),
@@ -452,7 +480,7 @@ private fun RecordingCard(
                     onClick = onStop,
                 ) {
                     Icon(Icons.Filled.Stop, contentDescription = null)
-                    Text(text = "Kaydı durdur", modifier = Modifier.padding(start = 8.dp))
+                    Text(text = stringResource(R.string.survey_stop), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
@@ -462,10 +490,10 @@ private fun RecordingCard(
 // The types worth offering at tagging time — plain WAYPOINT is the default and not
 // listed as its own chip (deselecting a hazard chip already means "just a point").
 private val TAGGABLE_HAZARD_TYPES = listOf(
-    NodeType.DOOR to "Kapı",
-    NodeType.STAIRS to "Merdiven",
-    NodeType.ELEVATOR to "Asansör",
-    NodeType.RAMP to "Rampa",
+    NodeType.DOOR to R.string.survey_type_door,
+    NodeType.STAIRS to R.string.survey_type_stairs,
+    NodeType.ELEVATOR to R.string.survey_type_elevator,
+    NodeType.RAMP to R.string.survey_type_ramp,
 )
 
 @Composable
@@ -480,12 +508,10 @@ private fun WaypointTaggingSection(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.LocationOn, contentDescription = null)
-                Text(text = "Bulunduğun yeri isimlendir", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
+                Text(text = stringResource(R.string.survey_tag_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
             }
             Text(
-                text = "\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. " +
-                    "Kapı/merdiven/asansör/rampa gibi bir tehlike ya da kat geçişiyse türünü de seç — kamera bunları göremez, " +
-                    "navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir.",
+                text = stringResource(R.string.survey_tag_body),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp),
             )
@@ -497,7 +523,7 @@ private fun WaypointTaggingSection(
                     FilterChip(
                         selected = selectedType == type,
                         onClick = { selectedType = if (selectedType == type) NodeType.WAYPOINT else type },
-                        label = { Text(label) },
+                        label = { Text(stringResource(label)) },
                     )
                 }
             }
@@ -505,7 +531,7 @@ private fun WaypointTaggingSection(
                 OutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
-                    label = { Text("Yer adı") },
+                    label = { Text(stringResource(R.string.survey_tag_name_label)) },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
@@ -518,7 +544,7 @@ private fun WaypointTaggingSection(
                         selectedType = NodeType.WAYPOINT
                     },
                 ) {
-                    Text("İşaretle")
+                    Text(stringResource(R.string.survey_tag_button))
                 }
             }
             taggedWaypoints.forEachIndexed { index, waypoint ->
@@ -528,13 +554,17 @@ private fun WaypointTaggingSection(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val typeLabel = TAGGABLE_HAZARD_TYPES.firstOrNull { it.first == waypoint.type }?.second
-                    val label = if (typeLabel != null) "${waypoint.name} ($typeLabel, kat ${waypoint.floor})" else "${waypoint.name} (kat ${waypoint.floor})"
+                    val label = if (typeLabel != null) {
+                        stringResource(R.string.survey_tagged_with_type, waypoint.name, stringResource(typeLabel), waypoint.floor)
+                    } else {
+                        stringResource(R.string.survey_tagged, waypoint.name, waypoint.floor)
+                    }
                     Text(text = label, style = MaterialTheme.typography.bodyMedium)
                     // Includes the waypoint's own name, not just "Sil" — a screen reader
                     // swiping past several tagged waypoints would otherwise hear the same
                     // ambiguous "Sil, düğme" repeated with no way to tell which is which.
                     IconButton(onClick = { onDelete(index) }) {
-                        Icon(Icons.Filled.DeleteOutline, contentDescription = "${waypoint.name} sil")
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = stringResource(R.string.survey_delete_waypoint, waypoint.name))
                     }
                 }
             }
@@ -548,6 +578,7 @@ private fun SaveMapCard(
     results: List<BeaconSurveyResult>,
     taggedWaypoints: List<TaggedWaypoint>,
     trajectoryPointCount: Int,
+    stepLengthMeters: Double,
 ) {
     var saveMessage by remember { mutableStateOf<String?>(null) }
     var saveFailed by remember { mutableStateOf(false) }
@@ -556,29 +587,30 @@ private fun SaveMapCard(
         Column(modifier = Modifier.padding(16.dp)) {
             if (results.isEmpty() && taggedWaypoints.isEmpty()) {
                 Text(
-                    text = "Hiçbir yer haritalanamadı: en az bir yere isim vermen veya her beacon'ın " +
-                        "en az ${BeaconSurveySolver.MIN_OBSERVATIONS_FOR_FIX} farklı noktadan görülmesi gerekiyor. " +
-                        "$trajectoryPointCount adım kaydedildi — eğer bu az ise (örn. tek haneli), adım sayımı çalışmamış olabilir; " +
-                        "daha uzun ve yavaş yürüyerek tekrar dene.",
+                    text = pluralStringResource(R.plurals.survey_nothing_mapped, trajectoryPointCount, BeaconSurveySolver.MIN_OBSERVATIONS_FOR_FIX, trajectoryPointCount),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 return@Column
             }
-            Text(text = "Harita hazır", style = MaterialTheme.typography.titleMedium)
+            Text(text = stringResource(R.string.survey_map_ready), style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "${taggedWaypoints.size} isimlendirilmiş yer, ${results.size} konumlandırılan beacon.",
+                text = stringResource(
+                    R.string.survey_map_ready_stats,
+                    countText(R.plurals.count_named_places, taggedWaypoints.size),
+                    countText(R.plurals.count_located_beacons, results.size),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp),
             )
             OutlinedTextField(
                 value = buildingName,
                 onValueChange = { buildingName = it },
-                label = { Text("Bina adı") },
+                label = { Text(stringResource(R.string.survey_building_name)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             )
             Text(
-                text = "Aynı isimde kayıtlı bir bina varsa haritası bununla güncellenir.",
+                text = stringResource(R.string.survey_building_name_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
@@ -591,20 +623,25 @@ private fun SaveMapCard(
                         buildingId = buildingName.trim(),
                         taggedWaypoints = taggedWaypoints,
                         beaconResults = results,
-                    )
+                    ).copy(surveyStepLengthMeters = stepLengthMeters)
                     val saved = BuildingMapStorage(context).save(map)
                     saveFailed = !saved
                     saveMessage = if (saved) {
                         val nodeCount = map.floors.sumOf { it.nodes.size }
                         val edgeCount = map.floors.sumOf { it.edges.size }
-                        "Kaydedildi: $nodeCount nokta, $edgeCount bağlantı, ${map.floors.size} kat."
+                        context.getString(
+                            R.string.survey_saved,
+                            context.countText(R.plurals.count_points, nodeCount),
+                            context.countText(R.plurals.count_connections, edgeCount),
+                            context.countText(R.plurals.count_floors, map.floors.size),
+                        )
                     } else {
-                        "Kaydedilemedi — cihazda yer kalmamış olabilir. Tekrar dene."
+                        context.getString(R.string.survey_save_failed)
                     }
                 },
             ) {
                 Icon(Icons.Filled.Save, contentDescription = null)
-                Text(text = "Haritayı kaydet", modifier = Modifier.padding(start = 8.dp))
+                Text(text = stringResource(R.string.survey_save), modifier = Modifier.padding(start = 8.dp))
             }
             saveMessage?.let {
                 Text(
@@ -626,19 +663,19 @@ private fun DiscoveredHeader(discoveredCount: Int, onCopyAll: () -> Unit, onClea
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = "$discoveredCount keşfedilen iBeacon", style = MaterialTheme.typography.titleMedium)
+            Text(text = pluralStringResource(R.plurals.survey_discovered, discoveredCount, discoveredCount), style = MaterialTheme.typography.titleMedium)
             Row {
                 OutlinedButton(enabled = discoveredCount > 0, onClick = onCopyAll) {
                     Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(text = "Kopyala", modifier = Modifier.padding(start = 4.dp))
+                    Text(text = stringResource(R.string.survey_copy), modifier = Modifier.padding(start = 4.dp))
                 }
                 TextButton(modifier = Modifier.padding(start = 4.dp), enabled = discoveredCount > 0, onClick = onClear) {
-                    Text("Temizle")
+                    Text(stringResource(R.string.survey_clear_list))
                 }
             }
         }
         Text(
-            text = "Bir kayıt sırasında görülen HER beacon burada birikir (bazıları eski/bayat okumayla) — hangi beacon'ın kurumun ağı olduğunu bulmak için kullan.",
+            text = stringResource(R.string.survey_discovered_hint),
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -648,13 +685,19 @@ private fun DiscoveredHeader(discoveredCount: Int, onCopyAll: () -> Unit, onClea
 private fun UuidGroupsSection(uuidGroups: List<UuidGroup>) {
     Column {
         Text(
-            text = "UUID grupları (aynı UUID + farklı minor = muhtemelen kurumun beacon ağı):",
+            text = stringResource(R.string.survey_uuid_groups_title),
             style = MaterialTheme.typography.titleSmall,
         )
         uuidGroups.forEach { group ->
-            val hint = if (group.distinctMinors > 1) "muhtemel kurum ağı" else "tek cihaz, muhtemelen kişisel"
+            val hint = stringResource(if (group.distinctMinors > 1) R.string.survey_uuid_group_network else R.string.survey_uuid_group_single)
             Text(
-                text = "${group.uuid} — ${group.distinctMinors} farklı minor, ${group.sightingCount} okuma ($hint)",
+                text = stringResource(
+                    R.string.survey_uuid_group_line,
+                    group.uuid,
+                    countText(R.plurals.count_minors, group.distinctMinors),
+                    countText(R.plurals.count_readings, group.sightingCount),
+                    hint,
+                ),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -664,8 +707,10 @@ private fun UuidGroupsSection(uuidGroups: List<UuidGroup>) {
 private data class UuidGroup(val uuid: String, val distinctMinors: Int, val sightingCount: Int)
 
 private fun BleBeaconReading.toSurveyLine(): String {
-    val distance = if (estimatedDistanceMeters >= 0) "${(estimatedDistanceMeters * 10).roundToInt() / 10.0}m" else "bilinmiyor"
-    return "uuid=$uuid major=$major minor=$minor mac=$macAddress rssi=${rssi}dBm mesafe=$distance"
+    // A machine-readable key=value line for pasting into notes/spreadsheets, so it stays
+    // language-neutral rather than going through string resources.
+    val distance = if (estimatedDistanceMeters >= 0) "${estimatedDistanceMeters.round1()}m" else "?"
+    return "uuid=$uuid major=$major minor=$minor mac=$macAddress rssi=${rssi}dBm distance=$distance"
 }
 
 internal fun Double.round1(): Double = (this * 10).roundToInt() / 10.0
@@ -678,7 +723,7 @@ private fun BeaconRow(beacon: BleBeaconReading) {
             val title = when {
                 beacon.uuid != null -> "iBeacon ${beacon.uuid}"
                 deviceName != null -> deviceName
-                else -> "Bilinmeyen cihaz"
+                else -> stringResource(R.string.survey_unknown_device)
             }
             Text(text = title, style = MaterialTheme.typography.bodyLarge)
             if (beacon.uuid != null) {
@@ -686,11 +731,11 @@ private fun BeaconRow(beacon: BleBeaconReading) {
             }
             Text(text = "MAC: ${beacon.macAddress}", style = MaterialTheme.typography.bodySmall)
             val distanceText = if (beacon.estimatedDistanceMeters >= 0) {
-                "${(beacon.estimatedDistanceMeters * 10).roundToInt() / 10.0}m (kalibre edilmemiş)"
+                stringResource(R.string.survey_distance_uncalibrated, beacon.estimatedDistanceMeters.round1().toString())
             } else {
-                "bilinmiyor"
+                stringResource(R.string.survey_unknown)
             }
-            Text(text = "RSSI: ${beacon.rssi} dBm, tahmini mesafe: $distanceText", style = MaterialTheme.typography.bodySmall)
+            Text(text = stringResource(R.string.survey_rssi_line, beacon.rssi, distanceText), style = MaterialTheme.typography.bodySmall)
         }
     }
 }

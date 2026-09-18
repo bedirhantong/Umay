@@ -107,7 +107,14 @@ data class StatusEvent(
 ) : FieldLogEvent()
 
 @Serializable
-enum class FloorChangePhase { PROMPTED, CONFIRMED_MANUALLY, CONFIRMED_AUTOMATICALLY }
+enum class FloorChangePhase {
+    PROMPTED,
+    CONFIRMED_MANUALLY,
+
+    /** By footstep count on a staircase (no barometer on this device). */
+    CONFIRMED_AUTOMATICALLY,
+    CONFIRMED_BY_BAROMETER,
+}
 
 @Serializable
 @SerialName("floor_change")
@@ -157,6 +164,14 @@ data class GroundTruthEvent(
     }
 }
 
+/** Barometer reading (~1 Hz), for calibrating floor height and the floor-change threshold. */
+@Serializable
+@SerialName("pressure")
+data class PressureEvent(
+    override val t: Long,
+    val hPa: Double,
+) : FieldLogEvent()
+
 @Serializable
 @SerialName("session_end")
 data class SessionEndEvent(
@@ -166,12 +181,16 @@ data class SessionEndEvent(
 
 object FieldLogJson {
     /** Bump whenever an event's shape changes incompatibly, so offline tooling can tell logs apart. */
-    const val SCHEMA_VERSION = 1
+    const val SCHEMA_VERSION = 2
 
     private val json = Json {
         classDiscriminator = "type"
         encodeDefaults = true
         ignoreUnknownKeys = true
+        // A NaN/Infinity anywhere (a degenerate sensor reading, an unset constant) must
+        // not make encode() throw: FieldLogRecorder treats a throw as a failed write and
+        // stops recording for the rest of the session.
+        allowSpecialFloatingPointValues = true
     }
 
     /** A single line, no trailing newline. */

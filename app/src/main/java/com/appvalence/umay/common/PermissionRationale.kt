@@ -18,18 +18,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.appvalence.umay.coremodel.AlertPriority
-import com.appvalence.umay.coremodel.NavigationAlert
-import com.appvalence.umay.feedback.TtsFeedbackController
+import com.appvalence.umay.R
 
 /**
  * Shown *before* the system permission dialog, instead of firing that dialog
  * the instant a screen opens: explains in plain language why the permission
  * is needed, and only requests it once the person taps through. A blind user
  * can't read the system dialog's fine print either way, so [message] is also
- * spoken via TTS as soon as this appears — the system prompt that follows
+ * spoken as soon as this appears (by TTS, or by TalkBack when it's on — see
+ * [rememberIsScreenReaderOn]) — the system prompt that follows
  * (after [onContinue]) still needs a sighted person or TalkBack to act on,
  * but at least the *reason* is available to everyone up front.
  */
@@ -40,21 +43,16 @@ fun PermissionRationale(
     message: String,
     onContinue: () -> Unit,
     modifier: Modifier = Modifier,
-    buttonLabel: String = "Devam et",
+    buttonLabel: String = stringResource(R.string.common_continue),
 ) {
     val context = LocalContext.current
-    val feedback = remember { TtsFeedbackController(context) }
+    val feedback = remember { createSpeechController(context) }
+    val screenReaderOn = rememberIsScreenReaderOn()
     DisposableEffect(Unit) { onDispose { feedback.shutdown() } }
-    LaunchedEffect(message) {
-        feedback.emit(
-            NavigationAlert(
-                id = "permission-rationale",
-                priority = AlertPriority.INFO,
-                message = message,
-                relatedObstacle = null,
-                createdAtMs = System.currentTimeMillis(),
-            ),
-        )
+    LaunchedEffect(message, screenReaderOn) {
+        // With TalkBack on, it reads the message (live region below) — speaking it here
+        // too would put two voices on top of each other.
+        if (!screenReaderOn) feedback.speakNow(message)
     }
 
     Column(
@@ -74,7 +72,9 @@ fun PermissionRationale(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .semantics { if (screenReaderOn) liveRegion = LiveRegionMode.Polite },
         )
         Button(modifier = Modifier.fillMaxWidth().padding(top = 24.dp), onClick = onContinue) {
             Text(buttonLabel)

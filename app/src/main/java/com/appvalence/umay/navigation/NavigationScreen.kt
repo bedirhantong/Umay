@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -63,10 +64,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.appvalence.umay.R
 import com.appvalence.umay.common.PermissionRationale
+import com.appvalence.umay.common.VoiceStatusNotice
+import com.appvalence.umay.common.createSpeechController
+import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.FieldLogEvent
@@ -76,6 +83,7 @@ import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.coremodel.GuidanceEvent
 import com.appvalence.umay.coremodel.PositionEvent
 import com.appvalence.umay.coremodel.PositionStream
+import com.appvalence.umay.coremodel.PressureEvent
 import com.appvalence.umay.coremodel.RssiEvent
 import com.appvalence.umay.coremodel.SessionEndEvent
 import com.appvalence.umay.coremodel.SessionStartEvent
@@ -83,13 +91,14 @@ import com.appvalence.umay.coremodel.StatusEvent
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
-import com.appvalence.umay.feedback.TtsFeedbackController
 import com.appvalence.umay.fieldlog.FieldLogRecorder
 import com.appvalence.umay.fieldlog.FieldLogStore
 import com.appvalence.umay.files.rememberBuildingImporter
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
 import com.appvalence.umay.perception.CameraXObstacleDetector
+import com.appvalence.umay.positioning.baro.BarometerSensor
+import com.appvalence.umay.positioning.baro.BarometricFloorChangeDetector
 import com.appvalence.umay.positioning.ble.BleBeaconScanner
 import com.appvalence.umay.positioning.engine.FingerprintPositioningEngine
 import com.appvalence.umay.positioning.engine.PdrPositioningEngine
@@ -99,6 +108,7 @@ import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import com.appvalence.umay.positioning.pdr.StepDetector
 import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
+import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.storage.BuildingMapStorage
 import com.appvalence.umay.survey.round1
 import kotlinx.coroutines.CancellationException
@@ -151,9 +161,8 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             if (!rationaleShown) {
                 PermissionRationale(
                     icon = Icons.Filled.LocationSearching,
-                    title = "İzin gerekiyor",
-                    message = "Nerede olduğunu bulmak için konum ve Bluetooth'a, önündeki engelleri görmek için " +
-                        "kameraya ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.",
+                    title = stringResource(R.string.common_permission_needed),
+                    message = stringResource(R.string.nav_permission_message),
                     onContinue = {
                         rationaleShown = true
                         permissionLauncher.launch(NAVIGATION_PERMISSIONS)
@@ -162,11 +171,11 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             } else {
                 EmptyState(
                     icon = Icons.Filled.LocationSearching,
-                    title = "İzin verilmedi",
-                    message = "Yönlendirme için kamera, konum ve Bluetooth izni gerekiyor.",
+                    title = stringResource(R.string.nav_permission_denied_title),
+                    message = stringResource(R.string.nav_permission_denied_message),
                 )
                 TextButton(modifier = Modifier.padding(top = 8.dp), onClick = { permissionLauncher.launch(NAVIGATION_PERMISSIONS) }) {
-                    Text("Tekrar dene")
+                    Text(stringResource(R.string.common_retry))
                 }
             }
             return@Column
@@ -175,8 +184,8 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
         if (!remember { StepDetector.isAvailable(context) }) {
             EmptyState(
                 icon = Icons.Filled.LocationSearching,
-                title = "Cihaz desteklenmiyor",
-                message = "Bu cihazda konum takibi için gereken ivmeölçer veya jiroskop sensörü yok, navigasyon kullanılamıyor.",
+                title = stringResource(R.string.nav_unsupported_title),
+                message = stringResource(R.string.nav_unsupported_message),
             )
             return@Column
         }
@@ -184,20 +193,19 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
         if (buildings.isEmpty()) {
             EmptyState(
                 icon = Icons.Filled.Map,
-                title = "Henüz bir harita yok",
-                message = "Önce \"Beacon Tarayıcı\" ekranında bir saha kaydı yapıp haritayı kaydet, " +
-                    "ya da başka bir cihazdan dışa aktarılmış bir haritayı içe aktar.",
+                title = stringResource(R.string.nav_no_map_title),
+                message = stringResource(R.string.nav_no_map_message),
                 modifier = Modifier.weight(1f),
             )
             Button(modifier = Modifier.fillMaxWidth(), onClick = importBuilding) {
                 Icon(Icons.Filled.FileOpen, contentDescription = null)
-                Text("Haritayı içe aktar", modifier = Modifier.padding(start = 8.dp))
+                Text(stringResource(R.string.common_import_building), modifier = Modifier.padding(start = 8.dp))
             }
             TextButton(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 onClick = { buildings = BuildingMapStorage(context).listBuildings() },
             ) {
-                Text("Yeniden dene")
+                Text(stringResource(R.string.common_reload))
             }
             return@Column
         }
@@ -219,7 +227,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
 
         val allNodes = map.floors.flatMap { it.nodes }
         if (allNodes.isEmpty()) {
-            EmptyState(icon = Icons.Filled.Map, title = "Harita boş", message = "Kaydedilmiş haritada hiç nokta yok.")
+            EmptyState(icon = Icons.Filled.Map, title = stringResource(R.string.nav_empty_map_title), message = stringResource(R.string.nav_empty_map_message))
             return@Column
         }
         val nodeFloor = remember(map) { map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap() }
@@ -232,7 +240,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
         if (!isNavigating) {
             if (buildings.size > 1) {
                 TextButton(modifier = Modifier.padding(bottom = 8.dp), onClick = { selectedBuildingId = null }) {
-                    Text("Bina değiştir (şu an: ${map.id})")
+                    Text(stringResource(R.string.nav_change_building, map.id))
                 }
             }
             RoutePicker(
@@ -247,7 +255,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             )
             if (remember { FieldLogStore(context).isRecordingEnabled }) {
                 RecordingIndicator(
-                    text = "Saha kaydı açık: bu yönlendirme kaydedilecek. \"Dosyalar\" sekmesinden kapatabilir ya da paylaşabilirsin.",
+                    text = stringResource(R.string.nav_recording_on_hint),
                     modifier = Modifier.padding(top = 12.dp),
                 )
             }
@@ -284,9 +292,9 @@ private fun BuildingPicker(buildings: List<BuildingMap>, onSelect: (BuildingMap)
     var pendingDelete by remember { mutableStateOf<BuildingMap?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Text(text = "Hangi binada gitmek istiyorsun?", style = MaterialTheme.typography.headlineSmall)
+        Text(text = stringResource(R.string.nav_pick_building_title), style = MaterialTheme.typography.headlineSmall)
         Text(
-            text = "Birden fazla saha kaydın var — birini seç.",
+            text = stringResource(R.string.nav_pick_building_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
@@ -302,13 +310,13 @@ private fun BuildingPicker(buildings: List<BuildingMap>, onSelect: (BuildingMap)
                         Text(text = building.id, style = MaterialTheme.typography.titleMedium)
                         val nodeCount = building.floors.sumOf { it.nodes.size }
                         Text(
-                            text = "${building.floors.size} kat, $nodeCount nokta",
+                            text = buildingSummary(building.floors.size, nodeCount),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     IconButton(onClick = { pendingDelete = building }) {
-                        Icon(Icons.Filled.DeleteOutline, contentDescription = "${building.id} binasını sil")
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = stringResource(R.string.common_delete_building_description, building.id))
                     }
                 }
             }
@@ -319,18 +327,18 @@ private fun BuildingPicker(buildings: List<BuildingMap>, onSelect: (BuildingMap)
     if (toDelete != null) {
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("'${toDelete.id}' silinsin mi?") },
-            text = { Text("Bu binanın haritası kalıcı olarak silinecek. Bu işlem geri alınamaz.") },
+            title = { Text(stringResource(R.string.common_delete_building_title, toDelete.id)) },
+            text = { Text(stringResource(R.string.nav_delete_building_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(toDelete)
                     pendingDelete = null
                 }) {
-                    Text("Sil", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Vazgeç") }
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -348,15 +356,15 @@ private fun RoutePicker(
     onDestinationChange: (Int) -> Unit,
     onBegin: () -> Unit,
 ) {
-    Text(text = "Nereye gitmek istiyorsun?", style = MaterialTheme.typography.headlineSmall)
+    Text(text = stringResource(R.string.nav_pick_route_title), style = MaterialTheme.typography.headlineSmall)
     Text(
-        text = "Bulunduğun noktayı ve gitmek istediğin yeri seç.",
+        text = stringResource(R.string.nav_pick_route_subtitle),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
     )
     NodeDropdown(
-        label = "Bulunduğum yer",
+        label = stringResource(R.string.nav_start_label),
         icon = Icons.Filled.LocationSearching,
         nodes = nodes,
         nodeFloor = nodeFloor,
@@ -365,7 +373,7 @@ private fun RoutePicker(
         onIndexChange = onStartChange,
     )
     NodeDropdown(
-        label = "Gitmek istediğim yer",
+        label = stringResource(R.string.nav_destination_label),
         icon = Icons.Filled.Flag,
         nodes = nodes,
         nodeFloor = nodeFloor,
@@ -380,12 +388,13 @@ private fun RoutePicker(
         onClick = onBegin,
     ) {
         Icon(Icons.Filled.PlayArrow, contentDescription = null)
-        Text(text = "Yönlendirmeyi başlat", modifier = Modifier.padding(start = 8.dp))
+        Text(text = stringResource(R.string.nav_begin), modifier = Modifier.padding(start = 8.dp))
     }
 }
 
+@Composable
 private fun nodeLabel(node: MapNode, nodeFloor: Map<String, Int>, showFloor: Boolean): String =
-    if (showFloor) "${node.name} (Kat ${nodeFloor[node.id] ?: 0})" else node.name
+    if (showFloor) stringResource(R.string.common_node_with_floor, node.name, nodeFloor[node.id] ?: 0) else node.name
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -424,12 +433,12 @@ private fun NodeDropdown(
     }
 }
 
-private enum class NavigationStatus(val label: String, val containerColor: @Composable () -> Color, val icon: ImageVector) {
-    SEARCHING("Konumun aranıyor...", { MaterialTheme.colorScheme.surfaceVariant }, Icons.Filled.LocationSearching),
-    ON_ROUTE("Yoldasın", { MaterialTheme.colorScheme.primaryContainer }, Icons.Filled.CheckCircle),
-    WARNING("Dikkat, yakında bir engel var", { Color(0xFFFFE0B2) }, Icons.Filled.Warning),
-    CRITICAL("DUR! Hemen önünde bir engel var", { MaterialTheme.colorScheme.errorContainer }, Icons.Filled.Warning),
-    ARRIVED("Hedefe ulaştın", { Color(0xFFC8E6C9) }, Icons.Filled.CheckCircle),
+private enum class NavigationStatus(@param:StringRes val label: Int, val containerColor: @Composable () -> Color, val icon: ImageVector) {
+    SEARCHING(R.string.nav_status_searching, { MaterialTheme.colorScheme.surfaceVariant }, Icons.Filled.LocationSearching),
+    ON_ROUTE(R.string.nav_status_on_route, { MaterialTheme.colorScheme.primaryContainer }, Icons.Filled.CheckCircle),
+    WARNING(R.string.nav_status_warning, { Color(0xFFFFE0B2) }, Icons.Filled.Warning),
+    CRITICAL(R.string.nav_status_critical, { MaterialTheme.colorScheme.errorContainer }, Icons.Filled.Warning),
+    ARRIVED(R.string.nav_status_arrived, { Color(0xFFC8E6C9) }, Icons.Filled.CheckCircle),
 }
 
 @Composable
@@ -443,10 +452,20 @@ private fun ActiveNavigation(
     onStop: () -> Unit,
 ) {
     val scanner = remember { BleBeaconScanner(context) }
-    val feedback = remember { TtsFeedbackController(context) }
+    val feedback = remember { createSpeechController(context) }
     var cameraWarning by remember { mutableStateOf<String?>(null) }
     val detector = remember { CameraXObstacleDetector(context, onBindFailed = { cameraWarning = it }) }
-    val stepDetector = remember { StepDetector(context) }
+    val stepLengthMeters = remember { UserSettings(context).stepLengthMeters }
+    val stepDetector = remember { StepDetector(context, stepLengthMeters) }
+
+    // With a barometer, floor changes confirm themselves from air pressure — stairs and
+    // elevators alike — so the footstep-count guess (NavigationOrchestrator's autoConfirm)
+    // is only used on phones without one. The manual button stays either way, as the
+    // fallback if the pressure change doesn't register (a split-level half floor, say).
+    val hasBarometer = remember { BarometerSensor.isAvailable(context) }
+    val barometer = remember { BarometerSensor(context) }
+    val floorChangeDetector = remember { BarometricFloorChangeDetector() }
+    val floorChangeTracking = remember { FloorChangeTracking() }
     val allNodes = remember(buildingMap) { buildingMap.floors.flatMap { it.nodes } }
     val allNodesById = remember(allNodes) { allNodes.associateBy { it.id } }
     val startFloorIndex = remember { nodeFloor[startNodeId] ?: 0 }
@@ -507,7 +526,7 @@ private fun ActiveNavigation(
     }
 
     DisposableEffect(Unit) {
-        recorder?.record(sessionStartEvent(context, buildingMap, startNodeId, destinationNode.id))
+        recorder?.record(sessionStartEvent(context, buildingMap, startNodeId, destinationNode.id, stepLengthMeters, hasBarometer))
         scanner.start()
         // No preview surface — nothing to show for a raw camera feed here, and CameraX's
         // preview surface (SurfaceView-backed) can visually paint over other content on
@@ -538,7 +557,7 @@ private fun ActiveNavigation(
     }
 
     var state by remember { mutableStateOf<NavigationState?>(null) }
-    var currentInstruction by remember { mutableStateOf("Yola çıkmaya hazırlanıyor...") }
+    var currentInstruction by remember { mutableStateOf(context.getString(R.string.nav_preparing)) }
     var pipelineError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(orchestrator) {
         var lastLoggedPositionMs = -1L
@@ -565,14 +584,22 @@ private fun ActiveNavigation(
                     lastPromptedFloorChange = hint?.targetNodeId
                 }
 
-                // A STAIRS crossing confirms itself once enough footsteps have piled up
-                // (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap needed,
-                // which matters since a blind user's hands may well be full on a staircase.
-                // Elevators never set autoConfirm, so those still wait for the button below.
-                newState.pendingFloorChange?.let { hint ->
-                    if (hint.autoConfirm) {
-                        confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg, FloorChangePhase.CONFIRMED_AUTOMATICALLY)
+                val hint = newState.pendingFloorChange
+                if (hint == null) {
+                    floorChangeDetector.disarm()
+                    floorChangeTracking.barometerConfirmedTargetId = null
+                } else if (hasBarometer) {
+                    // Don't re-arm for a crossing the barometer already confirmed: the
+                    // hint lingers until the next footstep produces a position on the new floor.
+                    if (hint.targetNodeId != floorChangeTracking.barometerConfirmedTargetId) {
+                        floorChangeDetector.arm(fromFloor = newState.position.floor, toFloor = hint.targetFloor)
                     }
+                } else if (hint.autoConfirm) {
+                    // No barometer: a STAIRS crossing confirms itself once enough footsteps have
+                    // piled up (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap
+                    // needed, which matters since a blind user's hands may well be full on a
+                    // staircase. Elevators never set autoConfirm; those wait for the button below.
+                    confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg, FloorChangePhase.CONFIRMED_AUTOMATICALLY)
                 }
             }
         } catch (e: CancellationException) {
@@ -583,8 +610,26 @@ private fun ActiveNavigation(
             // BleBeaconScanner's BleScanState.Failed, CameraXObstacleDetector's
             // onBindFailed, StepDetector.isAvailable gating steps before this even starts)
             // but an unanticipated one should show a recoverable screen, not crash the app.
-            pipelineError = "Navigasyon durduruldu: ${e.message ?: "beklenmeyen bir hata oluştu"}"
+            pipelineError = context.getString(R.string.nav_pipeline_error, e.message ?: context.getString(R.string.nav_pipeline_error_unknown))
             sessionEnd.reason = "error: ${e.message}"
+        }
+    }
+
+    if (hasBarometer) {
+        LaunchedEffect(barometer) {
+            var lastLoggedAtMs = 0L
+            barometer.readings().collect { reading ->
+                if (recorder != null && reading.timestampMs - lastLoggedAtMs >= PRESSURE_LOG_INTERVAL_MS) {
+                    lastLoggedAtMs = reading.timestampMs
+                    recorder.record(PressureEvent(reading.timestampMs, reading.hPa))
+                }
+                if (floorChangeDetector.onPressure(reading.hPa, reading.timestampMs)) {
+                    val current = state ?: return@collect
+                    val hint = current.pendingFloorChange ?: return@collect
+                    floorChangeTracking.barometerConfirmedTargetId = hint.targetNodeId
+                    confirmFloorChange(hint.targetNodeId, hint.targetFloor, current.position.headingDeg, FloorChangePhase.CONFIRMED_BY_BAROMETER)
+                }
+            }
         }
     }
 
@@ -610,19 +655,19 @@ private fun ActiveNavigation(
 
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         if (pipelineError != null) {
-            EmptyState(icon = Icons.Filled.Warning, title = "Bir şeyler ters gitti", message = pipelineError.orEmpty())
+            EmptyState(icon = Icons.Filled.Warning, title = stringResource(R.string.nav_error_title), message = pipelineError.orEmpty())
             Button(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), onClick = stop) {
-                Text("Geri dön")
+                Text(stringResource(R.string.common_back))
             }
             return@Column
         }
 
         StatusBanner(status)
+        VoiceStatusNotice(feedback, modifier = Modifier.padding(top = 8.dp))
 
         if (!hasFingerprintedWaypoints) {
             Text(
-                text = "Bu haritada isimlendirilmiş nokta yok, konum sadece adım sayımıyla tahmin ediliyor ve zamanla sapabilir. " +
-                    "Daha güvenilir takip için \"Beacon Tarayıcı\" ekranında yürürken yer isimlendir.",
+                text = stringResource(R.string.nav_no_fingerprints_warning),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 8.dp),
@@ -633,7 +678,7 @@ private fun ActiveNavigation(
         // obstacle detection, so this is a note, not a blocking EmptyState.
         cameraWarning?.let {
             Text(
-                text = "$it — engel algılama olmadan devam ediliyor.",
+                text = stringResource(R.string.nav_camera_warning, it),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 8.dp),
@@ -652,7 +697,6 @@ private fun ActiveNavigation(
 
         val pendingFloorChange = currentState?.pendingFloorChange
         if (pendingFloorChange != null) {
-            val direction = if (pendingFloorChange.targetFloor > currentFloorIndex) "yukarı" else "aşağı"
             Button(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 onClick = {
@@ -665,7 +709,21 @@ private fun ActiveNavigation(
                 },
             ) {
                 Icon(Icons.Filled.SwapVert, contentDescription = null)
-                Text(text = "Kat değiştirdim ($direction, Kat ${pendingFloorChange.targetFloor})", modifier = Modifier.padding(start = 8.dp))
+                Text(
+                    text = stringResource(
+                        if (pendingFloorChange.targetFloor > currentFloorIndex) R.string.nav_floor_change_up else R.string.nav_floor_change_down,
+                        pendingFloorChange.targetFloor,
+                    ),
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            if (hasBarometer) {
+                Text(
+                    text = stringResource(R.string.nav_floor_change_barometer_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
             }
         }
 
@@ -674,7 +732,7 @@ private fun ActiveNavigation(
             onClick = stop,
         ) {
             Icon(Icons.Filled.Stop, contentDescription = null)
-            Text(text = "Yönlendirmeyi durdur", modifier = Modifier.padding(start = 8.dp))
+            Text(text = stringResource(R.string.nav_stop), modifier = Modifier.padding(start = 8.dp))
         }
 
         if (recorder != null) {
@@ -689,22 +747,29 @@ private fun ActiveNavigation(
 
         NavigationMapCanvas(
             floorMap = currentFloorMap,
-            floorLabel = "Kat ${currentFloorMap.floorIndex}",
+            floorLabel = stringResource(R.string.common_floor, currentFloorMap.floorIndex),
             route = currentState?.route.orEmpty(),
             nextRouteIndex = currentState?.nextRouteIndex ?: 1,
             nodeFloor = nodeFloor,
             position = currentState?.position,
             obstacles = currentState?.obstacles ?: emptyList(),
-            description = mapDescription(currentFloorMap.floorIndex, progress, destinationNode, currentState?.obstacles?.size ?: 0),
+            description = mapDescription(context, currentFloorMap.floorIndex, progress, destinationNode, currentState?.obstacles?.size ?: 0),
             modifier = Modifier.padding(top = 16.dp),
         )
 
         if (currentState != null) {
             TechnicalDetails(
                 routeText = currentState.route.joinToString(" → ") { allNodesById[it.id]?.name ?: it.name },
-                technicalText = "x=${currentState.position.x.round1()} y=${currentState.position.y.round1()} " +
-                    "kat=${currentState.position.floor} doğruluk≈${currentState.position.accuracyMeters.round1()}m " +
-                    "kaynak=${currentState.position.source} fingerprint düzeltmesi=$fingerprintCorrectionCount",
+                technicalText = stringResource(
+                    R.string.nav_technical_details,
+                    currentState.position.x.round1().toString(),
+                    currentState.position.y.round1().toString(),
+                    currentState.position.floor,
+                    currentState.position.accuracyMeters.round1().toString(),
+                    currentState.position.source.name,
+                    fingerprintCorrectionCount,
+                    floorChangeDetector.climbedMeters()?.round1()?.let { "$it m" } ?: "-",
+                ),
             )
         }
     }
@@ -715,7 +780,21 @@ private class SessionEndReason {
     var reason: String = "left_screen"
 }
 
-private fun sessionStartEvent(context: Context, map: BuildingMap, startNodeId: String, destinationNodeId: String): FieldLogEvent {
+/** Plain holder, not Compose state: read and written only from the collectors above. */
+private class FloorChangeTracking {
+    var barometerConfirmedTargetId: String? = null
+}
+
+private const val PRESSURE_LOG_INTERVAL_MS = 1_000L
+
+private fun sessionStartEvent(
+    context: Context,
+    map: BuildingMap,
+    startNodeId: String,
+    destinationNodeId: String,
+    stepLengthMeters: Double,
+    hasBarometer: Boolean,
+): FieldLogEvent {
     val appVersion = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
     return SessionStartEvent(
         t = System.currentTimeMillis(),
@@ -728,6 +807,7 @@ private fun sessionStartEvent(context: Context, map: BuildingMap, startNodeId: S
         // Everything that was guessed rather than measured, so offline analysis knows
         // exactly which values produced this walk.
         constants = mapOf(
+            "stepLengthMetersInUse" to stepLengthMeters,
             "StepDetector.AVERAGE_STEP_LENGTH_METERS" to StepDetector.AVERAGE_STEP_LENGTH_METERS,
             "StepDetector.STEP_RISE_THRESHOLD_MPS2" to StepDetector.STEP_RISE_THRESHOLD_MPS2,
             "StepDetector.STEP_FALL_THRESHOLD_MPS2" to StepDetector.STEP_FALL_THRESHOLD_MPS2,
@@ -746,6 +826,14 @@ private fun sessionStartEvent(context: Context, map: BuildingMap, startNodeId: S
             "NavigationOrchestrator.CRITICAL_DISTANCE_METERS" to NavigationOrchestrator.CRITICAL_DISTANCE_METERS,
             "NavigationOrchestrator.WARNING_DISTANCE_METERS" to NavigationOrchestrator.WARNING_DISTANCE_METERS,
             "BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS" to BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS,
+            "hasBarometer" to if (hasBarometer) 1.0 else 0.0,
+            "BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS" to BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS,
+            "BarometricFloorChangeDetector.CONFIRM_FRACTION" to BarometricFloorChangeDetector.CONFIRM_FRACTION,
+            "BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS" to BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS,
+        ) + listOfNotNull(
+            // Omitted, not NaN, for maps saved before this was tracked: JSON has no NaN, and
+            // the encoder rejecting one would stop recording for the whole session.
+            map.surveyStepLengthMeters?.let { "map.surveyStepLengthMeters" to it },
         ),
         map = map,
     )
@@ -775,18 +863,22 @@ private fun RouteProgressCard(progress: RouteProgress, modifier: Modifier = Modi
     Card(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Sonraki", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.nav_progress_next), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(progress.nextNode.name, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = progress.metersToNext?.let { "${it.roundToInt()} m" } ?: "Kat değişimi",
+                    text = progress.metersToNext?.let { stringResource(R.string.common_meters_short, it.roundToInt()) } ?: stringResource(R.string.nav_progress_floor_change),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("Hedefe", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("~${progress.metersToDestination.roundToInt()} m", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.nav_progress_destination), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.nav_progress_remaining_meters, progress.metersToDestination.roundToInt()), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = if (progress.minutesToDestination <= 1) "1 dakikadan az" else "yaklaşık ${progress.minutesToDestination} dakika",
+                    text = if (progress.minutesToDestination <= 1) {
+                        stringResource(R.string.nav_progress_under_a_minute)
+                    } else {
+                        pluralStringResource(R.plurals.nav_progress_minutes, progress.minutesToDestination, progress.minutesToDestination)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -794,15 +886,23 @@ private fun RouteProgressCard(progress: RouteProgress, modifier: Modifier = Modi
     }
 }
 
-private fun mapDescription(floorIndex: Int, progress: RouteProgress?, destination: MapNode, obstacleCount: Int): String = buildString {
-    append("Kat $floorIndex haritası. ")
-    if (progress != null) {
-        append("Sonraki nokta ${progress.nextNode.name}")
-        progress.metersToNext?.let { append(", ${it.roundToInt()} metre") }
-        append(". ${destination.name} hedefine yaklaşık ${progress.metersToDestination.roundToInt()} metre. ")
-    }
-    if (obstacleCount > 0) append("$obstacleCount engel görünüyor.")
-}
+private fun mapDescription(context: Context, floorIndex: Int, progress: RouteProgress?, destination: MapNode, obstacleCount: Int): String =
+    listOfNotNull(
+        context.getString(R.string.nav_map_description_floor, floorIndex),
+        progress?.let {
+            val next = it.metersToNext
+            if (next != null) {
+                context.resources.getQuantityString(R.plurals.nav_map_description_next_distance, next.roundToInt(), it.nextNode.name, next.roundToInt())
+            } else {
+                context.getString(R.string.nav_map_description_next, it.nextNode.name)
+            }
+        },
+        progress?.let {
+            val meters = it.metersToDestination.roundToInt()
+            context.resources.getQuantityString(R.plurals.nav_map_description_destination, meters, destination.name, meters)
+        },
+        obstacleCount.takeIf { it > 0 }?.let { context.resources.getQuantityString(R.plurals.nav_map_description_obstacles, it, it) },
+    ).joinToString(" ")
 
 /**
  * Field-test ground truth: the tester taps this the moment they're physically
@@ -818,16 +918,17 @@ private fun GroundTruthControls(
     nodeFloor: Map<String, Int>,
     estimate: Position?,
 ) {
+    val context = LocalContext.current
     var choosing by remember { mutableStateOf(false) }
     var lastMark by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(top = 12.dp)) {
         RecordingIndicator(
-            text = if (recorder.failed) "Saha kaydı yazılamadı (depolama dolu olabilir), kayıt durdu." else "Saha kaydı alınıyor",
+            text = stringResource(if (recorder.failed) R.string.nav_recording_failed else R.string.nav_recording_active),
         )
         OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), onClick = { choosing = true }) {
             Icon(Icons.Filled.PinDrop, contentDescription = null)
-            Text("Buradayım: gerçek konumu işaretle", modifier = Modifier.padding(start = 8.dp))
+            Text(stringResource(R.string.nav_ground_truth_button), modifier = Modifier.padding(start = 8.dp))
         }
         lastMark?.let {
             Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -844,21 +945,22 @@ private fun GroundTruthControls(
         }
         AlertDialog(
             onDismissRequest = { choosing = false },
-            title = { Text("Şu an neredesin?") },
+            title = { Text(stringResource(R.string.nav_ground_truth_title)) },
             text = {
                 LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                     items(nodes, key = { it.id }) { node ->
                         val floor = nodeFloor[node.id] ?: 0
                         Text(
-                            text = if (buildingMap.floors.size > 1) "${node.name} (Kat $floor)" else node.name,
+                            text = if (buildingMap.floors.size > 1) stringResource(R.string.common_node_with_floor, node.name, floor) else node.name,
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     val event = GroundTruthEvent.of(System.currentTimeMillis(), node, floor, estimate)
                                     recorder.record(event)
-                                    lastMark = "✓ ${node.name} işaretlendi" +
-                                        (event.errorMeters?.let { " — tahmin ${it.round1()} m uzaktaydı" } ?: " — tahmin başka bir kattaydı")
+                                    lastMark = event.errorMeters
+                                        ?.let { context.getString(R.string.nav_ground_truth_marked_error, node.name, it.round1().toString()) }
+                                        ?: context.getString(R.string.nav_ground_truth_marked_other_floor, node.name)
                                     choosing = false
                                 }
                                 .padding(vertical = 12.dp),
@@ -867,7 +969,7 @@ private fun GroundTruthControls(
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { choosing = false }) { Text("Vazgeç") } },
+            dismissButton = { TextButton(onClick = { choosing = false }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 }
@@ -876,10 +978,10 @@ private fun GroundTruthControls(
 private fun TechnicalDetails(routeText: String, technicalText: String) {
     var expanded by remember { mutableStateOf(false) }
     TextButton(modifier = Modifier.padding(top = 8.dp), onClick = { expanded = !expanded }) {
-        Text(if (expanded) "Teknik ayrıntıları gizle" else "Teknik ayrıntıları göster")
+        Text(stringResource(if (expanded) R.string.nav_technical_hide else R.string.nav_technical_show))
     }
     if (expanded) {
-        Text(text = "Rota: $routeText", style = MaterialTheme.typography.bodySmall)
+        Text(text = stringResource(R.string.nav_technical_route, routeText), style = MaterialTheme.typography.bodySmall)
         Text(text = technicalText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -894,7 +996,7 @@ private fun StatusBanner(status: NavigationStatus) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Icon(status.icon, contentDescription = null, modifier = Modifier.size(40.dp))
                 Text(
-                    text = status.label,
+                    text = stringResource(status.label),
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(top = 8.dp),
                 )

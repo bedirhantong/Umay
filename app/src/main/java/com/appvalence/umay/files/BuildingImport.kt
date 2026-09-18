@@ -14,8 +14,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.appvalence.umay.R
+import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
+import com.appvalence.umay.coremodel.MapProblem
 import com.appvalence.umay.storage.BuildingMapStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,9 +61,10 @@ fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): () -> Unit {
     fun save(map: BuildingMap) {
         message = if (BuildingMapStorage(context).save(map)) {
             onImported(map)
-            "İçe aktarıldı" to "'${map.id}' haritası eklendi (${map.floors.size} kat, ${map.floors.sumOf { it.nodes.size }} nokta)."
+            context.getString(R.string.import_success_title) to
+                context.getString(R.string.import_success_body, map.id, context.buildingSummary(map.floors.size, map.floors.sumOf { it.nodes.size }))
         } else {
-            "Kaydedilemedi" to "Harita cihaza yazılamadı. Depolama alanı dolu olabilir."
+            context.getString(R.string.import_save_failed_title) to context.getString(R.string.import_save_failed_body)
         }
     }
 
@@ -67,7 +72,7 @@ fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): () -> Unit {
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             when (val read = readBuildingMap(context, uri)) {
-                is ImportRead.Rejected -> message = "İçe aktarılamadı" to read.reason
+                is ImportRead.Rejected -> message = context.getString(R.string.import_failed_title) to read.reason
                 is ImportRead.Parsed ->
                     if (BuildingMapStorage(context).exists(read.map.id)) pendingOverwrite = read.map else save(read.map)
             }
@@ -77,15 +82,15 @@ fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): () -> Unit {
     pendingOverwrite?.let { map ->
         AlertDialog(
             onDismissRequest = { pendingOverwrite = null },
-            title = { Text("'${map.id}' zaten var") },
-            text = { Text("Bu cihazda aynı adla bir bina var. İçe aktarılan harita onun yerine geçsin mi? Bu işlem geri alınamaz.") },
+            title = { Text(stringResource(R.string.import_exists_title, map.id)) },
+            text = { Text(stringResource(R.string.import_exists_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     pendingOverwrite = null
                     save(map)
-                }) { Text("Üzerine yaz") }
+                }) { Text(stringResource(R.string.import_overwrite)) }
             },
-            dismissButton = { TextButton(onClick = { pendingOverwrite = null }) { Text("Vazgeç") } },
+            dismissButton = { TextButton(onClick = { pendingOverwrite = null }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 
@@ -94,7 +99,7 @@ fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): () -> Unit {
             onDismissRequest = { message = null },
             title = { Text(title) },
             text = { Text(body) },
-            confirmButton = { TextButton(onClick = { message = null }) { Text("Tamam") } },
+            confirmButton = { TextButton(onClick = { message = null }) { Text(stringResource(R.string.common_ok)) } },
         )
     }
 
@@ -114,15 +119,26 @@ private suspend fun readBuildingMap(context: Context, uri: Uri): ImportRead = wi
             }
             out.toByteArray()
         }
-    }.getOrElse { return@withContext ImportRead.Rejected("Dosya okunamadı.") }
-        ?: return@withContext ImportRead.Rejected("Dosya okunamadı ya da bir harita dosyası için fazla büyük.")
+    }.getOrElse { return@withContext ImportRead.Rejected(context.getString(R.string.import_unreadable)) }
+        ?: return@withContext ImportRead.Rejected(context.getString(R.string.import_too_large))
 
     val map = runCatching { BuildingMapJson.decode(bytes.decodeToString()) }.getOrNull()
-        ?: return@withContext ImportRead.Rejected("Bu dosya bir Umay haritası değil.")
+        ?: return@withContext ImportRead.Rejected(context.getString(R.string.import_not_a_map))
 
     val problems = BuildingMapJson.problems(map)
     if (problems.isNotEmpty()) {
-        return@withContext ImportRead.Rejected("Harita bozuk görünüyor: ${problems.joinToString("; ")}.")
+        val details = problems.joinToString("; ") { problem ->
+            when (problem) {
+                MapProblem.BlankName -> context.getString(R.string.import_problem_blank_name)
+                MapProblem.NoNodes -> context.getString(R.string.import_problem_no_nodes)
+                MapProblem.DuplicateNodeIds -> context.getString(R.string.import_problem_duplicate_nodes)
+                MapProblem.DuplicateFloors -> context.getString(R.string.import_problem_duplicate_floors)
+                is MapProblem.DanglingEdges -> context.resources.getQuantityString(R.plurals.import_problem_dangling_edges, problem.count, problem.count)
+                is MapProblem.DanglingTransitions ->
+                    context.resources.getQuantityString(R.plurals.import_problem_dangling_transitions, problem.count, problem.count)
+            }
+        }
+        return@withContext ImportRead.Rejected(context.getString(R.string.import_corrupt, details))
     }
     ImportRead.Parsed(map)
 }

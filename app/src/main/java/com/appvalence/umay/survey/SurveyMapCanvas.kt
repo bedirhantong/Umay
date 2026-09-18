@@ -16,7 +16,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.appvalence.umay.R
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.trilateration.BeaconSurveyResult
@@ -42,10 +44,10 @@ fun SurveyMapCanvas(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        Text(text = "Harita önizleme (bu kat)", style = MaterialTheme.typography.titleSmall)
+        Text(text = stringResource(R.string.survey_preview_title), style = MaterialTheme.typography.titleSmall)
         if (trajectory.isEmpty() && results.isEmpty() && waypoints.isEmpty()) {
             Text(
-                text = "Henüz veri yok — kaydı başlatıp yürümeye başla.",
+                text = stringResource(R.string.survey_preview_empty),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp),
             )
@@ -120,7 +122,7 @@ fun SurveyMapCanvas(
             }
         }
         Text(
-            text = "🔵 yürüdüğün yol   🔴 konumlanan beacon   🟠 isimlendirilen yer   🟢 son konum",
+            text = stringResource(R.string.survey_preview_legend),
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 4.dp),
         )

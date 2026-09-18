@@ -1,0 +1,102 @@
+package com.appvalence.umay.positioning.baro
+
+import kotlin.math.abs
+import kotlin.math.sign
+
+/**
+ * Confirms a floor change from air pressure, with no tap and — unlike the
+ * footstep-count fallback — for elevators too (standing still in a moving
+ * elevator produces no steps, but plenty of pressure change).
+ *
+ * Usage: [arm] when the route says a floor change is coming (from the floor
+ * the user is on to the one the route needs), then feed every reading to
+ * [onPressure]; it returns true exactly once, when the user has actually
+ * made the change. [disarm] if the route stops waiting for one.
+ *
+ * "Actually made the change" means two things, both required:
+ * 1. Altitude moved at least [CONFIRM_FRACTION] of [floorHeightMeters] per
+ *    floor *in the expected direction* since arming — a phone barometer
+ *    resolves roughly half a meter, well under one floor, but a door slam
+ *    or HVAC gust can still nudge it, so the bar is most of a floor, never
+ *    a small fraction of one.
+ * 2. Vertical movement has settled (below [SETTLED_VERTICAL_SPEED_MPS]).
+ *    Floor heights vary from ~2.7 m (homes) to 4.5 m+ (offices, hospitals);
+ *    confirming the instant the threshold is crossed would snap tracking to
+ *    the arrival node while someone is still halfway up a tall staircase or
+ *    the elevator is still moving.
+ *
+ * Readings are averaged over [SMOOTHING_WINDOW_MS] to smooth out the
+ * sensor's sample-to-sample noise.
+ */
+class BarometricFloorChangeDetector(
+    private val floorHeightMeters: Double = DEFAULT_FLOOR_HEIGHT_METERS,
+) {
+    private val samples = ArrayDeque<Pair<Long, Double>>() // (timestampMs, altitude meters)
+    private var expectedFloorDelta = 0
+    private var baselineMeters: Double? = null
+
+    val isArmed: Boolean get() = expectedFloorDelta != 0
+
+    /** No-op if already armed for the same change, so it can be called on every state update. */
+    fun arm(fromFloor: Int, toFloor: Int) {
+        val delta = toFloor - fromFloor
+        if (delta == 0 || delta == expectedFloorDelta) return
+        expectedFloorDelta = delta
+        // Baseline is where the user was *before* the climb started; null until the
+        // first reading arrives if nothing has been measured yet.
+        baselineMeters = smoothedMeters()
+    }
+
+    fun disarm() {
+        expectedFloorDelta = 0
+        baselineMeters = null
+    }
+
+    /** Altitude change since [arm], for display/logging; null when not armed or no reading yet. */
+    fun climbedMeters(): Double? {
+        val baseline = baselineMeters ?: return null
+        return smoothedMeters()?.minus(baseline)
+    }
+
+    fun onPressure(hPa: Double, timestampMs: Long): Boolean {
+        samples.addLast(timestampMs to PressureAltitude.metersFromHpa(hPa))
+        while (samples.isNotEmpty() && timestampMs - samples.first().first > SMOOTHING_WINDOW_MS) samples.removeFirst()
+
+        if (!isArmed) return false
+        val smoothed = smoothedMeters() ?: return false
+        val baseline = baselineMeters ?: smoothed.also { baselineMeters = it }
+
+        val climbedInExpectedDirection = (smoothed - baseline) * sign(expectedFloorDelta.toDouble())
+        val needed = CONFIRM_FRACTION * floorHeightMeters * abs(expectedFloorDelta)
+        if (climbedInExpectedDirection < needed) return false
+        if (abs(verticalSpeedMps() ?: return false) > SETTLED_VERTICAL_SPEED_MPS) return false
+
+        disarm()
+        return true
+    }
+
+    private fun smoothedMeters(): Double? = samples.takeIf { it.isNotEmpty() }?.map { it.second }?.average()
+
+    // Older half of the window vs. newer half: a slope estimate that's robust to
+    // single noisy readings, unlike comparing the two most recent samples.
+    private fun verticalSpeedMps(): Double? {
+        if (samples.size < 4) return null
+        val midpoint = (samples.first().first + samples.last().first) / 2
+        val older = samples.filter { it.first <= midpoint }
+        val newer = samples.filter { it.first > midpoint }
+        if (older.isEmpty() || newer.isEmpty()) return null
+        val dtSeconds = (newer.map { it.first }.average() - older.map { it.first }.average()) / 1000.0
+        if (dtSeconds <= 0) return null
+        return (newer.map { it.second }.average() - older.map { it.second }.average()) / dtSeconds
+    }
+
+    companion object {
+        /** Typical storey height; the confirmation bar below leaves room for 2.7-4.5 m floors. */
+        const val DEFAULT_FLOOR_HEIGHT_METERS = 3.2
+        const val CONFIRM_FRACTION = 0.65
+        const val SMOOTHING_WINDOW_MS = 2_000L
+
+        // Walking up stairs climbs ~0.3-0.5 m/s, elevators ~1-2 m/s; standing still reads ~0.
+        const val SETTLED_VERTICAL_SPEED_MPS = 0.15
+    }
+}

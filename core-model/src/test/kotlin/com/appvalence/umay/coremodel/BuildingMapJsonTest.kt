@@ -48,7 +48,7 @@ class BuildingMapJsonTest {
     fun `a map without any nodes is rejected`() {
         val empty = BuildingMap(id = "x", floors = listOf(FloorMap(0, emptyList(), emptyList())))
 
-        assertEquals(listOf("Haritada hiç nokta yok"), BuildingMapJson.problems(empty))
+        assertEquals(listOf(MapProblem.NoNodes), BuildingMapJson.problems(empty))
     }
 
     @Test
@@ -58,7 +58,7 @@ class BuildingMapJsonTest {
             floors = listOf(floor.copy(edges = floor.edges + MapEdge("A", "GHOST", accessible = true, distanceMeters = 1.0))),
         )
 
-        assertEquals(listOf("1 bağlantı var olmayan bir noktayı gösteriyor"), BuildingMapJson.problems(broken))
+        assertEquals(listOf(MapProblem.DanglingEdges(1)), BuildingMapJson.problems(broken))
     }
 
     @Test
@@ -67,11 +67,11 @@ class BuildingMapJsonTest {
             floorTransitions = listOf(FloorTransition("A", 0, "B", 1, costMeters = 15.0)),
         )
 
-        assertEquals(listOf("1 kat geçişi var olmayan bir noktayı gösteriyor"), BuildingMapJson.problems(broken))
+        assertEquals(listOf(MapProblem.DanglingTransitions(1)), BuildingMapJson.problems(broken))
     }
 
     @Test
     fun `a blank building name is reported`() {
-        assertEquals(listOf("Binanın adı yok"), BuildingMapJson.problems(sampleMap.copy(id = "  ")))
+        assertEquals(listOf(MapProblem.BlankName), BuildingMapJson.problems(sampleMap.copy(id = "  ")))
     }
 }

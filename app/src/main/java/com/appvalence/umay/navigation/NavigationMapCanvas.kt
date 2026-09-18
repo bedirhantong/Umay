@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Accessible
+import androidx.compose.material.icons.automirrored.filled.Accessible
 import androidx.compose.material.icons.filled.DoorFront
 import androidx.compose.material.icons.filled.Elevator
 import androidx.compose.material.icons.filled.Flag
@@ -51,9 +51,11 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.VectorPainter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.appvalence.umay.R
 import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapNode
@@ -136,7 +138,7 @@ fun NavigationMapCanvas(
         door = rememberVectorPainter(Icons.Filled.DoorFront),
         stairs = rememberVectorPainter(Icons.Filled.Stairs),
         elevator = rememberVectorPainter(Icons.Filled.Elevator),
-        ramp = rememberVectorPainter(Icons.Filled.Accessible),
+        ramp = rememberVectorPainter(Icons.AutoMirrored.Filled.Accessible),
         destination = rememberVectorPainter(Icons.Filled.Flag),
         obstacle = rememberVectorPainter(Icons.Filled.PriorityHigh),
     )
@@ -192,7 +194,7 @@ fun NavigationMapCanvas(
             ) {
                 Icon(
                     imageVector = if (following) Icons.Filled.ZoomOutMap else Icons.Filled.MyLocation,
-                    contentDescription = if (following) "Tüm katı göster" else "Konumuma odaklan",
+                    contentDescription = stringResource(if (following) R.string.nav_map_show_all else R.string.nav_map_follow_me),
                 )
             }
         }
