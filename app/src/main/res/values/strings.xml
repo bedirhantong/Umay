@@ -111,6 +111,8 @@
     <string name="nav_error_title">Bir şeyler ters gitti</string>
     <string name="nav_no_fingerprints_warning">Bu haritada isimlendirilmiş nokta yok, konum sadece adım sayımıyla tahmin ediliyor ve zamanla sapabilir. Daha güvenilir takip için \"Beacon Tarayıcı\" ekranında yürürken yer isimlendir.</string>
     <string name="nav_camera_warning">%1$s. Engel algılama olmadan devam ediliyor.</string>
+    <string name="camera_failure_model">Engel algılama modeli yüklenemedi</string>
+    <string name="camera_failure_camera">Kamera başlatılamadı</string>
     <string name="nav_floor_change_up">Kat değiştirdim (yukarı, Kat %1$d)</string>
     <string name="nav_floor_change_down">Kat değiştirdim (aşağı, Kat %1$d)</string>
     <string name="nav_floor_change_barometer_hint">Basınç sensörü kat değişimini kendisi algılayacak. Algılamazsa bu düğmeye dokun.</string>
@@ -165,11 +167,46 @@
     <string name="nav_map_show_all">Tüm katı göster</string>
     <string name="nav_map_follow_me">Konumuma odaklan</string>
 
+    <!-- Spoken guidance (see ResourceGuidancePhrases). Place names are never given a
+         case suffix: the sentences are built around them instead ("X yönünde"). -->
+    <plurals name="say_meters">
+        <item quantity="one">%d metre</item>
+        <item quantity="other">%d metre</item>
+    </plurals>
+    <string name="say_walk_straight">%1$s yönünde yaklaşık %2$s ilerle.</string>
+    <string name="say_walk_then_right">%1$s yönünde yaklaşık %2$s ilerle, sonra sağa dön.</string>
+    <string name="say_walk_then_left">%1$s yönünde yaklaşık %2$s ilerle, sonra sola dön.</string>
+    <string name="say_approach_destination">Hedefe yaklaşık %1$s kaldı.</string>
+    <string name="say_floor_stairs_up">Merdivenle yukarı çık: %1$s, %2$s.</string>
+    <string name="say_floor_stairs_down">Merdivenle aşağı in: %1$s, %2$s.</string>
+    <string name="say_floor_elevator_up">Asansörle yukarı çık: %1$s, %2$s.</string>
+    <string name="say_floor_elevator_down">Asansörle aşağı in: %1$s, %2$s.</string>
+    <string name="say_floor_either_up">Merdiven ya da asansörle yukarı çık: %1$s, %2$s.</string>
+    <string name="say_floor_either_down">Merdiven ya da asansörle aşağı in: %1$s, %2$s.</string>
+    <string name="say_hazard_stairs">Dikkat, merdiven var.</string>
+    <string name="say_hazard_door">Önünde bir kapı var.</string>
+    <string name="say_hazard_ramp">Önünde bir rampa var.</string>
+    <string name="say_hazard_elevator">Önünde asansör var.</string>
+    <string name="say_arrived">Hedefe ulaştın.</string>
+    <string name="say_no_route">Bu iki nokta arasında bir rota bulunamadı.</string>
+    <string name="say_rerouted">Önündeki engel yüzünden rota değişti.</string>
+    <string name="say_obstacle_critical_person">Dur! Hemen önünde biri var.</string>
+    <string name="say_obstacle_critical_other">Dur! Hemen önünde bir engel var.</string>
+    <string name="say_obstacle_warning_person">Dikkat, yaklaşık %1$s önünde biri var.</string>
+    <string name="say_obstacle_warning_other">Dikkat, yaklaşık %1$s önünde bir engel var.</string>
+    <string name="say_obstacle_info_person">Yaklaşık %1$s önünde biri var.</string>
+    <string name="say_obstacle_info_other">Yaklaşık %1$s önünde bir engel var.</string>
+
     <!-- Survey (Beacon Tarayıcı) -->
     <string name="survey_permission_message">Binadaki beacon\'ları bulmak için konum ve Bluetooth\'a ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.</string>
     <string name="survey_permission_denied">Beacon taraması için konum ve Bluetooth izni gerekiyor.</string>
     <string name="survey_unsupported">Bu cihazda konum takibi için gereken ivmeölçer veya jiroskop sensörü yok, saha kaydı kullanılamıyor.</string>
     <string name="survey_scan_failed">Tarama başlatılamadı: %1$s</string>
+    <string name="ble_failure_location_off">cihazın Konum servisi kapalı, Bluetooth taraması için açık olmalı</string>
+    <string name="ble_failure_bluetooth_off">Bluetooth kapalı</string>
+    <string name="ble_failure_unsupported">bu cihaz Bluetooth LE taramasını desteklemiyor</string>
+    <string name="ble_failure_permission">izin verilmedi</string>
+    <string name="ble_failure_scan">tarama hatası (kod %1$d)</string>
     <string name="survey_advanced_show">Gelişmiş bilgileri göster (ham beacon listesi, UUID grupları)</string>
     <string name="survey_advanced_hide">Gelişmiş bilgileri gizle</string>
     <plurals name="survey_device_count">
@@ -207,6 +244,7 @@
     </plurals>
     <string name="survey_map_ready">Harita hazır</string>
     <string name="survey_map_ready_stats">%1$s, %2$s.</string>
+    <string name="survey_anchor_name">Kat %1$d, Nokta %2$d</string>
     <string name="survey_building_name">Bina adı</string>
     <string name="survey_building_name_hint">Aynı isimde kayıtlı bir bina varsa haritası bununla güncellenir.</string>
     <string name="survey_saved">Kaydedildi: %1$s, %2$s, %3$s.</string>

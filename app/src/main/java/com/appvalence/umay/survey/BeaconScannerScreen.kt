@@ -72,6 +72,7 @@ import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.ble.BleBeaconScanner
+import com.appvalence.umay.positioning.ble.BleScanFailure
 import com.appvalence.umay.positioning.ble.BleScanState
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import com.appvalence.umay.positioning.pdr.StepDetector
@@ -240,7 +241,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         if (scanState is BleScanState.Failed) {
             item {
                 Text(
-                    text = stringResource(R.string.survey_scan_failed, (scanState as BleScanState.Failed).reason),
+                    text = stringResource(R.string.survey_scan_failed, scanFailureText(scanState as BleScanState.Failed)),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -623,6 +624,7 @@ private fun SaveMapCard(
                         buildingId = buildingName.trim(),
                         taggedWaypoints = taggedWaypoints,
                         beaconResults = results,
+                        anchorName = { floor, number -> context.getString(R.string.survey_anchor_name, floor, number) },
                     ).copy(surveyStepLengthMeters = stepLengthMeters)
                     val saved = BuildingMapStorage(context).save(map)
                     saveFailed = !saved
@@ -711,6 +713,15 @@ private fun BleBeaconReading.toSurveyLine(): String {
     // language-neutral rather than going through string resources.
     val distance = if (estimatedDistanceMeters >= 0) "${estimatedDistanceMeters.round1()}m" else "?"
     return "uuid=$uuid major=$major minor=$minor mac=$macAddress rssi=${rssi}dBm distance=$distance"
+}
+
+@Composable
+private fun scanFailureText(failure: BleScanState.Failed): String = when (failure.reason) {
+    BleScanFailure.LOCATION_OFF -> stringResource(R.string.ble_failure_location_off)
+    BleScanFailure.BLUETOOTH_OFF -> stringResource(R.string.ble_failure_bluetooth_off)
+    BleScanFailure.UNSUPPORTED -> stringResource(R.string.ble_failure_unsupported)
+    BleScanFailure.PERMISSION_DENIED -> stringResource(R.string.ble_failure_permission)
+    BleScanFailure.SCAN_FAILED -> stringResource(R.string.ble_failure_scan, failure.errorCode ?: 0)
 }
 
 internal fun Double.round1(): Double = (this * 10).roundToInt() / 10.0

@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.onEach
 import java.util.UUID
 import kotlin.math.atan2
 import kotlin.math.hypot
-import kotlin.math.roundToInt
 
 /**
  * Combines the latest position and obstacle streams against the static
@@ -50,7 +49,8 @@ import kotlin.math.roundToInt
  *   edge and replans from the nearest graph node to the destination, raising
  *   an INFO alert about the reroute.
  *
- * Alerts are forwarded to [feedback] as they're produced.
+ * Alerts are forwarded to [feedback] as they're produced. Their wording comes
+ * from [phrases], so guidance can be spoken in any language.
  */
 class NavigationOrchestrator(
     private val positioning: PositioningEngine,
@@ -59,6 +59,7 @@ class NavigationOrchestrator(
     private val feedback: FeedbackController,
     private val startNodeId: String,
     private val destinationNodeId: String,
+    private val phrases: GuidancePhrases,
 ) {
     private val nodeFloor: Map<String, Int> =
         map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap()
@@ -168,7 +169,7 @@ class NavigationOrchestrator(
             return NavigationAlert(
                 id = "no-route-${UUID.randomUUID()}",
                 priority = AlertPriority.WARNING,
-                message = NO_ROUTE_MESSAGE,
+                message = phrases.noRoute(),
                 relatedObstacle = null,
                 createdAtMs = position.timestampMs,
                 cue = GuidanceCue.NO_ROUTE,
@@ -215,7 +216,7 @@ class NavigationOrchestrator(
                 return NavigationAlert(
                     id = "arrived-${UUID.randomUUID()}",
                     priority = AlertPriority.INFO,
-                    message = ARRIVED_MESSAGE,
+                    message = phrases.arrived(),
                     relatedObstacle = null,
                     createdAtMs = position.timestampMs,
                     cue = GuidanceCue.ARRIVED,
@@ -253,8 +254,8 @@ class NavigationOrchestrator(
      */
     fun currentInstruction(position: Position): String? = when {
         !hasPlannedRoute -> null
-        currentRoute.isEmpty() -> NO_ROUTE_MESSAGE
-        arrivalAnnounced -> ARRIVED_MESSAGE
+        currentRoute.isEmpty() -> phrases.noRoute()
+        arrivalAnnounced -> phrases.arrived()
         currentRoute.size < 2 -> null
         else -> legInstruction(routeTargetIndex, position)
     }
@@ -269,8 +270,8 @@ class NavigationOrchestrator(
         val next = currentRoute.getOrNull(targetIndex + 1) ?: return GuidanceCue.CONTINUE
         if (nodeFloor[next.id] != nodeFloor[target.id]) return GuidanceCue.CONTINUE
         return when (classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))) {
-            Turn.RIGHT -> GuidanceCue.TURN_RIGHT
-            Turn.LEFT -> GuidanceCue.TURN_LEFT
+            TurnDirection.RIGHT -> GuidanceCue.TURN_RIGHT
+            TurnDirection.LEFT -> GuidanceCue.TURN_LEFT
             null -> GuidanceCue.CONTINUE
         }
     }
@@ -278,50 +279,37 @@ class NavigationOrchestrator(
     private fun legInstruction(targetIndex: Int, position: Position): String {
         val target = currentRoute[targetIndex]
         val previous = currentRoute[targetIndex - 1]
+        val targetFloor = nodeFloor[target.id] ?: 0
+        val previousFloor = nodeFloor[previous.id] ?: 0
 
-        if (nodeFloor[target.id] != nodeFloor[previous.id]) {
+        if (targetFloor != previousFloor) {
             val method = when (target.type) {
-                NodeType.STAIRS -> "merdivenden"
-                NodeType.ELEVATOR -> "asansörle"
-                else -> "merdiven veya asansörle"
+                NodeType.STAIRS -> FloorChangeMethod.STAIRS
+                NodeType.ELEVATOR -> FloorChangeMethod.ELEVATOR
+                else -> FloorChangeMethod.UNKNOWN
             }
-            return "${target.name}'a git, sonra $method kat değiştir"
+            return phrases.changeFloor(method, goingUp = targetFloor > previousFloor, targetFloor = targetFloor, arrivalPlaceName = target.name)
         }
 
-        val hazard = hazardPrefix(target.type)
-        val distanceRounded = (hypot(target.x - position.x, target.y - position.y) * 10).roundToInt() / 10.0
-        if (targetIndex == currentRoute.lastIndex) {
-            return "${hazard}Hedefe yaklaşık $distanceRounded metre kaldı"
-        }
-
-        val next = currentRoute[targetIndex + 1]
-        // A turn direction needs both bearings on the same floor as target — if the
-        // *next* leg crosses floors, there's nothing meaningful to compare against.
-        val turn = if (nodeFloor[next.id] == nodeFloor[target.id]) {
-            when (classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))) {
-                Turn.RIGHT -> "sağa dön"
-                Turn.LEFT -> "sola dön"
-                null -> null
+        // The camera only ever detects people, never static structure — a tagged hazard
+        // is the only source of "there's a door/stairs/ramp right here" awareness in the
+        // app, and it only exists where the survey operator explicitly tagged one.
+        val hazard = phrases.hazardAhead(target.type)
+        val distance = hypot(target.x - position.x, target.y - position.y)
+        val instruction = if (targetIndex == currentRoute.lastIndex) {
+            phrases.approachDestination(distance)
+        } else {
+            val next = currentRoute[targetIndex + 1]
+            // A turn direction needs both bearings on the same floor as target — if the
+            // *next* leg crosses floors, there's nothing meaningful to compare against.
+            val turn = if (nodeFloor[next.id] == nodeFloor[target.id]) {
+                classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))
+            } else {
+                null
             }
-        } else {
-            null
+            phrases.walkToward(target.name, distance, turn)
         }
-        return if (turn == null) {
-            "${hazard}${target.name}'a doğru yaklaşık $distanceRounded metre ilerle"
-        } else {
-            "${hazard}${target.name}'a yaklaşık $distanceRounded metre ilerle, sonra $turn"
-        }
-    }
-
-    // The camera only ever detects people, never static structure — this is the only
-    // source of "there's a door/stairs/ramp right here" awareness in the app, and it
-    // only exists where the survey operator explicitly tagged one (see TaggedWaypoint).
-    private fun hazardPrefix(type: NodeType): String = when (type) {
-        NodeType.STAIRS -> "Dikkat, merdiven var. "
-        NodeType.DOOR -> "Önünde bir kapı var. "
-        NodeType.RAMP -> "Önünde bir rampa var. "
-        NodeType.ELEVATOR -> "Önünde asansör var. "
-        else -> ""
+        return listOfNotNull(hazard, instruction).joinToString(" ")
     }
 
     // Compass bearing (0 = north/+y, 90 = east/+x, clockwise) — matches PdrIntegrator's
@@ -330,13 +318,11 @@ class NavigationOrchestrator(
     private fun bearingDeg(from: MapNode, to: MapNode): Double =
         (Math.toDegrees(atan2(to.x - from.x, to.y - from.y)) + 360.0) % 360.0
 
-    private enum class Turn { LEFT, RIGHT }
-
-    private fun classifyTurn(incomingBearingDeg: Double, outgoingBearingDeg: Double): Turn? {
+    private fun classifyTurn(incomingBearingDeg: Double, outgoingBearingDeg: Double): TurnDirection? {
         val turnAngle = ((outgoingBearingDeg - incomingBearingDeg + 540.0) % 360.0) - 180.0
         return when {
-            turnAngle > TURN_ANGLE_THRESHOLD_DEG -> Turn.RIGHT
-            turnAngle < -TURN_ANGLE_THRESHOLD_DEG -> Turn.LEFT
+            turnAngle > TURN_ANGLE_THRESHOLD_DEG -> TurnDirection.RIGHT
+            turnAngle < -TURN_ANGLE_THRESHOLD_DEG -> TurnDirection.LEFT
             else -> null
         }
     }
@@ -368,7 +354,7 @@ class NavigationOrchestrator(
         return NavigationAlert(
             id = "reroute-${blocked.fromId}-${blocked.toId}-${UUID.randomUUID()}",
             priority = AlertPriority.INFO,
-            message = "Rota önündeki engel nedeniyle güncellendi",
+            message = phrases.rerouted(),
             relatedObstacle = obstacle,
             createdAtMs = obstacle.detectedAtMs,
             cue = GuidanceCue.REROUTED,
@@ -387,19 +373,10 @@ class NavigationOrchestrator(
         else -> null
     }
 
-    private fun obstacleMessage(priority: AlertPriority, obstacle: DetectedObstacle): String {
-        val distanceRounded = (obstacle.distanceMeters * 10).roundToInt() / 10.0
-        val subject = if (obstacle.type == ObstacleType.PERSON) "Kişi" else "Engel"
-        return when (priority) {
-            AlertPriority.CRITICAL -> "Dur, $subject çok yakın, yaklaşık $distanceRounded metre"
-            AlertPriority.WARNING -> "Dikkat, $subject yaklaşık $distanceRounded metre önünüzde"
-            AlertPriority.INFO -> "$subject yaklaşık $distanceRounded metre önünüzde"
-        }
-    }
+    private fun obstacleMessage(priority: AlertPriority, obstacle: DetectedObstacle): String =
+        phrases.obstacle(priority, isPerson = obstacle.type == ObstacleType.PERSON, distanceMeters = obstacle.distanceMeters)
 
     companion object {
-        private const val NO_ROUTE_MESSAGE = "Bu iki nokta arasında bir rota bulunamadı"
-        private const val ARRIVED_MESSAGE = "Hedefe ulaştın"
         private val HAZARD_TYPES = setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)
 
         const val CRITICAL_DISTANCE_METERS = 1.5

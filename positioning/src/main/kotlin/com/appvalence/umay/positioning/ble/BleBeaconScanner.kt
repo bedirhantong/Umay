@@ -18,10 +18,15 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
 
+/** Why a scan couldn't run — typed, so the UI words it in the user's language. */
+enum class BleScanFailure { LOCATION_OFF, BLUETOOTH_OFF, UNSUPPORTED, PERMISSION_DENIED, SCAN_FAILED }
+
 sealed class BleScanState {
     data object Idle : BleScanState()
     data object Scanning : BleScanState()
-    data class Failed(val reason: String) : BleScanState()
+
+    /** [errorCode] is the platform's ScanCallback error code, for [BleScanFailure.SCAN_FAILED] only. */
+    data class Failed(val reason: BleScanFailure, val errorCode: Int? = null) : BleScanState()
 }
 
 /**
@@ -76,7 +81,7 @@ class BleBeaconScanner(private val context: Context) {
 
         override fun onScanFailed(errorCode: Int) {
             isScanning = false
-            state.value = BleScanState.Failed("Tarama başarısız (kod $errorCode)")
+            state.value = BleScanState.Failed(BleScanFailure.SCAN_FAILED, errorCode)
             Log.e(TAG, "BLE scan failed with error code $errorCode")
         }
     }
@@ -94,19 +99,19 @@ class BleBeaconScanner(private val context: Context) {
 
         val locationManager = context.getSystemService(LocationManager::class.java)
         if (locationManager == null || !LocationManagerCompat.isLocationEnabled(locationManager)) {
-            state.value = BleScanState.Failed("Cihazın Konum (GPS) servisi kapalı — BLE taraması için açık olmalı")
+            state.value = BleScanState.Failed(BleScanFailure.LOCATION_OFF)
             return
         }
 
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
         if (adapter == null || !adapter.isEnabled) {
-            state.value = BleScanState.Failed("Bluetooth kapalı")
+            state.value = BleScanState.Failed(BleScanFailure.BLUETOOTH_OFF)
             return
         }
 
         val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
-            state.value = BleScanState.Failed("BLE taraması bu cihazda desteklenmiyor")
+            state.value = BleScanState.Failed(BleScanFailure.UNSUPPORTED)
             return
         }
 
@@ -118,7 +123,7 @@ class BleBeaconScanner(private val context: Context) {
             isScanning = true
             state.value = BleScanState.Scanning
         } catch (e: SecurityException) {
-            state.value = BleScanState.Failed("İzin reddedildi: ${e.message}")
+            state.value = BleScanState.Failed(BleScanFailure.PERMISSION_DENIED)
             Log.e(TAG, "BLE scan start failed", e)
         }
     }

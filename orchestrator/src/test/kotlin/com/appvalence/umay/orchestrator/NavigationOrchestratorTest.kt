@@ -52,6 +52,26 @@ private fun personObstacle(id: String, distanceMeters: Double, bearingDeg: Doubl
     relativeVelocityMps = null, confidence = 0.9f, detectedAtMs = detectedAtMs, sensorSource = ObstacleSensorSource.CAMERA_ML,
 )
 
+/**
+ * Language-free wording: tests assert what the orchestrator *decided* (which
+ * place, how far, which turn, which floor-change method) — how that's said
+ * in Turkish is the app's string resources' job, tested separately.
+ */
+private object TokenPhrases : GuidancePhrases {
+    private fun meters(distance: Double) = "%.1f".format(java.util.Locale.ROOT, distance)
+    override fun walkToward(placeName: String, distanceMeters: Double, thenTurn: TurnDirection?) =
+        "WALK $placeName ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
+    override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
+    override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =
+        "CHANGE_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor $arrivalPlaceName"
+    override fun hazardAhead(type: NodeType) = if (type in setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)) "HAZARD $type" else null
+    override fun arrived() = "ARRIVED"
+    override fun noRoute() = "NO_ROUTE"
+    override fun rerouted() = "REROUTED"
+    override fun obstacle(priority: AlertPriority, isPerson: Boolean, distanceMeters: Double) =
+        "OBSTACLE $priority ${if (isPerson) "PERSON" else "OTHER"} ${meters(distanceMeters)}"
+}
+
 class NavigationOrchestratorTest {
 
     private val emptyMap = BuildingMap(id = "test-building", floors = emptyList())
@@ -75,6 +95,7 @@ class NavigationOrchestratorTest {
             feedback = RecordingFeedbackController(),
             startNodeId = "A",
             destinationNodeId = "B",
+            phrases = TokenPhrases,
         )
 
         val state = orchestrator.start().toList().single()
@@ -94,6 +115,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "A",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
@@ -116,6 +138,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "A",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
@@ -137,6 +160,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "A",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
@@ -178,6 +202,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "C",
+            phrases = TokenPhrases,
         )
 
         val states = orchestrator.start().toList()
@@ -208,6 +233,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "C",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
@@ -237,12 +263,13 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "C",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
 
         val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
-        assertTrue(guidance.message.contains("sağa dön"))
+        assertTrue(guidance.message.endsWith("RIGHT"), guidance.message)
     }
 
     @Test
@@ -271,13 +298,14 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "C",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
 
         val arrivals = feedback.emitted.filter { it.id.startsWith("arrived-") }
         assertEquals(1, arrivals.size)
-        assertEquals("Hedefe ulaştın", arrivals.single().message)
+        assertEquals("ARRIVED", arrivals.single().message)
     }
 
     @Test
@@ -303,6 +331,7 @@ class NavigationOrchestratorTest {
             feedback = RecordingFeedbackController(),
             startNodeId = "A",
             destinationNodeId = "C",
+            phrases = TokenPhrases,
         )
 
         val states = orchestrator.start().toList()
@@ -332,6 +361,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "B",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
@@ -356,6 +386,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "B",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
@@ -400,6 +431,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "D",
+            phrases = TokenPhrases,
         )
 
         val states = orchestrator.start().toList()
@@ -421,6 +453,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "D",
+            phrases = TokenPhrases,
         )
 
         val states = orchestrator.start().toList()
@@ -429,7 +462,7 @@ class NavigationOrchestratorTest {
         assertEquals("C", hint?.targetNodeId)
         assertEquals(1, hint?.targetFloor)
         val guidance = feedback.emitted.last { it.id.startsWith("route-guide-") }
-        assertTrue(guidance.message.contains("kat değiştir"))
+        assertTrue(guidance.message.startsWith("CHANGE_FLOOR"), guidance.message)
     }
 
     @Test
@@ -447,6 +480,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "D",
+            phrases = TokenPhrases,
         )
 
         val states = orchestrator.start().toList()
@@ -472,6 +506,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "D",
+            phrases = TokenPhrases,
         )
 
         val states = orchestrator.start().toList()
@@ -515,12 +550,13 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "D",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
 
         val guidance = feedback.emitted.first { it.id.startsWith("route-guide-") }
-        assertTrue(guidance.message.startsWith("Dikkat, merdiven var."))
+        assertTrue(guidance.message.startsWith("HAZARD STAIRS "), guidance.message)
         assertEquals(AlertPriority.WARNING, guidance.priority)
     }
 
@@ -538,12 +574,13 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "D",
+            phrases = TokenPhrases,
         )
 
         orchestrator.start().toList()
 
         val guidance = feedback.emitted.last { it.id.startsWith("route-guide-") }
-        assertTrue(guidance.message.contains("merdivenden"))
+        assertTrue(guidance.message.startsWith("CHANGE_FLOOR STAIRS UP 1 "), guidance.message)
     }
 
     @Test
@@ -565,6 +602,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "D",
+            phrases = TokenPhrases,
         )
 
         val states = orchestrator.start().toList()
@@ -587,6 +625,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "D",
+            phrases = TokenPhrases,
         )
 
         val states = orchestrator.start().toList()
@@ -622,6 +661,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = destination,
+            phrases = TokenPhrases,
         )
 
     @Test
@@ -681,6 +721,7 @@ class NavigationOrchestratorTest {
             feedback = feedback,
             startNodeId = "A",
             destinationNodeId = "A",
+            phrases = TokenPhrases,
         )
         orchestrator.start().toList()
 
@@ -695,7 +736,6 @@ class NavigationOrchestratorTest {
         orchestrator.start().toList()
 
         val instruction = orchestrator.currentInstruction(position(0.0, 6.0))
-        assertTrue(instruction!!.contains("4.0 metre"), instruction)
-        assertTrue(instruction.contains("sağa dön"), instruction)
+        assertEquals("WALK Donus 4.0 RIGHT", instruction)
     }
 }

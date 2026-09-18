@@ -34,11 +34,14 @@ import java.util.concurrent.TimeUnit
  * callers can verify the NFR-1 320ms end-to-end budget; this class only covers the
  * sensing+detection portion of that budget, not fusion/feedback.
  */
+/** Why obstacle detection couldn't start — typed, so the UI words it in the user's language. */
+enum class CameraFailure { MODEL_UNAVAILABLE, CAMERA_UNAVAILABLE }
+
 class CameraXObstacleDetector(
     private val context: Context,
     private val personScoreThreshold: Float = DEFAULT_SCORE_THRESHOLD,
     private val onLatencyTrace: (LatencyTrace) -> Unit = {},
-    private val onBindFailed: (String) -> Unit = {},
+    private val onBindFailed: (CameraFailure) -> Unit = {},
 ) : ObstacleDetector {
 
     private val obstacles = MutableSharedFlow<List<DetectedObstacle>>(replay = 1, extraBufferCapacity = 1)
@@ -95,7 +98,7 @@ class CameraXObstacleDetector(
             )
         } catch (t: Throwable) {
             Log.e(TAG, "Obstacle detection model failed to load", t)
-            onBindFailed("Engel algılama modeli yüklenemedi: ${t.message}")
+            onBindFailed(CameraFailure.MODEL_UNAVAILABLE)
             return
         }
         objectDetector = detector
@@ -122,7 +125,7 @@ class CameraXObstacleDetector(
                     provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, *useCases)
                 } catch (t: Throwable) {
                     Log.e(TAG, "Camera binding failed", t)
-                    onBindFailed("Kamera başlatılamadı: ${t.message}")
+                    onBindFailed(CameraFailure.CAMERA_UNAVAILABLE)
                 }
             },
             ContextCompat.getMainExecutor(context),
