@@ -45,3 +45,6 @@ Thumbs.db
 # Test / lint output already excluded via **/build/, kept explicit for clarity
 **/build/reports/
 **/build/test-results/
+
+# Firebase config: project-specific, keep out of the public repository
+google-services.json
