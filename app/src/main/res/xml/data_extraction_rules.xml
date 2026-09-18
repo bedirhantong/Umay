@@ -5,8 +5,10 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="field-logs/" />
+        <exclude domain="file" path="crash-logs/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="field-logs/" />
+        <exclude domain="file" path="crash-logs/" />
     </device-transfer>
 </data-extraction-rules>

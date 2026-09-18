@@ -3,6 +3,7 @@ package com.appvalence.umay.positioning.ble
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
@@ -80,8 +81,15 @@ class BleBeaconScanner(private val context: Context) {
         }
     }
 
+    /**
+     * [targets] restricts the scan to a building's own beacons (see
+     * [BeaconScanTargets]) — required for scanning to continue while the screen
+     * is off. Null scans for every advertiser, which the on-site survey needs
+     * (it's discovering beacons, not looking for known ones) but which Android
+     * pauses with the screen off.
+     */
     @SuppressLint("MissingPermission")
-    fun start() {
+    fun start(targets: List<ScanTarget>? = null) {
         if (isScanning) return
 
         val locationManager = context.getSystemService(LocationManager::class.java)
@@ -106,7 +114,7 @@ class BleBeaconScanner(private val context: Context) {
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
         try {
-            scanner.startScan(null, settings, scanCallback)
+            scanner.startScan(targets?.map(::toScanFilter), settings, scanCallback)
             isScanning = true
             state.value = BleScanState.Scanning
         } catch (e: SecurityException) {
@@ -131,6 +139,18 @@ class BleBeaconScanner(private val context: Context) {
         state.value = BleScanState.Idle
         sightings.value = emptyMap()
         rssiFilters.clear()
+    }
+
+    private fun toScanFilter(target: ScanTarget): ScanFilter = when (target) {
+        is ScanTarget.DeviceAddress -> ScanFilter.Builder().setDeviceAddress(target.address).build()
+        is ScanTarget.IBeaconUuid -> {
+            // Match Apple manufacturer data "02 15 <uuid>" and ignore the trailing
+            // major (2), minor (2) and measured-power (1) bytes.
+            val uuidBytes = target.uuid.replace("-", "").chunked(2).map { it.toInt(16).toByte() }
+            val data = byteArrayOf(IBEACON_TYPE_BYTE, IBEACON_LENGTH_BYTE) + uuidBytes + ByteArray(IBEACON_TRAILER_LENGTH)
+            val mask = ByteArray(2 + uuidBytes.size) { 0xFF.toByte() } + ByteArray(IBEACON_TRAILER_LENGTH)
+            ScanFilter.Builder().setManufacturerData(APPLE_MANUFACTURER_ID, data, mask).build()
+        }
     }
 
     private fun ScanResult.toBeaconReading(): BleBeaconReading? {
@@ -187,6 +207,7 @@ class BleBeaconScanner(private val context: Context) {
         private const val IBEACON_TYPE_BYTE: Byte = 0x02
         private const val IBEACON_LENGTH_BYTE: Byte = 0x15
         private const val IBEACON_PAYLOAD_LENGTH = 23
+        private const val IBEACON_TRAILER_LENGTH = 5
         private val UUID_DASH_POSITIONS = setOf(4, 6, 8, 10)
         private const val STALE_THRESHOLD_MS = 15_000L
     }

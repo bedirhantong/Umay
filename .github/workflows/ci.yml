@@ -1,0 +1,69 @@
+# Unit tests + Android lint on every push, so nothing broken reaches main unnoticed.
+# Results for a branch's head commit also show up on its pull request, which is why
+# there's no separate pull_request trigger (it would just run everything twice).
+# Never builds or installs an APK: device testing is done by hand on real hardware.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  # A newer push to the same branch makes an in-progress run pointless.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-lint:
+    name: Unit tests + lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gradle/AGP 9 run on JDK 17; core-model compiles against a JDK 11 toolchain.
+      # The last version listed becomes JAVA_HOME.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            11
+            17
+
+      # Only accepts SDK licenses (so AGP can fetch the compileSdk platform itself) and
+      # installs platform-tools: the action's default package list still includes the
+      # long-removed "tools" package, which makes sdkmanager fail.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      # Caches Gradle dependencies/build outputs and validates the wrapper jar.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: >
+          ./gradlew --stacktrace
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_11_X64
+          :core-model:test :positioning:test :perception:test :feedback:test :orchestrator:test :app:testDebugUnitTest
+
+      - name: Lint
+        run: >
+          ./gradlew --stacktrace
+          -Porg.gradle.java.installations.fromEnv=JAVA_HOME_11_X64
+          :app:lintDebug
+
+      - name: Upload test and lint reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            **/build/reports/
+            **/build/test-results/
+          retention-days: 14

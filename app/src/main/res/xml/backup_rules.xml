@@ -2,4 +2,5 @@
 <!-- Pre-API 31 counterpart of data_extraction_rules.xml. -->
 <full-backup-content>
     <exclude domain="file" path="field-logs/" />
+    <exclude domain="file" path="crash-logs/" />
 </full-backup-content>

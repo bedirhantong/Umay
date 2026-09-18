@@ -1,15 +1,14 @@
 package com.appvalence.umay.navigation
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +16,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,10 +28,10 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.FileOpen
-import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Stop
@@ -54,7 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,58 +67,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.appvalence.umay.R
 import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.common.VoiceStatusNotice
-import com.appvalence.umay.common.createSpeechController
-import com.appvalence.umay.feedback.CompositeFeedbackController
-import com.appvalence.umay.feedback.HapticFeedbackController
 import com.appvalence.umay.common.buildingSummary
-import com.appvalence.umay.coremodel.AlertPriority
+import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.coremodel.BuildingMap
-import com.appvalence.umay.coremodel.FieldLogEvent
-import com.appvalence.umay.coremodel.FloorChangeEvent
-import com.appvalence.umay.coremodel.FloorChangePhase
 import com.appvalence.umay.coremodel.GroundTruthEvent
-import com.appvalence.umay.coremodel.GuidanceEvent
-import com.appvalence.umay.coremodel.PositionEvent
-import com.appvalence.umay.coremodel.PositionStream
-import com.appvalence.umay.coremodel.PressureEvent
-import com.appvalence.umay.coremodel.RssiEvent
-import com.appvalence.umay.coremodel.SessionEndEvent
-import com.appvalence.umay.coremodel.SessionStartEvent
-import com.appvalence.umay.coremodel.StatusEvent
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
-import com.appvalence.umay.coremodel.Position
-import com.appvalence.umay.fieldlog.FieldLogRecorder
 import com.appvalence.umay.fieldlog.FieldLogStore
 import com.appvalence.umay.files.rememberBuildingImporter
-import com.appvalence.umay.orchestrator.NavigationOrchestrator
-import com.appvalence.umay.orchestrator.NavigationState
-import com.appvalence.umay.perception.CameraXObstacleDetector
-import com.appvalence.umay.positioning.baro.BarometerSensor
-import com.appvalence.umay.positioning.baro.BarometricFloorChangeDetector
-import com.appvalence.umay.positioning.ble.BleBeaconScanner
-import com.appvalence.umay.positioning.engine.FingerprintPositioningEngine
-import com.appvalence.umay.positioning.engine.PdrPositioningEngine
-import com.appvalence.umay.positioning.engine.PositionFusionEngine
-import com.appvalence.umay.positioning.engine.PositioningEngine
-import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
-import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import com.appvalence.umay.positioning.pdr.StepDetector
-import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
 import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.storage.BuildingMapStorage
 import com.appvalence.umay.survey.round1
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.onEach
-import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 private val NAVIGATION_PERMISSIONS = buildList {
@@ -128,19 +100,22 @@ private val NAVIGATION_PERMISSIONS = buildList {
     }
 }.toTypedArray()
 
-private const val ARRIVAL_DISTANCE_METERS = 1.5
+// Asked for together with the required ones, but navigation works without it: the
+// foreground service runs regardless, only its notification stays hidden.
+private val OPTIONAL_NAVIGATION_PERMISSIONS = buildList {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+}.toTypedArray()
 
 /**
- * Faz 3 end-to-end screen: loads the [BuildingMap] saved from the beacon
- * survey (see [BuildingMapStorage], [BeaconScannerScreen]), lets the
- * operator pick a start/destination point by name from *any* floor, then
- * runs the real [NavigationOrchestrator] — live position fused from
- * continuous PDR and sparse RSSI-fingerprint corrections (see
- * [PositionFusionEngine]), camera obstacle detection, A* routing across
- * floors with obstacle-triggered rerouting, TTS alerts — and presents it the
- * way a consumer navigation app would: one big status message people can
- * read at a glance, with the technical detail (raw coordinates, node ids)
- * folded away rather than in their face.
+ * Picks a building and a start/destination point by name from *any* floor,
+ * then starts a [NavigationSession] — live position fused from continuous PDR
+ * and sparse RSSI-fingerprint corrections, camera obstacle detection, A*
+ * routing across floors with obstacle-triggered rerouting, spoken and
+ * vibrated guidance — and shows it the way a consumer navigation app would:
+ * one big status message people can read at a glance, with the technical
+ * detail folded away. The session itself runs independently of this screen
+ * (see [NavigationService]), so leaving it or turning the screen off doesn't
+ * end the walk.
  */
 @Composable
 fun NavigationScreen(modifier: Modifier = Modifier) {
@@ -152,7 +127,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
     }
     var rationaleShown by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        hasPermissions = grants.values.all { it }
+        hasPermissions = NAVIGATION_PERMISSIONS.all { grants[it] ?: (ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED) }
     }
 
     var buildings by remember { mutableStateOf(BuildingMapStorage(context).listBuildings()) }
@@ -168,7 +143,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                     message = stringResource(R.string.nav_permission_message),
                     onContinue = {
                         rationaleShown = true
-                        permissionLauncher.launch(NAVIGATION_PERMISSIONS)
+                        permissionLauncher.launch(NAVIGATION_PERMISSIONS + OPTIONAL_NAVIGATION_PERMISSIONS)
                     },
                 )
             } else {
@@ -177,7 +152,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                     title = stringResource(R.string.nav_permission_denied_title),
                     message = stringResource(R.string.nav_permission_denied_message),
                 )
-                TextButton(modifier = Modifier.padding(top = 8.dp), onClick = { permissionLauncher.launch(NAVIGATION_PERMISSIONS) }) {
+                TextButton(modifier = Modifier.padding(top = 8.dp), onClick = { permissionLauncher.launch(NAVIGATION_PERMISSIONS + OPTIONAL_NAVIGATION_PERMISSIONS) }) {
                     Text(stringResource(R.string.common_retry))
                 }
             }
@@ -190,6 +165,14 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                 title = stringResource(R.string.nav_unsupported_title),
                 message = stringResource(R.string.nav_unsupported_message),
             )
+            return@Column
+        }
+
+        // A walk already in progress (started earlier, screen since turned off, app
+        // reopened from the notification...) takes over the screen, whatever else is set.
+        val activeSession by NavigationSessions.active.collectAsState()
+        activeSession?.let { session ->
+            ActiveNavigationView(session, lifecycleOwner)
             return@Column
         }
 
@@ -238,39 +221,27 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
 
         var startIndex by remember(map.id) { mutableIntStateOf(0) }
         var destinationIndex by remember(map.id) { mutableIntStateOf((allNodes.size - 1).coerceAtLeast(0)) }
-        var isNavigating by remember(map.id) { mutableStateOf(false) }
-
-        if (!isNavigating) {
-            if (buildings.size > 1) {
-                TextButton(modifier = Modifier.padding(bottom = 8.dp), onClick = { selectedBuildingId = null }) {
-                    Text(stringResource(R.string.nav_change_building, map.id))
-                }
+        if (buildings.size > 1) {
+            TextButton(modifier = Modifier.padding(bottom = 8.dp), onClick = { selectedBuildingId = null }) {
+                Text(stringResource(R.string.nav_change_building, map.id))
             }
-            RoutePicker(
-                nodes = allNodes,
-                nodeFloor = nodeFloor,
-                showFloor = showFloorInLabels,
-                startIndex = startIndex,
-                destinationIndex = destinationIndex,
-                onStartChange = { startIndex = it },
-                onDestinationChange = { destinationIndex = it },
-                onBegin = { isNavigating = true },
-            )
-            if (remember { FieldLogStore(context).isRecordingEnabled }) {
-                RecordingIndicator(
-                    text = stringResource(R.string.nav_recording_on_hint),
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-            }
-        } else {
-            ActiveNavigation(
-                context = context,
-                lifecycleOwner = lifecycleOwner,
-                buildingMap = map,
-                nodeFloor = nodeFloor,
-                startNodeId = allNodes[startIndex].id,
-                destinationNode = allNodes[destinationIndex],
-                onStop = { isNavigating = false },
+        }
+        RoutePicker(
+            nodes = allNodes,
+            nodeFloor = nodeFloor,
+            showFloor = showFloorInLabels,
+            startIndex = startIndex,
+            destinationIndex = destinationIndex,
+            onStartChange = { startIndex = it },
+            onDestinationChange = { destinationIndex = it },
+            onBegin = {
+                NavigationSessions.start(context, map, startNodeId = allNodes[startIndex].id, destinationNode = allNodes[destinationIndex])
+            },
+        )
+        if (remember { FieldLogStore(context).isRecordingEnabled }) {
+            RecordingIndicator(
+                text = stringResource(R.string.nav_recording_on_hint),
+                modifier = Modifier.padding(top = 12.dp),
             )
         }
     }
@@ -442,240 +413,72 @@ private enum class NavigationStatus(@param:StringRes val label: Int, val contain
     WARNING(R.string.nav_status_warning, { Color(0xFFFFE0B2) }, Icons.Filled.Warning),
     CRITICAL(R.string.nav_status_critical, { MaterialTheme.colorScheme.errorContainer }, Icons.Filled.Warning),
     ARRIVED(R.string.nav_status_arrived, { Color(0xFFC8E6C9) }, Icons.Filled.CheckCircle),
+    ;
+
+    companion object {
+        fun of(phase: NavigationPhase): NavigationStatus = when (phase) {
+            NavigationPhase.SEARCHING -> SEARCHING
+            NavigationPhase.ON_ROUTE -> ON_ROUTE
+            NavigationPhase.WARNING -> WARNING
+            NavigationPhase.CRITICAL -> CRITICAL
+            NavigationPhase.ARRIVED -> ARRIVED
+        }
+    }
 }
 
+/**
+ * The live view of a running [NavigationSession]. Everything that makes
+ * navigation *work* lives in the session, which outlives this screen (screen
+ * off, other tab, app in the background); this only shows its state and
+ * forwards the user's taps. The one thing it does own is the camera
+ * attachment: obstacle detection runs exactly while this screen is visible.
+ */
 @Composable
-private fun ActiveNavigation(
-    context: Context,
-    lifecycleOwner: LifecycleOwner,
-    buildingMap: BuildingMap,
-    nodeFloor: Map<String, Int>,
-    startNodeId: String,
-    destinationNode: MapNode,
-    onStop: () -> Unit,
-) {
-    val scanner = remember { BleBeaconScanner(context) }
-    val speech = remember { createSpeechController(context) }
-    val haptics = remember { HapticFeedbackController(context) }
-    // Every alert goes out as speech and, unless switched off in Ayarlar, as a vibration
-    // cue too — the vibration still gets through where speech can't be heard.
-    val feedback = remember {
-        CompositeFeedbackController(listOfNotNull(speech, haptics.takeIf { UserSettings(context).hapticsEnabled }))
-    }
-    var cameraWarning by remember { mutableStateOf<String?>(null) }
-    val detector = remember { CameraXObstacleDetector(context, onBindFailed = { cameraWarning = it }) }
-    val stepLengthMeters = remember { UserSettings(context).stepLengthMeters }
-    val stepDetector = remember { StepDetector(context, stepLengthMeters) }
+private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: LifecycleOwner) {
+    val context = LocalContext.current
+    val ui by session.ui.collectAsState()
 
-    // With a barometer, floor changes confirm themselves from air pressure — stairs and
-    // elevators alike — so the footstep-count guess (NavigationOrchestrator's autoConfirm)
-    // is only used on phones without one. The manual button stays either way, as the
-    // fallback if the pressure change doesn't register (a split-level half floor, say).
-    val hasBarometer = remember { BarometerSensor.isAvailable(context) }
-    val barometer = remember { BarometerSensor(context) }
-    val floorChangeDetector = remember { BarometricFloorChangeDetector() }
-    val floorChangeTracking = remember { FloorChangeTracking() }
-    val allNodes = remember(buildingMap) { buildingMap.floors.flatMap { it.nodes } }
-    val allNodesById = remember(allNodes) { allNodes.associateBy { it.id } }
-    val startFloorIndex = remember { nodeFloor[startNodeId] ?: 0 }
-
-    var fingerprintCorrectionCount by remember { mutableIntStateOf(0) }
-
-    // Field-test log for this one session (see FieldLogRecorder) — null unless recording
-    // was switched on in "Dosyalar". Everything below records through `recorder?.`, so
-    // with recording off none of this costs anything.
-    val recorder = remember {
-        val store = FieldLogStore(context)
-        if (store.isRecordingEnabled) FieldLogRecorder(store.newSessionFile(buildingMap.id)) else null
-    }
-    val sessionEnd = remember { SessionEndReason() }
-    // Only beacons the map actually fingerprinted matter for calibration; every phone,
-    // watch and headset advertising nearby would otherwise bury them. With no
-    // fingerprints yet, keep iBeacons — likely what the next survey will use.
-    val fingerprintBeaconIds = remember(allNodes) { allNodes.flatMap { it.fingerprint }.map { it.beaconId }.toSet() }
-
-    // Hoisted out of the orchestrator's own remember block so the "Kat değiştirdim"
-    // button below can reset it directly when the user confirms a floor crossing —
-    // there's no barometer to detect that automatically (see NavigationOrchestrator's
-    // pendingFloorChange).
-    val pdrEngine = remember {
-        val startNode = allNodesById.getValue(startNodeId)
-        PdrPositioningEngine(stepDetector = stepDetector, startX = startNode.x, startY = startNode.y, floor = startFloorIndex)
-    }
-
-    val orchestrator = remember {
-        // RSSI-to-distance trilateration is too noisy in real buildings to trust as
-        // the primary signal (see BeaconMapBuilder's field notes); instead we walk
-        // continuously via PDR and only correct against named waypoints' recorded
-        // RSSI fingerprints (see FingerprintMatcher) — the RF-engineering-standard
-        // approach for indoor radio positioning.
-        val fingerprintEngine = FingerprintPositioningEngine(
-            beaconReadings = scanner.beaconUpdates(),
-            waypoints = allNodes.filter { it.fingerprint.isNotEmpty() },
-            floor = startFloorIndex,
-        )
-        val fusion = PositionFusionEngine(pdrResettable = pdrEngine)
-        val fusedPositioning = object : PositioningEngine {
-            override fun positionUpdates() = fusion.fuse(
-                fingerprintEngine.positionUpdates().onEach {
-                    fingerprintCorrectionCount++
-                    recorder?.record(PositionEvent.of(PositionStream.FINGERPRINT, it))
-                },
-                pdrEngine.positionUpdates().onEach { recorder?.record(PositionEvent.of(PositionStream.PDR, it)) },
-            )
+    DisposableEffect(session, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> session.attachCamera(lifecycleOwner)
+                Lifecycle.Event.ON_STOP -> session.detachCamera()
+                else -> Unit
+            }
         }
-        NavigationOrchestrator(
-            positioning = fusedPositioning,
-            perception = detector,
-            map = buildingMap,
-            feedback = feedback,
-            startNodeId = startNodeId,
-            destinationNodeId = destinationNode.id,
-        )
-    }
-
-    DisposableEffect(Unit) {
-        recorder?.record(sessionStartEvent(context, buildingMap, startNodeId, destinationNode.id, stepLengthMeters, hasBarometer))
-        scanner.start()
-        // No preview surface — nothing to show for a raw camera feed here, and CameraX's
-        // preview surface (SurfaceView-backed) can visually paint over other content on
-        // this screen. Obstacle detection runs on ImageAnalysis frames either way.
-        detector.bind(lifecycleOwner)
+        // addObserver replays ON_START right away if the screen is already visible.
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            scanner.stop()
-            detector.unbind()
-            speech.shutdown()
-            haptics.stop()
-            recorder?.record(SessionEndEvent(System.currentTimeMillis(), sessionEnd.reason))
-            recorder?.close()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            session.detachCamera()
         }
     }
+    KeepScreenOnIfRequested()
 
-    if (recorder != null) {
-        LaunchedEffect(recorder) {
-            scanner.rawReadingUpdates().collect { reading ->
-                val relevant = if (fingerprintBeaconIds.isEmpty()) reading.uuid != null else reading.beaconId in fingerprintBeaconIds
-                if (relevant) recorder.record(RssiEvent(reading.timestampMs, reading.beaconId, reading.rssi))
-            }
-        }
-    }
-
-    fun confirmFloorChange(targetNodeId: String, targetFloor: Int, headingDeg: Double, phase: FloorChangePhase) {
-        val targetNode = allNodesById[targetNodeId] ?: return
-        pdrEngine.changeFloor(newFloor = targetFloor, x = targetNode.x, y = targetNode.y, headingDeg = headingDeg)
-        recorder?.record(FloorChangeEvent(System.currentTimeMillis(), phase, targetNodeId, targetFloor))
-    }
-
-    var state by remember { mutableStateOf<NavigationState?>(null) }
-    var currentInstruction by remember { mutableStateOf(context.getString(R.string.nav_preparing)) }
-    var pipelineError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(orchestrator) {
-        var lastLoggedPositionMs = -1L
-        var lastPromptedFloorChange: String? = null
-        try {
-            orchestrator.start().collect { newState ->
-                state = newState
-                newState.alerts.firstOrNull { it.id.startsWith("route-guide-") || it.id.startsWith("arrived-") || it.id.startsWith("no-route-") }
-                    ?.let { currentInstruction = it.message }
-
-                if (recorder != null) {
-                    // combine() re-emits on every camera frame with the same position; log each position once.
-                    if (newState.position.timestampMs != lastLoggedPositionMs) {
-                        lastLoggedPositionMs = newState.position.timestampMs
-                        recorder.record(PositionEvent.of(PositionStream.FUSED, newState.position))
-                    }
-                    newState.alerts.forEach { alert ->
-                        recorder.record(GuidanceEvent(alert.createdAtMs, alert.id, alert.priority.name, alert.message, alert.cue.name))
-                    }
-                    val hint = newState.pendingFloorChange
-                    if (hint != null && hint.targetNodeId != lastPromptedFloorChange) {
-                        recorder.record(FloorChangeEvent(System.currentTimeMillis(), FloorChangePhase.PROMPTED, hint.targetNodeId, hint.targetFloor))
-                    }
-                    lastPromptedFloorChange = hint?.targetNodeId
-                }
-
-                val hint = newState.pendingFloorChange
-                if (hint == null) {
-                    floorChangeDetector.disarm()
-                    floorChangeTracking.barometerConfirmedTargetId = null
-                } else if (hasBarometer) {
-                    // Don't re-arm for a crossing the barometer already confirmed: the
-                    // hint lingers until the next footstep produces a position on the new floor.
-                    if (hint.targetNodeId != floorChangeTracking.barometerConfirmedTargetId) {
-                        floorChangeDetector.arm(fromFloor = newState.position.floor, toFloor = hint.targetFloor)
-                    }
-                } else if (hint.autoConfirm) {
-                    // No barometer: a STAIRS crossing confirms itself once enough footsteps have
-                    // piled up (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap
-                    // needed, which matters since a blind user's hands may well be full on a
-                    // staircase. Elevators never set autoConfirm; those wait for the button below.
-                    confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg, FloorChangePhase.CONFIRMED_AUTOMATICALLY)
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e // normal collection teardown (screen left, "Durdur" pressed) — not a failure
-        } catch (e: Exception) {
-            // Last-resort safety net: nothing in this pipeline is expected to throw (every
-            // known failure mode below is already caught and surfaced visibly instead —
-            // BleBeaconScanner's BleScanState.Failed, CameraXObstacleDetector's
-            // onBindFailed, StepDetector.isAvailable gating steps before this even starts)
-            // but an unanticipated one should show a recoverable screen, not crash the app.
-            pipelineError = context.getString(R.string.nav_pipeline_error, e.message ?: context.getString(R.string.nav_pipeline_error_unknown))
-            sessionEnd.reason = "error: ${e.message}"
-        }
-    }
-
-    if (hasBarometer) {
-        LaunchedEffect(barometer) {
-            var lastLoggedAtMs = 0L
-            barometer.readings().collect { reading ->
-                if (recorder != null && reading.timestampMs - lastLoggedAtMs >= PRESSURE_LOG_INTERVAL_MS) {
-                    lastLoggedAtMs = reading.timestampMs
-                    recorder.record(PressureEvent(reading.timestampMs, reading.hPa))
-                }
-                if (floorChangeDetector.onPressure(reading.hPa, reading.timestampMs)) {
-                    val current = state ?: return@collect
-                    val hint = current.pendingFloorChange ?: return@collect
-                    floorChangeTracking.barometerConfirmedTargetId = hint.targetNodeId
-                    confirmFloorChange(hint.targetNodeId, hint.targetFloor, current.position.headingDeg, FloorChangePhase.CONFIRMED_BY_BAROMETER)
-                }
-            }
-        }
-    }
-
-    val currentState = state
-    val destinationFloor = remember { nodeFloor[destinationNode.id] ?: 0 }
-    val status = currentState.toNavigationStatus(destinationNode, destinationFloor)
-    val hasFingerprintedWaypoints = remember(allNodes) { allNodes.any { it.fingerprint.isNotEmpty() } }
-    if (recorder != null) {
-        LaunchedEffect(status) { recorder.record(StatusEvent(System.currentTimeMillis(), status.name)) }
-    }
-
-    val currentFloorIndex = currentState?.position?.floor ?: startFloorIndex
-    val currentFloorMap = remember(buildingMap, currentFloorIndex) {
-        buildingMap.floors.firstOrNull { it.floorIndex == currentFloorIndex } ?: buildingMap.floors.first()
+    val currentState = ui.state
+    val status = NavigationStatus.of(ui.phase)
+    val currentFloorIndex = currentState?.position?.floor ?: session.startFloorIndex
+    val currentFloorMap = remember(session, currentFloorIndex) {
+        session.buildingMap.floors.firstOrNull { it.floorIndex == currentFloorIndex } ?: session.buildingMap.floors.first()
     }
     val progress = currentState?.let {
-        routeProgress(it.route, it.nextRouteIndex, it.position, nodeFloor, buildingMap.floorTransitions)
-    }
-    val stop = {
-        sessionEnd.reason = if (status == NavigationStatus.ARRIVED) "arrived" else "stopped"
-        onStop()
+        routeProgress(it.route, it.nextRouteIndex, it.position, session.nodeFloor, session.buildingMap.floorTransitions)
     }
 
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        val pipelineError = ui.pipelineError
         if (pipelineError != null) {
-            EmptyState(icon = Icons.Filled.Warning, title = stringResource(R.string.nav_error_title), message = pipelineError.orEmpty())
-            Button(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), onClick = stop) {
+            EmptyState(icon = Icons.Filled.Warning, title = stringResource(R.string.nav_error_title), message = pipelineError)
+            Button(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), onClick = { session.stop() }) {
                 Text(stringResource(R.string.common_back))
             }
             return@Column
         }
 
         StatusBanner(status)
-        VoiceStatusNotice(speech, modifier = Modifier.padding(top = 8.dp))
+        VoiceStatusNotice(session.speech, modifier = Modifier.padding(top = 8.dp))
 
-        if (!hasFingerprintedWaypoints) {
+        if (!session.hasFingerprintedWaypoints) {
             Text(
                 text = stringResource(R.string.nav_no_fingerprints_warning),
                 style = MaterialTheme.typography.bodySmall,
@@ -686,7 +489,7 @@ private fun ActiveNavigation(
 
         // Non-fatal: navigation (position, routing, TTS guidance) still works without
         // obstacle detection, so this is a note, not a blocking EmptyState.
-        cameraWarning?.let {
+        ui.cameraWarning?.let {
             Text(
                 text = stringResource(R.string.nav_camera_warning, it),
                 style = MaterialTheme.typography.bodySmall,
@@ -696,28 +499,14 @@ private fun ActiveNavigation(
         }
 
         Text(
-            text = currentInstruction,
+            text = ui.instruction,
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
         )
-        // Guidance is spoken once per leg and then only every few seconds; someone who
-        // missed it (a noisy corridor, a conversation) shouldn't have to wait. The repeat
-        // is re-worded from the live position, so the distance in it is current, not the
-        // one from when it was first announced.
-        val remainingSentence = progress
-            ?.takeIf { it.nextNode.id != destinationNode.id }
-            ?.metersToDestination?.roundToInt()
-            ?.let { pluralStringResource(R.plurals.nav_repeat_remaining, it, it) }
         Button(
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(bottom = 12.dp),
             enabled = currentState != null && status != NavigationStatus.ARRIVED,
-            onClick = {
-                val fresh = currentState?.let { orchestrator.currentInstruction(it.position) }
-                if (fresh != null) currentInstruction = fresh
-                val text = listOfNotNull(fresh ?: currentInstruction, remainingSentence).joinToString(" ")
-                speech.speakNow(text)
-                recorder?.record(GuidanceEvent(System.currentTimeMillis(), "repeat-request", "INFO", text))
-            },
+            onClick = session::repeatInstruction,
         ) {
             Icon(Icons.Filled.Replay, contentDescription = null)
             Text(stringResource(R.string.nav_repeat), modifier = Modifier.padding(start = 8.dp))
@@ -731,14 +520,7 @@ private fun ActiveNavigation(
         if (pendingFloorChange != null) {
             Button(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                onClick = {
-                    confirmFloorChange(
-                        pendingFloorChange.targetNodeId,
-                        pendingFloorChange.targetFloor,
-                        currentState.position.headingDeg,
-                        FloorChangePhase.CONFIRMED_MANUALLY,
-                    )
-                },
+                onClick = session::confirmFloorChangeManually,
             ) {
                 Icon(Icons.Filled.SwapVert, contentDescription = null)
                 Text(
@@ -749,7 +531,7 @@ private fun ActiveNavigation(
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
-            if (hasBarometer) {
+            if (session.hasBarometer) {
                 Text(
                     text = stringResource(R.string.nav_floor_change_barometer_hint),
                     style = MaterialTheme.typography.bodySmall,
@@ -761,20 +543,14 @@ private fun ActiveNavigation(
 
         Button(
             modifier = Modifier.fillMaxWidth(),
-            onClick = stop,
+            onClick = { session.stop() },
         ) {
             Icon(Icons.Filled.Stop, contentDescription = null)
             Text(text = stringResource(R.string.nav_stop), modifier = Modifier.padding(start = 8.dp))
         }
 
-        if (recorder != null) {
-            GroundTruthControls(
-                recorder = recorder,
-                currentFloorIndex = currentFloorIndex,
-                buildingMap = buildingMap,
-                nodeFloor = nodeFloor,
-                estimate = currentState?.position,
-            )
+        if (session.isRecording) {
+            GroundTruthControls(session = session, currentFloorIndex = currentFloorIndex)
         }
 
         NavigationMapCanvas(
@@ -782,16 +558,16 @@ private fun ActiveNavigation(
             floorLabel = stringResource(R.string.common_floor, currentFloorMap.floorIndex),
             route = currentState?.route.orEmpty(),
             nextRouteIndex = currentState?.nextRouteIndex ?: 1,
-            nodeFloor = nodeFloor,
+            nodeFloor = session.nodeFloor,
             position = currentState?.position,
             obstacles = currentState?.obstacles ?: emptyList(),
-            description = mapDescription(context, currentFloorMap.floorIndex, progress, destinationNode, currentState?.obstacles?.size ?: 0),
+            description = mapDescription(context, currentFloorMap.floorIndex, progress, session.destinationNode, currentState?.obstacles?.size ?: 0),
             modifier = Modifier.padding(top = 16.dp),
         )
 
         if (currentState != null) {
             TechnicalDetails(
-                routeText = currentState.route.joinToString(" → ") { allNodesById[it.id]?.name ?: it.name },
+                routeText = currentState.route.joinToString(" → ") { session.allNodesById[it.id]?.name ?: it.name },
                 technicalText = stringResource(
                     R.string.nav_technical_details,
                     currentState.position.x.round1().toString(),
@@ -799,77 +575,41 @@ private fun ActiveNavigation(
                     currentState.position.floor,
                     currentState.position.accuracyMeters.round1().toString(),
                     currentState.position.source.name,
-                    fingerprintCorrectionCount,
-                    floorChangeDetector.climbedMeters()?.round1()?.let { "$it m" } ?: "-",
+                    ui.fingerprintCorrections,
+                    ui.barometerClimbMeters?.round1()?.let { "$it m" } ?: "-",
                 ),
             )
         }
     }
 }
 
-/** Why a field-log session ended — set by whatever ends it, read once when the screen is disposed. */
-private class SessionEndReason {
-    var reason: String = "left_screen"
+/**
+ * Ayarlar's "Ekranı açık tut": keeps the screen (and with it the camera, so obstacle
+ * detection) on for as long as the navigation view is showing. A screen-reader user
+ * gets the lowest brightness instead of whatever the phone was set to — the light
+ * serves no one who can't see it, and the battery serves everyone.
+ */
+@Composable
+private fun KeepScreenOnIfRequested() {
+    val context = LocalContext.current
+    val keepOn = remember { UserSettings(context).keepScreenOnDuringNavigation }
+    val screenReaderOn = rememberIsScreenReaderOn()
+    if (!keepOn) return
+    val window = (context as? Activity)?.window ?: return
+    DisposableEffect(window, screenReaderOn) {
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val previousBrightness = window.attributes.screenBrightness
+        if (screenReaderOn) {
+            window.attributes = window.attributes.apply { screenBrightness = SCREEN_READER_BRIGHTNESS }
+        }
+        onDispose {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.attributes = window.attributes.apply { screenBrightness = previousBrightness }
+        }
+    }
 }
 
-/** Plain holder, not Compose state: read and written only from the collectors above. */
-private class FloorChangeTracking {
-    var barometerConfirmedTargetId: String? = null
-}
-
-private const val PRESSURE_LOG_INTERVAL_MS = 1_000L
-
-private fun sessionStartEvent(
-    context: Context,
-    map: BuildingMap,
-    startNodeId: String,
-    destinationNodeId: String,
-    stepLengthMeters: Double,
-    hasBarometer: Boolean,
-): FieldLogEvent {
-    val appVersion = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
-    return SessionStartEvent(
-        t = System.currentTimeMillis(),
-        appVersion = appVersion ?: "?",
-        device = "${Build.MANUFACTURER} ${Build.MODEL}",
-        androidSdk = Build.VERSION.SDK_INT,
-        buildingId = map.id,
-        startNodeId = startNodeId,
-        destinationNodeId = destinationNodeId,
-        // Everything that was guessed rather than measured, so offline analysis knows
-        // exactly which values produced this walk.
-        constants = mapOf(
-            "stepLengthMetersInUse" to stepLengthMeters,
-            "StepDetector.AVERAGE_STEP_LENGTH_METERS" to StepDetector.AVERAGE_STEP_LENGTH_METERS,
-            "StepDetector.STEP_RISE_THRESHOLD_MPS2" to StepDetector.STEP_RISE_THRESHOLD_MPS2,
-            "StepDetector.STEP_FALL_THRESHOLD_MPS2" to StepDetector.STEP_FALL_THRESHOLD_MPS2,
-            "StepDetector.MIN_STEP_INTERVAL_MS" to StepDetector.MIN_STEP_INTERVAL_MS.toDouble(),
-            "StepDetector.BASELINE_TIME_CONSTANT_SECONDS" to StepDetector.BASELINE_TIME_CONSTANT_SECONDS,
-            "PdrIntegrator.DEFAULT_DRIFT_PER_STEP_METERS" to PdrIntegrator.DEFAULT_DRIFT_PER_STEP_METERS,
-            "FingerprintMatcher.MIN_SHARED_BEACONS" to FingerprintMatcher.MIN_SHARED_BEACONS.toDouble(),
-            "FingerprintMatcher.MAX_MATCH_DISTANCE" to FingerprintMatcher.MAX_MATCH_DISTANCE,
-            "FingerprintMatcher.AMBIGUITY_MARGIN" to FingerprintMatcher.AMBIGUITY_MARGIN,
-            "FingerprintMatcher.MISSING_BEACON_RSSI" to FingerprintMatcher.MISSING_BEACON_RSSI,
-            "FingerprintPositioningEngine.ASSUMED_ACCURACY_METERS" to FingerprintPositioningEngine.ASSUMED_ACCURACY_METERS,
-            "NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS" to NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS,
-            "NavigationOrchestrator.ARRIVAL_DISTANCE_METERS" to NavigationOrchestrator.ARRIVAL_DISTANCE_METERS,
-            "NavigationOrchestrator.TURN_ANGLE_THRESHOLD_DEG" to NavigationOrchestrator.TURN_ANGLE_THRESHOLD_DEG,
-            "NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT" to NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT.toDouble(),
-            "NavigationOrchestrator.CRITICAL_DISTANCE_METERS" to NavigationOrchestrator.CRITICAL_DISTANCE_METERS,
-            "NavigationOrchestrator.WARNING_DISTANCE_METERS" to NavigationOrchestrator.WARNING_DISTANCE_METERS,
-            "BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS" to BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS,
-            "hasBarometer" to if (hasBarometer) 1.0 else 0.0,
-            "BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS" to BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS,
-            "BarometricFloorChangeDetector.CONFIRM_FRACTION" to BarometricFloorChangeDetector.CONFIRM_FRACTION,
-            "BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS" to BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS,
-        ) + listOfNotNull(
-            // Omitted, not NaN, for maps saved before this was tracked: JSON has no NaN, and
-            // the encoder rejecting one would stop recording for the whole session.
-            map.surveyStepLengthMeters?.let { "map.surveyStepLengthMeters" to it },
-        ),
-        map = map,
-    )
-}
+private const val SCREEN_READER_BRIGHTNESS = 0.01f
 
 @Composable
 private fun RecordingIndicator(text: String, modifier: Modifier = Modifier) {
@@ -943,20 +683,15 @@ private fun mapDescription(context: Context, floorIndex: Int, progress: RoutePro
  * per walk is what makes the position error measurable rather than a feeling.
  */
 @Composable
-private fun GroundTruthControls(
-    recorder: FieldLogRecorder,
-    currentFloorIndex: Int,
-    buildingMap: BuildingMap,
-    nodeFloor: Map<String, Int>,
-    estimate: Position?,
-) {
+private fun GroundTruthControls(session: NavigationSession, currentFloorIndex: Int) {
     val context = LocalContext.current
     var choosing by remember { mutableStateOf(false) }
     var lastMark by remember { mutableStateOf<String?>(null) }
+    val buildingMap = session.buildingMap
 
     Column(modifier = Modifier.padding(top = 12.dp)) {
         RecordingIndicator(
-            text = stringResource(if (recorder.failed) R.string.nav_recording_failed else R.string.nav_recording_active),
+            text = stringResource(if (session.recordingFailed) R.string.nav_recording_failed else R.string.nav_recording_active),
         )
         OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), onClick = { choosing = true }) {
             Icon(Icons.Filled.PinDrop, contentDescription = null)
@@ -981,16 +716,15 @@ private fun GroundTruthControls(
             text = {
                 LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                     items(nodes, key = { it.id }) { node ->
-                        val floor = nodeFloor[node.id] ?: 0
+                        val floor = session.nodeFloor[node.id] ?: 0
                         Text(
                             text = if (buildingMap.floors.size > 1) stringResource(R.string.common_node_with_floor, node.name, floor) else node.name,
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    val event = GroundTruthEvent.of(System.currentTimeMillis(), node, floor, estimate)
-                                    recorder.record(event)
-                                    lastMark = event.errorMeters
+                                    val event = session.markGroundTruth(node)
+                                    lastMark = event?.errorMeters
                                         ?.let { context.getString(R.string.nav_ground_truth_marked_error, node.name, it.round1().toString()) }
                                         ?: context.getString(R.string.nav_ground_truth_marked_other_floor, node.name)
                                     choosing = false
@@ -1035,22 +769,4 @@ private fun StatusBanner(status: NavigationStatus) {
             }
         }
     }
-}
-
-private fun NavigationState?.toNavigationStatus(destinationNode: MapNode, destinationFloor: Int): NavigationStatus {
-    if (this == null) return NavigationStatus.SEARCHING
-    if (pendingFloorChange != null) return NavigationStatus.ON_ROUTE
-
-    val hasCritical = alerts.any { it.priority == AlertPriority.CRITICAL }
-    val hasWarning = alerts.any { it.priority == AlertPriority.WARNING }
-    if (hasCritical) return NavigationStatus.CRITICAL
-    if (hasWarning) return NavigationStatus.WARNING
-
-    // Arrival can only be judged once the user is actually on the destination's floor
-    // — comparing (x, y) across floors is meaningless (independent PDR origins).
-    if (position.floor != destinationFloor) return NavigationStatus.ON_ROUTE
-    val distanceToDestination = hypot(position.x - destinationNode.x, position.y - destinationNode.y)
-    if (distanceToDestination <= ARRIVAL_DISTANCE_METERS) return NavigationStatus.ARRIVED
-
-    return NavigationStatus.ON_ROUTE
 }

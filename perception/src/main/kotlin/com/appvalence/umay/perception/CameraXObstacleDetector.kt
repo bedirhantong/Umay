@@ -42,7 +42,7 @@ class CameraXObstacleDetector(
 ) : ObstacleDetector {
 
     private val obstacles = MutableSharedFlow<List<DetectedObstacle>>(replay = 1, extraBufferCapacity = 1)
-    private val tracker = ObstacleTracker()
+    private var tracker = ObstacleTracker()
     private var analyzerExecutor: ExecutorService? = null
     private var objectDetector: ObjectDetector? = null
     private var cameraProvider: ProcessCameraProvider? = null
@@ -129,6 +129,12 @@ class CameraXObstacleDetector(
         )
     }
 
+    /**
+     * Stops the camera and clears what it last saw. The clear matters: [obstacles]
+     * replays its latest value, so without it a person seen just before the camera
+     * stopped (screen turned off, app backgrounded) would stay "in front of" the
+     * user indefinitely and keep re-triggering alerts for someone long gone.
+     */
     fun unbind() {
         cameraProvider?.unbindAll()
         cameraProvider = null
@@ -141,6 +147,8 @@ class CameraXObstacleDetector(
         analyzerExecutor = null
         objectDetector?.close()
         objectDetector = null
+        tracker = ObstacleTracker()
+        obstacles.tryEmit(emptyList())
     }
 
     private fun analyzeFrame(imageProxy: ImageProxy, detector: ObjectDetector) {

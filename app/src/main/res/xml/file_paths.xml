@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only these two folders can ever be handed to another app via FileProvider:
-     field-test logs, and throwaway export copies of building maps. The live
+<!-- Only these folders can ever be handed to another app via FileProvider:
+     field-test logs, crash reports, and throwaway export copies of building maps. The live
      building maps themselves (files/buildings/) are never exposed directly. -->
 <paths>
     <files-path name="field_logs" path="field-logs/" />
+    <files-path name="crash_logs" path="crash-logs/" />
     <cache-path name="exports" path="exports/" />
 </paths>

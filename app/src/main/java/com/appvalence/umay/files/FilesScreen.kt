@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
 import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.diagnostics.CrashLog
 import com.appvalence.umay.fieldlog.FieldLogStore
 import com.appvalence.umay.storage.BuildingMapStorage
 import java.io.File
@@ -61,9 +62,11 @@ fun FilesScreen(modifier: Modifier = Modifier) {
 
     var buildings by remember { mutableStateOf(buildingStorage.listBuildings()) }
     var logs by remember { mutableStateOf(logStore.listLogs()) }
+    var crashReports by remember { mutableStateOf(CrashLog.list(context)) }
     var recordingEnabled by remember { mutableStateOf(logStore.isRecordingEnabled) }
     var pendingBuildingDelete by remember { mutableStateOf<BuildingMap?>(null) }
     var pendingLogDelete by remember { mutableStateOf<File?>(null) }
+    var pendingCrashDelete by remember { mutableStateOf<File?>(null) }
     var confirmDeleteAllLogs by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -157,8 +160,44 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                 )
             }
         }
+
+        // Only shown when there's something to show: most people will never see this.
+        if (crashReports.isNotEmpty()) {
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            SectionHeading(stringResource(R.string.files_crashes_title))
+            Text(
+                text = stringResource(R.string.files_crashes_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            crashReports.forEach { report ->
+                FileRow(
+                    title = report.nameWithoutExtension,
+                    subtitle = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(report.lastModified())),
+                    shareDescription = stringResource(R.string.files_crash_share_description),
+                    deleteDescription = stringResource(R.string.files_crash_delete_description),
+                    onShare = {
+                        val shared = shareFiles(context, listOf(report), CrashLog.SHARE_MIME_TYPE, chooserTitle = context.getString(R.string.files_crash_chooser))
+                        if (!shared) errorMessage = context.getString(R.string.files_log_share_failed)
+                    },
+                    onDelete = { pendingCrashDelete = report },
+                )
+            }
+        }
     }
 
+    pendingCrashDelete?.let { report ->
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.files_log_delete_title),
+            body = stringResource(R.string.files_log_delete_body, report.nameWithoutExtension),
+            onConfirm = {
+                CrashLog.delete(context, report)
+                crashReports = CrashLog.list(context)
+            },
+            onDismiss = { pendingCrashDelete = null },
+        )
+    }
     pendingBuildingDelete?.let { building ->
         ConfirmDeleteDialog(
             title = stringResource(R.string.common_delete_building_title, building.id),

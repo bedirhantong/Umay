@@ -1,8 +1,13 @@
 package com.appvalence.umay.feedback
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.NavigationAlert
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +46,14 @@ enum class VoiceStatus {
  * the UI can offer to install one instead of speaking in a foreign accent
  * without explanation. Speech still goes ahead in that case — for someone
  * who can't see the screen, accented guidance beats silence.
+ *
+ * Audio is tagged as *navigation guidance*, the way turn-by-turn apps do it:
+ * the system routes it to a connected Bluetooth headset and briefly lowers
+ * (ducks) music or a podcast while it speaks, then restores it. During a
+ * phone call nothing is spoken — the system refuses the audio focus, and
+ * talking over a call helps no one — while vibration cues (a separate
+ * [FeedbackController]) keep working; the periodic repeat of the current
+ * instruction catches the user up once the call ends.
  */
 class TtsFeedbackController(
     context: Context,
@@ -50,6 +63,28 @@ class TtsFeedbackController(
 
     private var isReady = false
     private val pendingUtterances = mutableListOf<NavigationAlert>()
+
+    private val audioManager: AudioManager? = context.getSystemService(AudioManager::class.java)
+    private val audioAttributes: AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+    private val focusRequest: AudioFocusRequest? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(audioAttributes)
+            .setOnAudioFocusChangeListener { }
+            .build()
+    } else {
+        null
+    }
+
+    @Suppress("DEPRECATION")
+    private val legacyFocusListener = AudioManager.OnAudioFocusChangeListener { }
+
+    // Utterances queued or playing. Audio focus is held while this is non-empty and
+    // released as soon as it empties, so ducked music comes back right after speech.
+    // Touched from the main thread (speak) and the TTS engine's callback thread.
+    private val activeUtterances = mutableSetOf<String>()
     private val status = MutableStateFlow(VoiceStatus.INITIALIZING)
 
     val voiceStatus: StateFlow<VoiceStatus> = status.asStateFlow()
@@ -75,6 +110,16 @@ class TtsFeedbackController(
             }
             status.value = configureVoice()
             tts.setSpeechRate(speechRate)
+            tts.setAudioAttributes(audioAttributes)
+            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String) = Unit
+                override fun onDone(utteranceId: String) = finished(utteranceId)
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String) = finished(utteranceId)
+                override fun onError(utteranceId: String, errorCode: Int) = finished(utteranceId)
+                override fun onStop(utteranceId: String, interrupted: Boolean) = finished(utteranceId)
+            })
             isReady = true
             pendingUtterances.forEach { speak(it) }
             pendingUtterances.clear()
@@ -113,12 +158,46 @@ class TtsFeedbackController(
     }
 
     private fun speak(alert: NavigationAlert) {
+        if (!acquireAudioFocus()) return // in a call (see class doc)
         val queueMode = if (alert.priority == AlertPriority.CRITICAL) {
             TextToSpeech.QUEUE_FLUSH
         } else {
             TextToSpeech.QUEUE_ADD
         }
-        tts.speak(alert.message, queueMode, Bundle.EMPTY, alert.id)
+        synchronized(activeUtterances) { activeUtterances += alert.id }
+        if (tts.speak(alert.message, queueMode, Bundle.EMPTY, alert.id) != TextToSpeech.SUCCESS) finished(alert.id)
+    }
+
+    private fun acquireAudioFocus(): Boolean {
+        val manager = audioManager ?: return true
+        val mode = manager.mode
+        if (mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION) return false
+        if (synchronized(activeUtterances) { activeUtterances.isNotEmpty() }) return true // already held
+        val result = if (focusRequest != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.requestAudioFocus(focusRequest)
+        } else {
+            @Suppress("DEPRECATION")
+            manager.requestAudioFocus(legacyFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+        }
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    private fun finished(utteranceId: String) {
+        val nothingLeft = synchronized(activeUtterances) {
+            activeUtterances -= utteranceId
+            activeUtterances.isEmpty()
+        }
+        if (nothingLeft) abandonAudioFocus()
+    }
+
+    private fun abandonAudioFocus() {
+        val manager = audioManager ?: return
+        if (focusRequest != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.abandonAudioFocusRequest(focusRequest)
+        } else {
+            @Suppress("DEPRECATION")
+            manager.abandonAudioFocus(legacyFocusListener)
+        }
     }
 
     /**
@@ -147,6 +226,8 @@ class TtsFeedbackController(
     fun shutdown() {
         tts.stop()
         tts.shutdown()
+        synchronized(activeUtterances) { activeUtterances.clear() }
+        abandonAudioFocus()
     }
 
     companion object {
