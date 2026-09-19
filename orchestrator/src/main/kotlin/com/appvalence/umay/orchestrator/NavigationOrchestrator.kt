@@ -16,6 +16,7 @@ import com.appvalence.umay.perception.ObstacleDetector
 import com.appvalence.umay.positioning.engine.PositioningEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.onEach
 import java.util.UUID
 import kotlin.math.atan2
@@ -88,7 +89,14 @@ class NavigationOrchestrator(
     private var lastCountedPositionTimestampMs = -1L
 
     fun start(): Flow<NavigationState> =
-        combine(positioning.positionUpdates(), perception.obstacleUpdates()) { position, obstacles ->
+        combine(
+            positioning.positionUpdates(),
+            // "Still nothing in view" repeated for every analyzed camera frame — by far the
+            // common case — changes nothing here, but used to re-run all of this and
+            // redraw the whole navigation screen several times a second. Frames that do
+            // contain obstacles always differ (a fresh detectedAtMs) and still go through.
+            perception.obstacleUpdates().distinctUntilChanged { old, new -> old.isEmpty() && new.isEmpty() },
+        ) { position, obstacles ->
             ensureRoute()
             val floorMap = floorMapFor(position.floor)
             val alerts = deriveAlerts(position, obstacles, floorMap)

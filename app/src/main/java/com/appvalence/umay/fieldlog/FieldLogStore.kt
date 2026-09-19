@@ -2,6 +2,7 @@ package com.appvalence.umay.fieldlog
 
 import android.content.Context
 import androidx.core.content.edit
+import com.appvalence.umay.common.newestFirst
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -21,10 +22,10 @@ class FieldLogStore(context: Context) {
         get() = preferences.getBoolean(KEY_RECORDING_ENABLED, false)
         set(value) = preferences.edit { putBoolean(KEY_RECORDING_ENABLED, value) }
 
-    /** Newest first. */
+    /** Newest first. Disk I/O: call off the main thread. */
     fun listLogs(): List<File> =
         directory.listFiles { file -> file.extension == LOG_EXTENSION }
-            ?.sortedByDescending { it.lastModified() }
+            ?.newestFirst()
             .orEmpty()
 
     fun delete(file: File): Boolean = file.parentFile == directory && file.delete()

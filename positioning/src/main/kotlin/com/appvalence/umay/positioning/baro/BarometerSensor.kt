@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import com.appvalence.umay.positioning.SensorThread
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -35,7 +36,7 @@ class BarometerSensor(context: Context) {
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
-        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL, SensorThread.handler)
         awaitClose { sensorManager.unregisterListener(listener) }
     }
 

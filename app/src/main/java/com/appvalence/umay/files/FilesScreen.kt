@@ -3,13 +3,15 @@ package com.appvalence.umay.files
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileOpen
@@ -25,168 +27,209 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
-import com.appvalence.umay.cloudmap.SharedMapPoolSection
+import com.appvalence.umay.appGraph
+import com.appvalence.umay.cloudmap.SharedMapPoolDialogs
+import com.appvalence.umay.cloudmap.rememberSharedMapPoolUi
+import com.appvalence.umay.cloudmap.sharedMapPoolItems
+import com.appvalence.umay.common.StoredFile
 import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.diagnostics.CrashLog
 import com.appvalence.umay.fieldlog.FieldLogStore
-import com.appvalence.umay.storage.BuildingMapStorage
-import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
 /**
  * Everything that moves data on or off this device: building maps (export
- * to share a survey with another phone, import one received from another)
- * and field-test logs (turn recording on, share the logs for offline
- * calibration, clean them up).
+ * to share a survey with another phone, import one received from another,
+ * the shared online pool) and field-test logs (turn recording on, share the
+ * logs for offline calibration, clean them up).
+ *
+ * A lazy list, since every section here grows with use — up to 50 field logs,
+ * 20 crash reports, a public pool of up to 200 buildings — and composing all
+ * of that up front on every visit is what made this tab slower the longer the
+ * app was used. File listings are read off the main thread.
  */
 @Composable
 fun FilesScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val buildingStorage = remember { BuildingMapStorage(context) }
+    val buildingRepository = context.appGraph.buildings
+    val buildings = buildingRepository.buildings.collectAsState().value.orEmpty()
     val logStore = remember { FieldLogStore(context) }
+    val scope = rememberCoroutineScope()
 
-    var buildings by remember { mutableStateOf(buildingStorage.listBuildings()) }
-    var logs by remember { mutableStateOf(logStore.listLogs()) }
-    var crashReports by remember { mutableStateOf(CrashLog.list(context)) }
+    var logs by remember { mutableStateOf<List<StoredFile>>(emptyList()) }
+    var crashReports by remember { mutableStateOf<List<StoredFile>>(emptyList()) }
     var recordingEnabled by remember { mutableStateOf(logStore.isRecordingEnabled) }
     var pendingBuildingDelete by remember { mutableStateOf<BuildingMap?>(null) }
-    var pendingLogDelete by remember { mutableStateOf<File?>(null) }
-    var pendingCrashDelete by remember { mutableStateOf<File?>(null) }
+    var pendingLogDelete by remember { mutableStateOf<StoredFile?>(null) }
+    var pendingCrashDelete by remember { mutableStateOf<StoredFile?>(null) }
     var confirmDeleteAllLogs by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    val importBuilding = rememberBuildingImporter(onImported = { buildings = buildingStorage.listBuildings() })
+    fun reloadLogs() {
+        scope.launch { logs = withContext(Dispatchers.IO) { StoredFile.of(logStore.listLogs()) } }
+    }
+    fun reloadCrashReports() {
+        scope.launch { crashReports = withContext(Dispatchers.IO) { StoredFile.of(CrashLog.list(context)) } }
+    }
+    LaunchedEffect(Unit) {
+        reloadLogs()
+        reloadCrashReports()
+    }
 
-    Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        SectionHeading(stringResource(R.string.files_buildings_title))
-        Text(
-            text = stringResource(R.string.files_buildings_body),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedButton(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), onClick = importBuilding.pickFile) {
-            Icon(Icons.Filled.FileOpen, contentDescription = null)
-            Text(stringResource(R.string.common_import_building), modifier = Modifier.padding(start = 8.dp))
+    val importBuilding = rememberBuildingImporter()
+    val pool = rememberSharedMapPoolUi()
+    val poolOnline by pool.pool.isOnline.collectAsState()
+    val poolListing by pool.pool.listing.collectAsState()
+    val publishedIds by pool.pool.publishedIds.collectAsState()
+    val dateTimeFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
+
+    LazyColumn(
+        state = rememberLazyListState(),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+    ) {
+        item(key = "buildings-header") {
+            Column {
+                SectionHeading(stringResource(R.string.files_buildings_title))
+                Text(
+                    text = stringResource(R.string.files_buildings_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), onClick = importBuilding.pickFile) {
+                    Icon(Icons.Filled.FileOpen, contentDescription = null)
+                    Text(stringResource(R.string.common_import_building), modifier = Modifier.padding(start = 8.dp))
+                }
+                if (buildings.isEmpty()) EmptyLine(stringResource(R.string.files_no_buildings))
+            }
         }
-        if (buildings.isEmpty()) {
-            EmptyLine(stringResource(R.string.files_no_buildings))
-        }
-        buildings.forEach { building ->
+        items(buildings, key = { "building:${it.id}" }) { building ->
             FileRow(
                 title = building.id,
                 subtitle = buildingSummary(building.floors.size, building.floors.sumOf { it.nodes.size }),
                 shareDescription = stringResource(R.string.files_export_building_description, building.id),
                 deleteDescription = stringResource(R.string.common_delete_building_description, building.id),
                 onShare = {
-                    val copy = buildingStorage.exportCopy(building)
-                    val shared = copy != null &&
-                        shareFiles(context, listOf(copy), mimeType = "application/json", chooserTitle = context.getString(R.string.files_export_chooser))
-                    if (!shared) errorMessage = context.getString(R.string.files_export_failed)
+                    scope.launch {
+                        val copy = buildingRepository.exportCopy(building)
+                        val shared = copy != null &&
+                            shareFiles(context, listOf(copy), mimeType = "application/json", chooserTitle = context.getString(R.string.files_export_chooser))
+                        if (!shared) errorMessage = context.getString(R.string.files_export_failed)
+                    }
                 },
                 onDelete = { pendingBuildingDelete = building },
             )
         }
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+        item(key = "divider-pool") { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
 
-        SharedMapPoolSection(
-            localBuildings = buildings,
-            onLocalBuildingsChanged = { buildings = buildingStorage.listBuildings() },
-        )
+        sharedMapPoolItems(pool, buildings, publishedIds, poolOnline, poolListing)
 
-        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+        item(key = "divider-logs") { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
 
-        SectionHeading(stringResource(R.string.files_logs_title))
-        Text(
-            text = stringResource(R.string.files_logs_body),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .toggleable(
-                    value = recordingEnabled,
-                    role = Role.Switch,
-                    onValueChange = {
-                        recordingEnabled = it
-                        logStore.isRecordingEnabled = it
-                    },
-                ),
-        ) {
-            Text(text = stringResource(R.string.files_logs_toggle), style = MaterialTheme.typography.bodyLarge)
-            // Row's toggleable owns the click and the merged accessible name (see BeaconScannerScreen).
-            Switch(checked = recordingEnabled, onCheckedChange = null)
-        }
-
-        if (logs.isEmpty()) {
-            EmptyLine(stringResource(R.string.files_no_logs))
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                OutlinedButton(
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        val shared = shareFiles(context, logs, FieldLogStore.SHARE_MIME_TYPE, chooserTitle = context.getString(R.string.files_logs_chooser))
-                        if (!shared) errorMessage = context.getString(R.string.files_logs_share_failed)
-                    },
-                ) { Text(stringResource(R.string.files_share_all, logs.size)) }
-                OutlinedButton(modifier = Modifier.weight(1f), onClick = { confirmDeleteAllLogs = true }) {
-                    Text(stringResource(R.string.files_delete_all))
+        item(key = "logs-header") {
+            Column {
+                SectionHeading(stringResource(R.string.files_logs_title))
+                Text(
+                    text = stringResource(R.string.files_logs_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                        .toggleable(
+                            value = recordingEnabled,
+                            role = Role.Switch,
+                            onValueChange = {
+                                recordingEnabled = it
+                                logStore.isRecordingEnabled = it
+                            },
+                        ),
+                ) {
+                    Text(text = stringResource(R.string.files_logs_toggle), style = MaterialTheme.typography.bodyLarge)
+                    // Row's toggleable owns the click and the merged accessible name (see BeaconScannerScreen).
+                    Switch(checked = recordingEnabled, onCheckedChange = null)
+                }
+                if (logs.isEmpty()) {
+                    EmptyLine(stringResource(R.string.files_no_logs))
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val shared = shareFiles(context, logs.map { it.file }, FieldLogStore.SHARE_MIME_TYPE, chooserTitle = context.getString(R.string.files_logs_chooser))
+                                if (!shared) errorMessage = context.getString(R.string.files_logs_share_failed)
+                            },
+                        ) { Text(stringResource(R.string.files_share_all, logs.size)) }
+                        OutlinedButton(modifier = Modifier.weight(1f), onClick = { confirmDeleteAllLogs = true }) {
+                            Text(stringResource(R.string.files_delete_all))
+                        }
+                    }
                 }
             }
-            logs.forEach { log ->
-                FileRow(
-                    title = log.nameWithoutExtension,
-                    subtitle = "${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(log.lastModified()))} · " +
-                        Formatter.formatShortFileSize(context, log.length()),
-                    shareDescription = stringResource(R.string.files_log_share_description),
-                    deleteDescription = stringResource(R.string.files_log_delete_description),
-                    onShare = {
-                        val shared = shareFiles(context, listOf(log), FieldLogStore.SHARE_MIME_TYPE, chooserTitle = context.getString(R.string.files_log_chooser))
-                        if (!shared) errorMessage = context.getString(R.string.files_log_share_failed)
-                    },
-                    onDelete = { pendingLogDelete = log },
-                )
-            }
+        }
+        items(logs, key = { "log:${it.file.path}" }) { log ->
+            FileRow(
+                title = log.name,
+                subtitle = "${dateTimeFormat.format(Date(log.modifiedAtMs))} · ${Formatter.formatShortFileSize(context, log.sizeBytes)}",
+                shareDescription = stringResource(R.string.files_log_share_description),
+                deleteDescription = stringResource(R.string.files_log_delete_description),
+                onShare = {
+                    val shared = shareFiles(context, listOf(log.file), FieldLogStore.SHARE_MIME_TYPE, chooserTitle = context.getString(R.string.files_log_chooser))
+                    if (!shared) errorMessage = context.getString(R.string.files_log_share_failed)
+                },
+                onDelete = { pendingLogDelete = log },
+            )
         }
 
         // Only shown when there's something to show: most people will never see this.
         if (crashReports.isNotEmpty()) {
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-            SectionHeading(stringResource(R.string.files_crashes_title))
-            Text(
-                text = stringResource(R.string.files_crashes_body),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            crashReports.forEach { report ->
+            item(key = "crashes-header") {
+                Column {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                    SectionHeading(stringResource(R.string.files_crashes_title))
+                    Text(
+                        text = stringResource(R.string.files_crashes_body),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+            }
+            items(crashReports, key = { "crash:${it.file.path}" }) { report ->
                 FileRow(
-                    title = report.nameWithoutExtension,
-                    subtitle = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(report.lastModified())),
+                    title = report.name,
+                    subtitle = dateTimeFormat.format(Date(report.modifiedAtMs)),
                     shareDescription = stringResource(R.string.files_crash_share_description),
                     deleteDescription = stringResource(R.string.files_crash_delete_description),
                     onShare = {
-                        val shared = shareFiles(context, listOf(report), CrashLog.SHARE_MIME_TYPE, chooserTitle = context.getString(R.string.files_crash_chooser))
+                        val shared = shareFiles(context, listOf(report.file), CrashLog.SHARE_MIME_TYPE, chooserTitle = context.getString(R.string.files_crash_chooser))
                         if (!shared) errorMessage = context.getString(R.string.files_log_share_failed)
                     },
                     onDelete = { pendingCrashDelete = report },
@@ -195,13 +238,17 @@ fun FilesScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    SharedMapPoolDialogs(pool)
+
     pendingCrashDelete?.let { report ->
         ConfirmDeleteDialog(
             title = stringResource(R.string.files_log_delete_title),
-            body = stringResource(R.string.files_log_delete_body, report.nameWithoutExtension),
+            body = stringResource(R.string.files_log_delete_body, report.name),
             onConfirm = {
-                CrashLog.delete(context, report)
-                crashReports = CrashLog.list(context)
+                scope.launch {
+                    withContext(Dispatchers.IO) { CrashLog.delete(context, report.file) }
+                    reloadCrashReports()
+                }
             },
             onDismiss = { pendingCrashDelete = null },
         )
@@ -210,20 +257,19 @@ fun FilesScreen(modifier: Modifier = Modifier) {
         ConfirmDeleteDialog(
             title = stringResource(R.string.common_delete_building_title, building.id),
             body = stringResource(R.string.files_delete_building_body),
-            onConfirm = {
-                buildingStorage.delete(building.id)
-                buildings = buildingStorage.listBuildings()
-            },
+            onConfirm = { scope.launch { buildingRepository.delete(building.id) } },
             onDismiss = { pendingBuildingDelete = null },
         )
     }
     pendingLogDelete?.let { log ->
         ConfirmDeleteDialog(
             title = stringResource(R.string.files_log_delete_title),
-            body = stringResource(R.string.files_log_delete_body, log.nameWithoutExtension),
+            body = stringResource(R.string.files_log_delete_body, log.name),
             onConfirm = {
-                logStore.delete(log)
-                logs = logStore.listLogs()
+                scope.launch {
+                    withContext(Dispatchers.IO) { logStore.delete(log.file) }
+                    reloadLogs()
+                }
             },
             onDismiss = { pendingLogDelete = null },
         )
@@ -233,8 +279,10 @@ fun FilesScreen(modifier: Modifier = Modifier) {
             title = stringResource(R.string.files_logs_delete_all_title),
             body = pluralStringResource(R.plurals.files_logs_delete_all_body, logs.size, logs.size),
             onConfirm = {
-                logStore.deleteAll()
-                logs = logStore.listLogs()
+                scope.launch {
+                    withContext(Dispatchers.IO) { logStore.deleteAll() }
+                    reloadLogs()
+                }
             },
             onDismiss = { confirmDeleteAllLogs = false },
         )

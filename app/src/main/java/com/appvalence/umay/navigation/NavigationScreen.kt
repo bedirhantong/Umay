@@ -54,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -63,6 +64,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +79,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.appvalence.umay.R
+import com.appvalence.umay.appGraph
 import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.common.VoiceStatusNotice
 import com.appvalence.umay.common.buildingSummary
@@ -89,8 +92,8 @@ import com.appvalence.umay.fieldlog.FieldLogStore
 import com.appvalence.umay.files.rememberBuildingImporter
 import com.appvalence.umay.positioning.pdr.StepDetector
 import com.appvalence.umay.settings.UserSettings
-import com.appvalence.umay.storage.BuildingMapStorage
 import com.appvalence.umay.survey.round1
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val NAVIGATION_PERMISSIONS = buildList {
@@ -123,6 +126,9 @@ private val OPTIONAL_NAVIGATION_PERMISSIONS = buildList {
 fun NavigationScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = context as LifecycleOwner
+    val buildingRepository = context.appGraph.buildings
+    val loadedBuildings by buildingRepository.buildings.collectAsState()
+    val scope = rememberCoroutineScope()
 
     var hasPermissions by remember {
         mutableStateOf(NAVIGATION_PERMISSIONS.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED })
@@ -132,9 +138,8 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
         hasPermissions = NAVIGATION_PERMISSIONS.all { grants[it] ?: (ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED) }
     }
 
-    var buildings by remember { mutableStateOf(BuildingMapStorage(context).listBuildings()) }
     var selectedBuildingId by remember { mutableStateOf<String?>(null) }
-    val importBuilding = rememberBuildingImporter(onImported = { buildings = BuildingMapStorage(context).listBuildings() })
+    val importBuilding = rememberBuildingImporter()
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         if (!hasPermissions) {
@@ -178,6 +183,9 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             return@Column
         }
 
+        // Still being read from disk (only ever on the very first screen after launch).
+        val buildings = loadedBuildings ?: return@Column
+
         if (buildings.isEmpty()) {
             EmptyState(
                 icon = Icons.Filled.Map,
@@ -191,7 +199,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             }
             TextButton(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                onClick = { buildings = BuildingMapStorage(context).listBuildings() },
+                onClick = buildingRepository::refresh,
             ) {
                 Text(stringResource(R.string.common_reload))
             }
@@ -205,10 +213,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             BuildingPicker(
                 buildings = buildings,
                 onSelect = { selectedBuildingId = it.id },
-                onDelete = { building ->
-                    BuildingMapStorage(context).delete(building.id)
-                    buildings = BuildingMapStorage(context).listBuildings()
-                },
+                onDelete = { building -> scope.launch { buildingRepository.delete(building.id) } },
             )
             return@Column
         }
@@ -467,168 +472,192 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
         routeProgress(it.route, it.nextRouteIndex, it.position, session.nodeFloor, session.buildingMap.floorTransitions)
     }
 
-    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-        val pipelineError = ui.pipelineError
-        if (pipelineError != null) {
+    val pipelineError = ui.pipelineError
+    if (pipelineError != null) {
+        Column(modifier = Modifier.fillMaxSize()) {
             EmptyState(icon = Icons.Filled.Warning, title = stringResource(R.string.nav_error_title), message = pipelineError)
             Button(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), onClick = { session.stop() }) {
                 Text(stringResource(R.string.common_back))
             }
-            return@Column
         }
+        return
+    }
 
-        StatusBanner(status)
-        VoiceStatusNotice(session.speech, modifier = Modifier.padding(top = 8.dp))
+    // "Yazı oku" / "Bir şey sor" live in a bar fixed to the bottom of the screen, not in
+    // the scrolling content above — those two are the assistant actions someone reaches
+    // for constantly while walking, and having to scroll to find them (past the status
+    // banner, the map, technical details…) is exactly the "UI kötü" complaint this fixes.
+    // Modern voice-assistant apps keep their mic/action bar sticky for the same reason.
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            StatusBanner(status)
+            VoiceStatusNotice(session.speech, modifier = Modifier.padding(top = 8.dp))
 
-        if (!session.hasFingerprintedWaypoints) {
-            Text(
-                text = stringResource(R.string.nav_no_fingerprints_warning),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-
-        // Non-fatal: navigation (position, routing, TTS guidance) still works without
-        // obstacle detection, so this is a note, not a blocking EmptyState.
-        ui.cameraWarning?.let {
-            Text(
-                text = stringResource(R.string.nav_camera_warning, it),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-
-        Text(
-            text = ui.instruction,
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-        )
-        Button(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(bottom = 12.dp),
-            enabled = currentState != null && status != NavigationStatus.ARRIVED,
-            onClick = session::repeatInstruction,
-        ) {
-            Icon(Icons.Filled.Replay, contentDescription = null)
-            Text(stringResource(R.string.nav_repeat), modifier = Modifier.padding(start = 8.dp))
-        }
-
-        // Fully offline (on-device OCR, see MlKitSignTextReader) — reads whatever the
-        // obstacle-detection camera currently sees, so it only makes sense while that's
-        // running. Disabled rather than hidden while a read is already in flight, so a
-        // second tap doesn't queue a confusing second announcement.
-        OutlinedButton(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(bottom = 12.dp),
-            enabled = !ui.readingSigns,
-            onClick = session::readSignsAloud,
-        ) {
-            Icon(Icons.Filled.TextFields, contentDescription = null)
-            Text(stringResource(R.string.nav_read_signs), modifier = Modifier.padding(start = 8.dp))
-        }
-
-        // Fully offline (BuildingQueryMatcher runs against this building's own graph, no
-        // cloud, no language model) — only needs RECORD_AUDIO, asked for here rather than
-        // upfront with camera/location, and only the first time this button is actually
-        // used. Speaking the reason before the system dialog follows the same rule as
-        // every other permission ask in this app: a blind user can't read the dialog's
-        // fine print, so the *why* has to be said out loud regardless.
-        var pendingQuestion by remember { mutableStateOf(false) }
-        val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted && pendingQuestion) session.askQuestion()
-            pendingQuestion = false
-        }
-        OutlinedButton(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(bottom = 12.dp),
-            enabled = !ui.askingQuestion,
-            onClick = {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                    session.askQuestion()
-                } else {
-                    session.speech.speakNow(context.getString(R.string.voice_query_permission_message))
-                    pendingQuestion = true
-                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            },
-        ) {
-            Icon(Icons.Filled.Mic, contentDescription = null)
-            Text(stringResource(R.string.nav_ask_question), modifier = Modifier.padding(start = 8.dp))
-        }
-        ui.lastQuestionAnswer?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
-        }
-
-        if (progress != null && status != NavigationStatus.ARRIVED) {
-            RouteProgressCard(progress, modifier = Modifier.padding(bottom = 12.dp))
-        }
-
-        val pendingFloorChange = currentState?.pendingFloorChange
-        if (pendingFloorChange != null) {
-            Button(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                onClick = session::confirmFloorChangeManually,
-            ) {
-                Icon(Icons.Filled.SwapVert, contentDescription = null)
+            if (!session.hasFingerprintedWaypoints) {
                 Text(
-                    text = stringResource(
-                        if (pendingFloorChange.targetFloor > currentFloorIndex) R.string.nav_floor_change_up else R.string.nav_floor_change_down,
-                        pendingFloorChange.targetFloor,
-                    ),
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-            if (session.hasBarometer) {
-                Text(
-                    text = stringResource(R.string.nav_floor_change_barometer_hint),
+                    text = stringResource(R.string.nav_no_fingerprints_warning),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            // Non-fatal: navigation (position, routing, TTS guidance) still works without
+            // obstacle detection, so this is a note, not a blocking EmptyState.
+            ui.cameraWarning?.let {
+                Text(
+                    text = stringResource(R.string.nav_camera_warning, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            Text(
+                text = ui.instruction,
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+            )
+            Button(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(bottom = 12.dp),
+                enabled = currentState != null && status != NavigationStatus.ARRIVED,
+                onClick = session::repeatInstruction,
+            ) {
+                Icon(Icons.Filled.Replay, contentDescription = null)
+                Text(stringResource(R.string.nav_repeat), modifier = Modifier.padding(start = 8.dp))
+            }
+
+            ui.lastQuestionAnswer?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+            }
+
+            if (progress != null && status != NavigationStatus.ARRIVED) {
+                RouteProgressCard(progress, modifier = Modifier.padding(bottom = 12.dp))
+            }
+
+            val pendingFloorChange = currentState?.pendingFloorChange
+            if (pendingFloorChange != null) {
+                Button(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    onClick = session::confirmFloorChangeManually,
+                ) {
+                    Icon(Icons.Filled.SwapVert, contentDescription = null)
+                    Text(
+                        text = stringResource(
+                            if (pendingFloorChange.targetFloor > currentFloorIndex) R.string.nav_floor_change_up else R.string.nav_floor_change_down,
+                            pendingFloorChange.targetFloor,
+                        ),
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+                if (session.hasBarometer) {
+                    Text(
+                        text = stringResource(R.string.nav_floor_change_barometer_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+            }
+
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { session.stop() },
+            ) {
+                Icon(Icons.Filled.Stop, contentDescription = null)
+                Text(text = stringResource(R.string.nav_stop), modifier = Modifier.padding(start = 8.dp))
+            }
+
+            if (session.isRecording) {
+                GroundTruthControls(session = session, currentFloorIndex = currentFloorIndex)
+            }
+
+            NavigationMapCanvas(
+                floorMap = currentFloorMap,
+                floorLabel = stringResource(R.string.common_floor, currentFloorMap.floorIndex),
+                route = currentState?.route.orEmpty(),
+                nextRouteIndex = currentState?.nextRouteIndex ?: 1,
+                nodeFloor = session.nodeFloor,
+                position = currentState?.position,
+                obstacles = currentState?.obstacles ?: emptyList(),
+                description = mapDescription(context, currentFloorMap.floorIndex, progress, session.destinationNode, currentState?.obstacles?.size ?: 0),
+                modifier = Modifier.padding(top = 16.dp),
+            )
+
+            if (currentState != null) {
+                TechnicalDetails(
+                    routeText = currentState.route.joinToString(" → ") { session.allNodesById[it.id]?.name ?: it.name },
+                    technicalText = stringResource(
+                        R.string.nav_technical_details,
+                        currentState.position.x.round1().toString(),
+                        currentState.position.y.round1().toString(),
+                        currentState.position.floor,
+                        currentState.position.accuracyMeters.round1().toString(),
+                        currentState.position.source.name,
+                        ui.fingerprintCorrections,
+                        ui.barometerClimbMeters?.round1()?.let { "$it m" } ?: "-",
+                    ),
                 )
             }
         }
 
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = { session.stop() },
+        StickyAssistantBar(session = session, ui = ui)
+    }
+}
+
+/**
+ * Fixed to the bottom of the active-navigation screen regardless of scroll
+ * position — see the comment above this function's caller. Both actions are
+ * fully offline (on-device OCR for sign reading, [com.appvalence.umay.orchestrator.BuildingQueryMatcher]
+ * for questions); a disabled button (not a hidden one) while one is already in
+ * flight is what stops an impatient double-tap from queuing a second announcement.
+ */
+@Composable
+private fun StickyAssistantBar(session: NavigationSession, ui: NavigationSessionUi) {
+    val context = LocalContext.current
+    var pendingQuestion by remember { mutableStateOf(false) }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted && pendingQuestion) session.askQuestion()
+        pendingQuestion = false
+    }
+
+    Surface(tonalElevation = 3.dp, shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(Icons.Filled.Stop, contentDescription = null)
-            Text(text = stringResource(R.string.nav_stop), modifier = Modifier.padding(start = 8.dp))
-        }
+            OutlinedButton(
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                enabled = !ui.readingSigns,
+                onClick = session::readSignsAloud,
+            ) {
+                Icon(Icons.Filled.TextFields, contentDescription = null)
+                Text(stringResource(R.string.nav_read_signs), modifier = Modifier.padding(start = 8.dp))
+            }
 
-        if (session.isRecording) {
-            GroundTruthControls(session = session, currentFloorIndex = currentFloorIndex)
-        }
-
-        NavigationMapCanvas(
-            floorMap = currentFloorMap,
-            floorLabel = stringResource(R.string.common_floor, currentFloorMap.floorIndex),
-            route = currentState?.route.orEmpty(),
-            nextRouteIndex = currentState?.nextRouteIndex ?: 1,
-            nodeFloor = session.nodeFloor,
-            position = currentState?.position,
-            obstacles = currentState?.obstacles ?: emptyList(),
-            description = mapDescription(context, currentFloorMap.floorIndex, progress, session.destinationNode, currentState?.obstacles?.size ?: 0),
-            modifier = Modifier.padding(top = 16.dp),
-        )
-
-        if (currentState != null) {
-            TechnicalDetails(
-                routeText = currentState.route.joinToString(" → ") { session.allNodesById[it.id]?.name ?: it.name },
-                technicalText = stringResource(
-                    R.string.nav_technical_details,
-                    currentState.position.x.round1().toString(),
-                    currentState.position.y.round1().toString(),
-                    currentState.position.floor,
-                    currentState.position.accuracyMeters.round1().toString(),
-                    currentState.position.source.name,
-                    ui.fingerprintCorrections,
-                    ui.barometerClimbMeters?.round1()?.let { "$it m" } ?: "-",
-                ),
-            )
+            // Speaking the reason before the system permission dialog follows the same
+            // rule as every other permission ask in this app: a blind user can't read
+            // the dialog's fine print, so the *why* has to be said out loud regardless.
+            OutlinedButton(
+                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                enabled = !ui.askingQuestion,
+                onClick = {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        session.askQuestion()
+                    } else {
+                        session.speech.speakNow(context.getString(R.string.voice_query_permission_message))
+                        pendingQuestion = true
+                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+            ) {
+                Icon(Icons.Filled.Mic, contentDescription = null)
+                Text(stringResource(R.string.nav_ask_question), modifier = Modifier.padding(start = 8.dp))
+            }
         }
     }
 }

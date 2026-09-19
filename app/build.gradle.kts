@@ -65,6 +65,15 @@ android {
                 "proguard-rules.pro"
             )
         }
+        // For judging performance on a real phone: exactly the release build (R8, not
+        // debuggable, baseline profile applied), just signed with the local debug key so
+        // Android Studio can install it. Debug builds run Compose several times slower
+        // and say nothing about how the released app will feel.
+        create("profile") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -94,6 +103,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

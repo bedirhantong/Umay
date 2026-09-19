@@ -32,9 +32,14 @@ class PublishedBuildingsStore(context: Context) {
         preferences.edit { remove(keyFor(localBuildingId)) }
     }
 
-    private fun keyFor(localBuildingId: String) = "remote_id:$localBuildingId"
+    /** Every local building this device has published, by local id. */
+    fun publishedLocalIds(): Set<String> =
+        preferences.all.keys.filter { it.startsWith(KEY_PREFIX) }.map { it.removePrefix(KEY_PREFIX) }.toSet()
+
+    private fun keyFor(localBuildingId: String) = "$KEY_PREFIX$localBuildingId"
 
     private companion object {
         const val PREFERENCES_NAME = "published_buildings"
+        const val KEY_PREFIX = "remote_id:"
     }
 }

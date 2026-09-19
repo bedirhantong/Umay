@@ -103,5 +103,43 @@ class BeaconSurveySolverTest {
         assertTrue(abs(floor1Result.x - 8.0) < 0.1 && abs(floor1Result.y - 2.0) < 0.1)
     }
 
+    @Test
+    fun `nearestPose picks the same pose a linear scan would, for any timestamp`() {
+        val random = java.util.Random(42)
+        var t = 0L
+        val poses = List(500) {
+            t += 200 + random.nextInt(800)
+            pose(random.nextDouble(), random.nextDouble(), t)
+        }
+        repeat(2_000) {
+            val query = random.nextInt((t + 5_000).toInt()).toLong() - 2_000
+            val expected = poses.minByOrNull { kotlin.math.abs(it.timestampMs - query) }
+            assertEquals(expected, BeaconSurveySolver.nearestPose(poses, query), "query=$query")
+        }
+    }
+
+    @Test
+    fun `nearestPose breaks an exact tie toward the earlier pose`() {
+        val earlier = pose(0.0, 0.0, 1_000L)
+        val later = pose(1.0, 0.0, 2_000L)
+        assertEquals(earlier, BeaconSurveySolver.nearestPose(listOf(earlier, later), 1_500L))
+    }
+
+    @Test
+    fun `solving doesn't depend on the trajectory being in time order`() {
+        val trajectory = listOf(
+            pose(0.0, 0.0, 0L),
+            pose(10.0, 0.0, 1_000L),
+            pose(0.0, 10.0, 2_000L),
+            pose(10.0, 10.0, 3_000L),
+        )
+        val readings = trajectory.map { readingAt(it, "beacon-A", beaconX = 4.0, beaconY = 6.0) }
+
+        assertEquals(
+            BeaconSurveySolver.solve(trajectory, readings),
+            BeaconSurveySolver.solve(trajectory.reversed(), readings),
+        )
+    }
+
     private fun abs(value: Double) = kotlin.math.abs(value)
 }

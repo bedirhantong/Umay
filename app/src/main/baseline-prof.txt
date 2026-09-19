@@ -1,0 +1,6 @@
+# Baseline profile: code compiled ahead of time on install, instead of running
+# interpreted the first few times it's used — which is exactly when switching to a
+# screen for the first time stutters. Compose's own libraries ship their profiles
+# already; this adds all of Umay's own code (every module), which is small enough
+# to compile whole.
+HSPLcom/appvalence/umay/**;->**(**)**

@@ -1,10 +1,12 @@
 package com.appvalence.umay.cloudmap
 
-import androidx.compose.foundation.layout.Arrangement
+import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
@@ -16,11 +18,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,248 +33,252 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
-import com.appvalence.umay.cloud.AndroidConnectivityMonitor
-import com.appvalence.umay.cloud.FirestoreBuildingMapRepository
+import com.appvalence.umay.appGraph
 import com.appvalence.umay.cloud.PublicBuildingSummary
 import com.appvalence.umay.cloud.RemoteMapFailure
 import com.appvalence.umay.cloud.asRemoteMapFailure
 import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
-import com.appvalence.umay.storage.BuildingMapStorage
+import com.appvalence.umay.storage.BuildingRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
 /**
- * "Herkese aç" next to each local building (a small extension of Dosyalar's
- * existing building rows) and "Keşfet": everyone else's published buildings,
- * downloadable into this device's own local collection.
+ * "Herkese aç" next to each local building and "Keşfet": everyone else's
+ * published buildings, downloadable into this device's own collection. The pool
+ * itself ([SharedMapPool]) outlives this screen; this only holds what the
+ * screen is showing right now (a confirmation, a result message).
  *
- * Everything here requires connectivity, checked once up front via
- * [AndroidConnectivityMonitor] and shown honestly instead of letting an
- * action just fail: offline, the whole section explains that and points
- * back at the local import/export this screen already offers, which never
- * needed a connection to begin with.
+ * Everything here requires connectivity, and says so honestly instead of
+ * letting an action just fail: offline, the section explains that and points
+ * back at the local import/export Dosyalar already offers.
  */
-@Composable
-fun SharedMapPoolSection(
-    localBuildings: List<BuildingMap>,
-    onLocalBuildingsChanged: () -> Unit,
-    modifier: Modifier = Modifier,
+@Stable
+class SharedMapPoolUi internal constructor(
+    private val context: Context,
+    private val scope: CoroutineScope,
+    val pool: SharedMapPool,
+    private val buildings: BuildingRepository,
 ) {
-    val context = LocalContext.current
-    val storage = remember { BuildingMapStorage(context) }
-    val published = remember { PublishedBuildingsStore(context) }
-    val repository = remember { FirestoreBuildingMapRepository() }
-    val connectivity = remember { AndroidConnectivityMonitor(context) }
-    val isOnline by connectivity.isOnline.collectAsState(initial = false)
-    val scope = rememberCoroutineScope()
+    var errorMessage by mutableStateOf<String?>(null)
+    var successMessage by mutableStateOf<String?>(null)
+    var pendingPublish by mutableStateOf<BuildingMap?>(null)
+    var pendingUnpublish by mutableStateOf<BuildingMap?>(null)
+    var pendingOverwrite by mutableStateOf<BuildingMap?>(null)
 
-    var publicBuildings by remember { mutableStateOf<List<PublicBuildingSummary>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
-    var listError by remember { mutableStateOf<String?>(null) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var pendingUnpublish by remember { mutableStateOf<BuildingMap?>(null) }
-    var pendingPublish by remember { mutableStateOf<BuildingMap?>(null) }
-    var pendingOverwrite by remember { mutableStateOf<BuildingMap?>(null) }
-    var successMessage by remember { mutableStateOf<String?>(null) }
-
-    fun refreshListing() {
-        loading = true
-        listError = null
+    fun publish(building: BuildingMap) {
+        pendingPublish = null
         scope.launch {
-            repository.listPublicBuildings()
-                .onSuccess { publicBuildings = it }
-                .onFailure { listError = context.remoteMapFailureText(it.asRemoteMapFailure()) }
-            loading = false
+            pool.publish(building)
+                .onSuccess { successMessage = context.getString(R.string.cloud_publish_success, building.id) }
+                .onFailure { errorMessage = context.remoteMapFailureText(it.asRemoteMapFailure()) }
         }
     }
-    // Loads once as soon as there's a connection, so opening this screen with data
-    // already on doesn't require an extra tap — a manual "Yenile" covers the rest.
-    LaunchedEffect(isOnline) { if (isOnline && publicBuildings.isEmpty() && !loading) refreshListing() }
 
-    fun saveDownloaded(map: BuildingMap) {
-        val problems = BuildingMapJson.problems(map)
-        if (problems.isNotEmpty()) {
+    fun unpublish(building: BuildingMap) {
+        pendingUnpublish = null
+        scope.launch {
+            pool.unpublish(building.id).onFailure { errorMessage = context.remoteMapFailureText(it.asRemoteMapFailure()) }
+        }
+    }
+
+    fun download(summary: PublicBuildingSummary) {
+        scope.launch {
+            pool.download(summary.id)
+                .onSuccess { saveDownloaded(it, overwrite = false) }
+                .onFailure { errorMessage = context.remoteMapFailureText(it.asRemoteMapFailure()) }
+        }
+    }
+
+    fun confirmOverwrite(map: BuildingMap) {
+        pendingOverwrite = null
+        scope.launch { saveDownloaded(map, overwrite = true) }
+    }
+
+    private suspend fun saveDownloaded(map: BuildingMap, overwrite: Boolean) {
+        if (BuildingMapJson.problems(map).isNotEmpty()) {
             errorMessage = context.getString(R.string.cloud_map_corrupt)
             return
         }
-        if (storage.exists(map.id)) {
+        if (!overwrite && buildings.exists(map.id)) {
             pendingOverwrite = map
             return
         }
-        if (storage.save(map)) {
-            onLocalBuildingsChanged()
+        if (buildings.save(map)) {
             successMessage = context.getString(R.string.cloud_download_success, map.id)
         } else {
             errorMessage = context.getString(R.string.import_save_failed_body)
         }
     }
+}
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = stringResource(R.string.cloud_pool_title),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-        Text(
-            text = stringResource(R.string.cloud_pool_body),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
+@Composable
+fun rememberSharedMapPoolUi(): SharedMapPoolUi {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val ui = remember { SharedMapPoolUi(context, scope, context.appGraph.sharedMapPool, context.appGraph.buildings) }
+    val isOnline by ui.pool.isOnline.collectAsState()
+    // Only when the cached listing is actually old — reopening Dosyalar a minute later
+    // shows what was already fetched instead of downloading it all again.
+    LaunchedEffect(isOnline) { if (isOnline) ui.pool.refreshIfStale() }
+    return ui
+}
 
-        if (!isOnline) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                Icon(Icons.Filled.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+/**
+ * The pool's rows, as items of the caller's lazy list — so a long public
+ * listing is only ever composed as far as it's actually on screen, rather than
+ * all at once every time Dosyalar opens.
+ */
+fun LazyListScope.sharedMapPoolItems(
+    ui: SharedMapPoolUi,
+    localBuildings: List<BuildingMap>,
+    publishedIds: Set<String>,
+    isOnline: Boolean,
+    listing: PoolListing,
+) {
+    item(key = "pool-header") {
+        Column {
+            Text(
+                text = stringResource(R.string.cloud_pool_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 4.dp).semantics { heading() },
+            )
+            Text(
+                text = stringResource(R.string.cloud_pool_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            if (!isOnline) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                    Icon(Icons.Filled.CloudOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = stringResource(R.string.cloud_offline),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+            if (localBuildings.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.cloud_offline),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = stringResource(R.string.cloud_no_local_buildings),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 8.dp),
+                    modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
-        }
-
-        if (localBuildings.isEmpty()) {
-            Text(
-                text = stringResource(R.string.cloud_no_local_buildings),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-        } else {
-            localBuildings.forEach { building ->
-                val remoteId = published.remoteIdFor(building.id)
-                PublishRow(
-                    building = building,
-                    isPublished = remoteId != null,
-                    enabled = isOnline,
-                    onPublish = { pendingPublish = building },
-                    onUnpublish = { pendingUnpublish = building },
-                )
-            }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) {
-            Text(stringResource(R.string.cloud_discover_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            IconButton(enabled = isOnline && !loading, onClick = { refreshListing() }) {
-                Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.cloud_refresh))
-            }
-        }
-
-        if (loading) {
-            CircularProgressIndicator(modifier = Modifier.padding(vertical = 8.dp))
-        }
-        listError?.let {
-            Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp))
-        }
-        if (isOnline && !loading && listError == null && publicBuildings.isEmpty()) {
-            Text(
-                text = stringResource(R.string.cloud_pool_empty),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-        }
-        publicBuildings.forEach { summary ->
-            DownloadRow(
-                summary = summary,
-                onDownload = {
-                    scope.launch {
-                        repository.downloadBuildingMap(summary.id)
-                            .onSuccess { saveDownloaded(it) }
-                            .onFailure { errorMessage = context.remoteMapFailureText(it.asRemoteMapFailure()) }
-                    }
-                },
-            )
         }
     }
 
-    pendingPublish?.let { building ->
+    items(localBuildings, key = { "publish:${it.id}" }) { building ->
+        PublishRow(
+            building = building,
+            isPublished = building.id in publishedIds,
+            enabled = isOnline,
+            onPublish = { ui.pendingPublish = building },
+            onUnpublish = { ui.pendingUnpublish = building },
+        )
+    }
+
+    item(key = "pool-discover-header") {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) {
+                Text(
+                    text = stringResource(R.string.cloud_discover_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+                IconButton(enabled = isOnline && !listing.loading, onClick = ui.pool::refresh) {
+                    Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.cloud_refresh))
+                }
+            }
+            if (listing.loading) {
+                CircularProgressIndicator(modifier = Modifier.padding(vertical = 8.dp))
+            }
+            listing.failure?.let { failure ->
+                Text(
+                    text = LocalContext.current.remoteMapFailureText(failure),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            val fetchedEmpty = listing.fetchedAtMs != 0L && listing.summaries.isEmpty()
+            if (isOnline && !listing.loading && listing.failure == null && fetchedEmpty) {
+                Text(
+                    text = stringResource(R.string.cloud_pool_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+        }
+    }
+
+    items(listing.summaries, key = { "remote:${it.id}" }) { summary ->
+        DownloadRow(summary = summary, onDownload = { ui.download(summary) })
+    }
+}
+
+/** The confirmation and result dialogs for [sharedMapPoolItems]; call once, outside the list. */
+@Composable
+fun SharedMapPoolDialogs(ui: SharedMapPoolUi) {
+    ui.pendingPublish?.let { building ->
         AlertDialog(
-            onDismissRequest = { pendingPublish = null },
+            onDismissRequest = { ui.pendingPublish = null },
             title = { Text(stringResource(R.string.cloud_publish_confirm_title, building.id)) },
             text = { Text(stringResource(R.string.cloud_publish_confirm_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingPublish = null
-                    scope.launch {
-                        repository.publishBuildingMap(building)
-                            .onSuccess { remoteId ->
-                                published.markPublished(building.id, remoteId)
-                                successMessage = context.getString(R.string.cloud_publish_success, building.id)
-                                refreshListing()
-                            }
-                            .onFailure { errorMessage = context.remoteMapFailureText(it.asRemoteMapFailure()) }
-                    }
-                }) { Text(stringResource(R.string.cloud_publish_confirm_action)) }
-            },
-            dismissButton = { TextButton(onClick = { pendingPublish = null }) { Text(stringResource(R.string.common_cancel)) } },
+            confirmButton = { TextButton(onClick = { ui.publish(building) }) { Text(stringResource(R.string.cloud_publish_confirm_action)) } },
+            dismissButton = { TextButton(onClick = { ui.pendingPublish = null }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 
-    pendingUnpublish?.let { building ->
+    ui.pendingUnpublish?.let { building ->
         AlertDialog(
-            onDismissRequest = { pendingUnpublish = null },
+            onDismissRequest = { ui.pendingUnpublish = null },
             title = { Text(stringResource(R.string.cloud_unpublish_confirm_title, building.id)) },
             text = { Text(stringResource(R.string.cloud_unpublish_confirm_body)) },
             confirmButton = {
-                TextButton(onClick = {
-                    val remoteId = published.remoteIdFor(building.id)
-                    pendingUnpublish = null
-                    if (remoteId == null) return@TextButton
-                    scope.launch {
-                        repository.unpublishBuildingMap(remoteId)
-                            .onSuccess {
-                                published.markUnpublished(building.id)
-                                refreshListing()
-                            }
-                            .onFailure { errorMessage = context.remoteMapFailureText(it.asRemoteMapFailure()) }
-                    }
-                }) { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { ui.unpublish(building) }) {
+                    Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
+                }
             },
-            dismissButton = { TextButton(onClick = { pendingUnpublish = null }) { Text(stringResource(R.string.common_cancel)) } },
+            dismissButton = { TextButton(onClick = { ui.pendingUnpublish = null }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 
-    pendingOverwrite?.let { map ->
+    ui.pendingOverwrite?.let { map ->
         AlertDialog(
-            onDismissRequest = { pendingOverwrite = null },
+            onDismissRequest = { ui.pendingOverwrite = null },
             title = { Text(stringResource(R.string.import_exists_title, map.id)) },
             text = { Text(stringResource(R.string.import_exists_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingOverwrite = null
-                    if (storage.save(map)) {
-                        onLocalBuildingsChanged()
-                        successMessage = context.getString(R.string.cloud_download_success, map.id)
-                    } else {
-                        errorMessage = context.getString(R.string.import_save_failed_body)
-                    }
-                }) { Text(stringResource(R.string.import_overwrite)) }
-            },
-            dismissButton = { TextButton(onClick = { pendingOverwrite = null }) { Text(stringResource(R.string.common_cancel)) } },
+            confirmButton = { TextButton(onClick = { ui.confirmOverwrite(map) }) { Text(stringResource(R.string.import_overwrite)) } },
+            dismissButton = { TextButton(onClick = { ui.pendingOverwrite = null }) { Text(stringResource(R.string.common_cancel)) } },
         )
     }
 
-    successMessage?.let {
+    ui.successMessage?.let {
         AlertDialog(
-            onDismissRequest = { successMessage = null },
+            onDismissRequest = { ui.successMessage = null },
             title = { Text(it) },
             text = null,
-            confirmButton = { TextButton(onClick = { successMessage = null }) { Text(stringResource(R.string.common_ok)) } },
+            confirmButton = { TextButton(onClick = { ui.successMessage = null }) { Text(stringResource(R.string.common_ok)) } },
         )
     }
-    errorMessage?.let {
+    ui.errorMessage?.let {
         AlertDialog(
-            onDismissRequest = { errorMessage = null },
+            onDismissRequest = { ui.errorMessage = null },
             title = { Text(stringResource(R.string.common_error_title)) },
             text = { Text(it) },
-            confirmButton = { TextButton(onClick = { errorMessage = null }) { Text(stringResource(R.string.common_ok)) } },
+            confirmButton = { TextButton(onClick = { ui.errorMessage = null }) { Text(stringResource(R.string.common_ok)) } },
         )
     }
 }
@@ -307,6 +313,7 @@ private fun PublishRow(building: BuildingMap, isPublished: Boolean, enabled: Boo
 
 @Composable
 private fun DownloadRow(summary: PublicBuildingSummary, onDownload: () -> Unit) {
+    val dateFormat = remember { DateFormat.getDateInstance(DateFormat.SHORT) }
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
@@ -315,8 +322,7 @@ private fun DownloadRow(summary: PublicBuildingSummary, onDownload: () -> Unit) 
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = summary.displayName, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    text = buildingSummary(summary.floorCount, summary.nodeCount) + " · " +
-                        DateFormat.getDateInstance(DateFormat.SHORT).format(Date(summary.updatedAtMs)),
+                    text = buildingSummary(summary.floorCount, summary.nodeCount) + " · " + dateFormat.format(Date(summary.updatedAtMs)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -328,7 +334,7 @@ private fun DownloadRow(summary: PublicBuildingSummary, onDownload: () -> Unit) 
     }
 }
 
-private fun android.content.Context.remoteMapFailureText(failure: RemoteMapFailure): String = when (failure) {
+private fun Context.remoteMapFailureText(failure: RemoteMapFailure): String = when (failure) {
     RemoteMapFailure.NoConnection -> getString(R.string.cloud_error_no_connection)
     RemoteMapFailure.NotFound -> getString(R.string.cloud_error_not_found)
     is RemoteMapFailure.TooLarge -> getString(R.string.cloud_error_too_large)

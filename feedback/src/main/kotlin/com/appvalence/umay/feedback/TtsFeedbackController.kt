@@ -6,6 +6,8 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import com.appvalence.umay.coremodel.AlertPriority
@@ -14,6 +16,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /** Whether guidance can actually be spoken in the right language on this device. */
 enum class VoiceStatus {
@@ -54,6 +59,15 @@ enum class VoiceStatus {
  * talking over a call helps no one — while vibration cues (a separate
  * [FeedbackController]) keep working; the periodic repeat of the current
  * instruction catches the user up once the call ends.
+ *
+ * Picking the voice ([configureVoice]) is done on a background thread, never
+ * in the engine's init callback on the main thread: listing an engine's
+ * voices returns hundreds of them over binder, and selecting one makes the
+ * engine load its model synchronously — together easily a few hundred
+ * milliseconds, which used to freeze whichever screen had just opened.
+ * Anything spoken before that finishes is queued and played right after.
+ *
+ * All public methods are main-thread only.
  */
 class TtsFeedbackController(
     context: Context,
@@ -62,7 +76,12 @@ class TtsFeedbackController(
 ) : FeedbackController {
 
     private var isReady = false
+    private var isShutDown = false
     private val pendingUtterances = mutableListOf<NavigationAlert>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val setupExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "umay-tts-setup").apply { isDaemon = true }
+    }
 
     private val audioManager: AudioManager? = context.getSystemService(AudioManager::class.java)
     private val audioAttributes: AudioAttributes = AudioAttributes.Builder()
@@ -105,24 +124,51 @@ class TtsFeedbackController(
     init {
         tts = TextToSpeech(context.applicationContext) { initStatus ->
             if (initStatus != TextToSpeech.SUCCESS) {
-                status.value = VoiceStatus.ENGINE_UNAVAILABLE
+                mainHandler.post { if (!isShutDown) status.value = VoiceStatus.ENGINE_UNAVAILABLE }
                 return@TextToSpeech
             }
-            status.value = configureVoice()
-            tts.setSpeechRate(speechRate)
-            tts.setAudioAttributes(audioAttributes)
-            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String) = Unit
-                override fun onDone(utteranceId: String) = finished(utteranceId)
+            runInBackground {
+                val voiceStatus = runCatching { configureVoice() }.getOrDefault(VoiceStatus.NOT_SUPPORTED)
+                tts.setAudioAttributes(audioAttributes)
+                tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String) = Unit
+                    override fun onDone(utteranceId: String) = finished(utteranceId)
 
-                @Deprecated("Deprecated in Java")
-                override fun onError(utteranceId: String) = finished(utteranceId)
-                override fun onError(utteranceId: String, errorCode: Int) = finished(utteranceId)
-                override fun onStop(utteranceId: String, interrupted: Boolean) = finished(utteranceId)
-            })
-            isReady = true
-            pendingUtterances.forEach { speak(it) }
-            pendingUtterances.clear()
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String) = finished(utteranceId)
+                    override fun onError(utteranceId: String, errorCode: Int) = finished(utteranceId)
+                    override fun onStop(utteranceId: String, interrupted: Boolean) = finished(utteranceId)
+                })
+                mainHandler.post {
+                    if (isShutDown) return@post
+                    tts.setSpeechRate(speechRate)
+                    status.value = voiceStatus
+                    isReady = true
+                    pendingUtterances.forEach { speak(it) }
+                    pendingUtterances.clear()
+                }
+            }
+        }
+    }
+
+    /**
+     * Re-checks which voice is available — for when the person has just come back
+     * from installing the missing voice data (see [VoiceStatus.MISSING_DATA]).
+     * Does nothing until the engine has finished starting up.
+     */
+    fun refreshVoice() {
+        if (!isReady) return
+        runInBackground {
+            val voiceStatus = runCatching { configureVoice() }.getOrDefault(VoiceStatus.NOT_SUPPORTED)
+            mainHandler.post { if (!isShutDown) status.value = voiceStatus }
+        }
+    }
+
+    private fun runInBackground(block: () -> Unit) {
+        try {
+            setupExecutor.execute(block)
+        } catch (_: RejectedExecutionException) {
+            // Already shut down — nothing left to set up.
         }
     }
 
@@ -150,6 +196,7 @@ class TtsFeedbackController(
     }
 
     override fun emit(alert: NavigationAlert) {
+        if (isShutDown) return
         if (!isReady) {
             pendingUtterances += alert
             return
@@ -224,6 +271,10 @@ class TtsFeedbackController(
     }
 
     fun shutdown() {
+        isShutDown = true
+        isReady = false
+        pendingUtterances.clear()
+        setupExecutor.shutdown()
         tts.stop()
         tts.shutdown()
         synchronized(activeUtterances) { activeUtterances.clear() }
