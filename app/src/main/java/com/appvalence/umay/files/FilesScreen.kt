@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
+import com.appvalence.umay.cloudmap.SharedMapPoolSection
 import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.diagnostics.CrashLog
@@ -101,6 +102,13 @@ fun FilesScreen(modifier: Modifier = Modifier) {
                 onDelete = { pendingBuildingDelete = building },
             )
         }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+        SharedMapPoolSection(
+            localBuildings = buildings,
+            onLocalBuildingsChanged = { buildings = buildingStorage.listBuildings() },
+        )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 

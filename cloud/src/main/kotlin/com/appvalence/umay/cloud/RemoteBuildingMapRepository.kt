@@ -56,9 +56,12 @@ interface RemoteBuildingMapRepository {
      * never automatic — since it makes the map visible to anyone. Overwrites
      * an existing publication with the same [BuildingMap.id], but only if
      * this device published it in the first place ([RemoteMapFailure.NotOwner]
-     * otherwise).
+     * otherwise). Returns the id it was published under, for later use with
+     * [unpublishBuildingMap] — callers have nowhere else to learn it, since
+     * it's derived from [BuildingMap.id] by a sanitization rule that's this
+     * repository's own implementation detail, not part of its public contract.
      */
-    suspend fun publishBuildingMap(map: BuildingMap): Result<Unit>
+    suspend fun publishBuildingMap(map: BuildingMap): Result<String>
 
     /** [RemoteMapFailure.NotOwner] unless this device is the one that published [id]. */
     suspend fun unpublishBuildingMap(id: String): Result<Unit>
