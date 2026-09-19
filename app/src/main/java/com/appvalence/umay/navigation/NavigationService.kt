@@ -27,6 +27,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 /**
  * Keeps the app in the foreground for as long as a [NavigationSession] runs —
@@ -40,7 +42,10 @@ import kotlinx.coroutines.launch
  * *is* location access, and the permissions it needs are already granted
  * before any session can start.
  */
+@AndroidEntryPoint
 class NavigationService : Service() {
+    @Inject lateinit var sessions: NavigationSessions
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var notificationJob: Job? = null
 
@@ -49,10 +54,10 @@ class NavigationService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             // The session stopping calls back into stop(), which ends this service.
-            NavigationSessions.active.value?.stop("stopped_from_notification") ?: stopSelf()
+            sessions.active.value?.stop("stopped_from_notification") ?: stopSelf()
             return START_NOT_STICKY
         }
-        val session = NavigationSessions.active.value
+        val session = sessions.active.value
         if (session == null) {
             stopSelf()
             return START_NOT_STICKY

@@ -73,7 +73,7 @@ class TtsFeedbackController(
     context: Context,
     private val speechLocale: Locale = Locale.getDefault(),
     speechRate: Float = DEFAULT_SPEECH_RATE,
-) : FeedbackController {
+) : FeedbackController, Speaker {
 
     private var isReady = false
     private var isShutDown = false
@@ -106,7 +106,7 @@ class TtsFeedbackController(
     private val activeUtterances = mutableSetOf<String>()
     private val status = MutableStateFlow(VoiceStatus.INITIALIZING)
 
-    val voiceStatus: StateFlow<VoiceStatus> = status.asStateFlow()
+    override val voiceStatus: StateFlow<VoiceStatus> = status.asStateFlow()
 
     private lateinit var tts: TextToSpeech
 
@@ -115,7 +115,7 @@ class TtsFeedbackController(
      * listen at 2x or faster; someone new to it may want it slower — this is a
      * personal setting, not something to hardcode.
      */
-    var speechRate: Float = speechRate
+    override var speechRate: Float = speechRate
         set(value) {
             field = value
             if (isReady) tts.setSpeechRate(value)
@@ -156,7 +156,7 @@ class TtsFeedbackController(
      * from installing the missing voice data (see [VoiceStatus.MISSING_DATA]).
      * Does nothing until the engine has finished starting up.
      */
-    fun refreshVoice() {
+    override fun refreshVoice() {
         if (!isReady) return
         runInBackground {
             val voiceStatus = runCatching { configureVoice() }.getOrDefault(VoiceStatus.NOT_SUPPORTED)
@@ -252,7 +252,7 @@ class TtsFeedbackController(
      * narration that replaces itself (an onboarding page the person just
      * moved past), not for navigation alerts, which go through [emit].
      */
-    fun speakNow(text: String) {
+    override fun speakNow(text: String) {
         emit(
             NavigationAlert(
                 id = "narration-${System.nanoTime()}",
@@ -265,7 +265,7 @@ class TtsFeedbackController(
     }
 
     /** Stops speaking without shutting down, e.g. when the person skips ahead. */
-    fun stop() {
+    override fun stop() {
         if (isReady) tts.stop()
         pendingUtterances.clear()
     }

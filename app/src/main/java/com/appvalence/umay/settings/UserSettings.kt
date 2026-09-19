@@ -4,30 +4,19 @@ import android.content.Context
 import androidx.core.content.edit
 import com.appvalence.umay.feedback.TtsFeedbackController
 import com.appvalence.umay.positioning.pdr.StepDetector
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /** Per-person, per-device preferences that outlive a single session. */
-class UserSettings(context: Context) {
-    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-
+interface UserSettings {
     /** This person's calibrated stride, or null if they haven't calibrated yet. */
     var calibratedStepLengthMeters: Double?
-        get() = if (preferences.contains(KEY_STEP_LENGTH)) preferences.getFloat(KEY_STEP_LENGTH, 0f).toDouble() else null
-        set(value) = preferences.edit {
-            if (value == null) remove(KEY_STEP_LENGTH) else putFloat(KEY_STEP_LENGTH, value.toFloat())
-        }
-
-    /** The stride dead reckoning should use: the calibrated one when there is one. */
-    val stepLengthMeters: Double
-        get() = calibratedStepLengthMeters ?: StepDetector.AVERAGE_STEP_LENGTH_METERS
 
     /** Vibration cues alongside speech (see HapticPatterns). On by default: they cost nothing and help in noise. */
     var hapticsEnabled: Boolean
-        get() = preferences.getBoolean(KEY_HAPTICS_ENABLED, true)
-        set(value) = preferences.edit { putBoolean(KEY_HAPTICS_ENABLED, value) }
 
     var speechRate: Float
-        get() = preferences.getFloat(KEY_SPEECH_RATE, TtsFeedbackController.DEFAULT_SPEECH_RATE)
-        set(value) = preferences.edit { putFloat(KEY_SPEECH_RATE, value) }
 
     /**
      * Off by default: with the screen off, positioning and guidance carry on (see
@@ -35,10 +24,37 @@ class UserSettings(context: Context) {
      * the screen awake for the whole walk so it doesn't — at a real battery cost.
      */
     var keepScreenOnDuringNavigation: Boolean
+
+    var onboardingCompleted: Boolean
+
+    /** The stride dead reckoning should use: the calibrated one when there is one. */
+    val stepLengthMeters: Double
+        get() = calibratedStepLengthMeters ?: StepDetector.AVERAGE_STEP_LENGTH_METERS
+}
+
+@Singleton
+class SharedPreferencesUserSettings @Inject constructor(@ApplicationContext context: Context) : UserSettings {
+    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    override var calibratedStepLengthMeters: Double?
+        get() = if (preferences.contains(KEY_STEP_LENGTH)) preferences.getFloat(KEY_STEP_LENGTH, 0f).toDouble() else null
+        set(value) = preferences.edit {
+            if (value == null) remove(KEY_STEP_LENGTH) else putFloat(KEY_STEP_LENGTH, value.toFloat())
+        }
+
+    override var hapticsEnabled: Boolean
+        get() = preferences.getBoolean(KEY_HAPTICS_ENABLED, true)
+        set(value) = preferences.edit { putBoolean(KEY_HAPTICS_ENABLED, value) }
+
+    override var speechRate: Float
+        get() = preferences.getFloat(KEY_SPEECH_RATE, TtsFeedbackController.DEFAULT_SPEECH_RATE)
+        set(value) = preferences.edit { putFloat(KEY_SPEECH_RATE, value) }
+
+    override var keepScreenOnDuringNavigation: Boolean
         get() = preferences.getBoolean(KEY_KEEP_SCREEN_ON, false)
         set(value) = preferences.edit { putBoolean(KEY_KEEP_SCREEN_ON, value) }
 
-    var onboardingCompleted: Boolean
+    override var onboardingCompleted: Boolean
         get() = preferences.getBoolean(KEY_ONBOARDING_COMPLETED, false)
         set(value) = preferences.edit { putBoolean(KEY_ONBOARDING_COMPLETED, value) }
 

@@ -45,7 +45,7 @@ sealed class BleScanState {
  * platform's scan client registration failing) via [scanState] instead of
  * failing silently (NFR-3: prefer a visible "not sure" state over silence).
  */
-class BleBeaconScanner(private val context: Context) {
+class BleBeaconScanner(private val context: Context) : BeaconScanner {
 
     private val sightings = MutableStateFlow<Map<String, BleBeaconReading>>(emptyMap())
     private val state = MutableStateFlow<BleScanState>(BleScanState.Idle)
@@ -63,12 +63,12 @@ class BleBeaconScanner(private val context: Context) {
     // optimally (see KalmanFilter1D) instead of a fixed-ratio EMA.
     private val rssiFilters = mutableMapOf<String, KalmanFilter1D>()
 
-    fun beaconUpdates(): Flow<List<BleBeaconReading>> =
+    override fun beaconUpdates(): Flow<List<BleBeaconReading>> =
         sightings.map { it.values.sortedByDescending { reading -> reading.rssi } }
 
-    fun scanState(): Flow<BleScanState> = state
+    override fun scanState(): Flow<BleScanState> = state
 
-    fun rawReadingUpdates(): Flow<BleBeaconReading> = rawReadings.asSharedFlow()
+    override fun rawReadingUpdates(): Flow<BleBeaconReading> = rawReadings.asSharedFlow()
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -94,7 +94,7 @@ class BleBeaconScanner(private val context: Context) {
      * pauses with the screen off.
      */
     @SuppressLint("MissingPermission")
-    fun start(targets: List<ScanTarget>? = null) {
+    override fun start(targets: List<ScanTarget>?) {
         if (isScanning) return
 
         val locationManager = context.getSystemService(LocationManager::class.java)
@@ -129,7 +129,7 @@ class BleBeaconScanner(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    fun stop() {
+    override fun stop() {
         if (!isScanning) {
             state.value = BleScanState.Idle
             return

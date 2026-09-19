@@ -2,13 +2,13 @@ package com.appvalence.umay.settings
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,20 +32,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -55,43 +50,37 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.appvalence.umay.R
-import com.appvalence.umay.common.rememberAppSpeech
-import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.common.VoiceStatusNotice
+import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.coremodel.GuidanceCue
-import com.appvalence.umay.feedback.HapticFeedbackController
-import com.appvalence.umay.feedback.HapticPatterns
 import com.appvalence.umay.feedback.VoiceStatus
-import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.pdr.StepDetector
 import com.appvalence.umay.positioning.pdr.StepLengthCalibration
-import kotlin.math.roundToInt
 import java.text.DecimalFormat
+import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val settings = remember { UserSettings(context) }
-    var calibratedStepLength by remember { mutableStateOf(settings.calibratedStepLengthMeters) }
-    var calibrating by remember { mutableStateOf(false) }
+fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier, viewModel: SettingsViewModel = hiltViewModel()) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    // Whatever was being said here is cut off on leaving; the shared voice itself stays up.
+    DisposableEffect(viewModel) { onDispose { viewModel.stopSpeaking() } }
 
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        if (calibrating) {
+        if (state.calibrating) {
             StepCalibration(
-                onSave = { stepLength ->
-                    settings.calibratedStepLengthMeters = stepLength
-                    calibratedStepLength = stepLength
-                    calibrating = false
-                },
-                onCancel = { calibrating = false },
+                onSave = viewModel::saveCalibratedStepLength,
+                onCancel = viewModel::cancelCalibration,
             )
             return@Column
         }
 
         SettingsCard(icon = Icons.AutoMirrored.Filled.DirectionsWalk, title = stringResource(R.string.settings_step_title)) {
+            val calibrated = state.calibratedStepLengthMeters
             Text(
-                text = calibratedStepLength
+                text = calibrated
                     ?.let { stringResource(R.string.settings_step_calibrated, centimeters(it)) }
                     ?: stringResource(R.string.settings_step_default, centimeters(StepDetector.AVERAGE_STEP_LENGTH_METERS)),
                 style = MaterialTheme.typography.bodyLarge,
@@ -102,54 +91,41 @@ fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )
-            Button(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), onClick = { calibrating = true }) {
-                Text(stringResource(if (calibratedStepLength == null) R.string.settings_step_calibrate else R.string.settings_step_recalibrate))
+            Button(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), onClick = viewModel::startCalibration) {
+                Text(stringResource(if (calibrated == null) R.string.settings_step_calibrate else R.string.settings_step_recalibrate))
             }
-            if (calibratedStepLength != null) {
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        settings.calibratedStepLengthMeters = null
-                        calibratedStepLength = null
-                    },
-                ) { Text(stringResource(R.string.settings_step_reset)) }
+            if (calibrated != null) {
+                TextButton(modifier = Modifier.fillMaxWidth(), onClick = viewModel::resetStepLength) {
+                    Text(stringResource(R.string.settings_step_reset))
+                }
             }
         }
 
-        val hasBarometer = remember { BarometerSensor.isAvailable(context) }
         SettingsCard(icon = Icons.Filled.Layers, title = stringResource(R.string.settings_floor_title)) {
             Text(
-                text = stringResource(if (hasBarometer) R.string.settings_floor_barometer else R.string.settings_floor_no_barometer),
+                text = stringResource(if (viewModel.hasBarometer) R.string.settings_floor_barometer else R.string.settings_floor_no_barometer),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
 
         SettingsCard(icon = Icons.Filled.RecordVoiceOver, title = stringResource(R.string.settings_voice_title)) {
-            VoiceSettings(settings)
+            VoiceSettings(viewModel, state.speechRate)
         }
 
         SettingsCard(icon = Icons.Filled.Vibration, title = stringResource(R.string.settings_haptics_title)) {
-            HapticSettings(settings)
+            HapticSettings(viewModel, state.hapticsEnabled)
         }
 
         SettingsCard(icon = Icons.Filled.LightMode, title = stringResource(R.string.settings_screen_title)) {
-            var keepScreenOn by remember { mutableStateOf(settings.keepScreenOnDuringNavigation) }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .toggleable(
-                        value = keepScreenOn,
-                        role = Role.Switch,
-                        onValueChange = {
-                            keepScreenOn = it
-                            settings.keepScreenOnDuringNavigation = it
-                        },
-                    ),
+                    .toggleable(value = state.keepScreenOn, role = Role.Switch, onValueChange = viewModel::setKeepScreenOn),
             ) {
                 Text(text = stringResource(R.string.settings_keep_screen_on), style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = keepScreenOn, onCheckedChange = null)
+                Switch(checked = state.keepScreenOn, onCheckedChange = null)
             }
             Text(
                 text = stringResource(R.string.settings_keep_screen_on_body),
@@ -190,19 +166,17 @@ private fun SettingsCard(icon: ImageVector, title: String, content: @Composable 
 
 /** Which voice guidance will be spoken in and how fast, a way to hear it, and a fix if it's the wrong voice. */
 @Composable
-private fun VoiceSettings(settings: UserSettings) {
-    val context = LocalContext.current
-    val tts = rememberAppSpeech()
-    val status by tts.voiceStatus.collectAsState()
-    var rate by remember { mutableFloatStateOf(settings.speechRate) }
+private fun VoiceSettings(viewModel: SettingsViewModel, rate: Float) {
+    val resources = LocalResources.current
+    val status by viewModel.voiceStatus.collectAsStateWithLifecycle()
 
     when (status) {
         VoiceStatus.INITIALIZING -> Text(stringResource(R.string.voice_checking), style = MaterialTheme.typography.bodyMedium)
         VoiceStatus.READY -> Text(stringResource(R.string.voice_ready), style = MaterialTheme.typography.bodyMedium)
-        else -> VoiceStatusNotice(tts)
+        else -> VoiceStatusNotice(status, onRecheck = viewModel::refreshVoice)
     }
     val sample = stringResource(R.string.voice_sample)
-    OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), onClick = { tts.speakNow(sample) }) {
+    OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), onClick = { viewModel.speak(sample) }) {
         Text(stringResource(R.string.voice_try))
     }
 
@@ -210,11 +184,8 @@ private fun VoiceSettings(settings: UserSettings) {
     // and to count by touch, and it speaks its new pace right away — the value itself
     // is spoken as part of the sample, so this works the same with TalkBack on.
     fun changeRate(step: Int) {
-        val index = (SPEECH_RATE_STEPS.indexOfFirst { it >= rate }.takeIf { it >= 0 } ?: SPEECH_RATE_STEPS.lastIndex) + step
-        rate = SPEECH_RATE_STEPS[index.coerceIn(0, SPEECH_RATE_STEPS.lastIndex)]
-        settings.speechRate = rate
-        tts.speechRate = rate
-        tts.speakNow(context.getString(R.string.settings_rate_sample, formatRate(rate)))
+        val newRate = viewModel.changeSpeechRate(step)
+        viewModel.speak(resources.getString(R.string.settings_rate_sample, formatRate(newRate)))
     }
     Text(
         text = stringResource(R.string.settings_rate_label, formatRate(rate)),
@@ -222,17 +193,14 @@ private fun VoiceSettings(settings: UserSettings) {
         modifier = Modifier.padding(top = 16.dp),
     )
     Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(modifier = Modifier.weight(1f), enabled = rate > SPEECH_RATE_STEPS.first(), onClick = { changeRate(-1) }) {
+        OutlinedButton(modifier = Modifier.weight(1f), enabled = rate > SettingsViewModel.SPEECH_RATE_STEPS.first(), onClick = { changeRate(-1) }) {
             Text(stringResource(R.string.settings_rate_slower))
         }
-        OutlinedButton(modifier = Modifier.weight(1f), enabled = rate < SPEECH_RATE_STEPS.last(), onClick = { changeRate(+1) }) {
+        OutlinedButton(modifier = Modifier.weight(1f), enabled = rate < SettingsViewModel.SPEECH_RATE_STEPS.last(), onClick = { changeRate(+1) }) {
             Text(stringResource(R.string.settings_rate_faster))
         }
     }
 }
-
-// From "new to speech output" to "experienced screen-reader user" pace.
-private val SPEECH_RATE_STEPS = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
 
 private fun formatRate(rate: Float): String = DecimalFormat("0.##").format(rate)
 
@@ -255,28 +223,17 @@ private val HAPTIC_GUIDE = listOf(
  * here — not for the first time mid-corridor.
  */
 @Composable
-private fun HapticSettings(settings: UserSettings) {
-    val context = LocalContext.current
-    val haptics = remember { HapticFeedbackController(context) }
-    DisposableEffect(Unit) { onDispose { haptics.stop() } }
-    if (!haptics.isAvailable) {
+private fun HapticSettings(viewModel: SettingsViewModel, enabled: Boolean) {
+    if (!viewModel.hapticsAvailable) {
         Text(stringResource(R.string.settings_haptics_unavailable), style = MaterialTheme.typography.bodyMedium)
         return
     }
-    var enabled by remember { mutableStateOf(settings.hapticsEnabled) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
-            .toggleable(
-                value = enabled,
-                role = Role.Switch,
-                onValueChange = {
-                    enabled = it
-                    settings.hapticsEnabled = it
-                },
-            ),
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = viewModel::setHapticsEnabled),
     ) {
         Text(text = stringResource(R.string.settings_haptics_toggle), style = MaterialTheme.typography.bodyLarge)
         // Row's toggleable owns the click and the merged accessible name (see BeaconScannerScreen).
@@ -289,10 +246,7 @@ private fun HapticSettings(settings: UserSettings) {
         modifier = Modifier.padding(top = 8.dp),
     )
     HAPTIC_GUIDE.forEach { (cue, label) ->
-        OutlinedButton(
-            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-            onClick = { HapticPatterns.forCue(cue)?.let(haptics::play) },
-        ) {
+        OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 6.dp), onClick = { viewModel.playHaptic(cue) }) {
             Text(stringResource(label), modifier = Modifier.fillMaxWidth())
         }
     }
@@ -333,29 +287,23 @@ private fun AboutSection() {
     )
 }
 
-private enum class CalibrationPhase { SETUP, WALKING, RESULT }
-
 /**
- * Walk a known distance, count the steps, divide (see [StepLengthCalibration]).
  * The "done" control while walking is one huge button filling most of the
  * screen, so it can be hit without looking — the person is walking, and may
  * well be blind — and every phase is spoken.
  */
 @Composable
-private fun StepCalibration(onSave: (Double) -> Unit, onCancel: () -> Unit) {
+private fun StepCalibration(onSave: (Double) -> Unit, onCancel: () -> Unit, viewModel: StepCalibrationViewModel = hiltViewModel()) {
     val context = LocalContext.current
-    val sensorsAvailable = remember { StepDetector.isAvailable(context) }
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val screenReaderOn = rememberIsScreenReaderOn()
-    val tts = rememberAppSpeech()
     fun say(text: String) {
-        if (!screenReaderOn) tts.speakNow(text)
+        if (!screenReaderOn) viewModel.speak(text)
     }
-
-    var phase by remember { mutableStateOf(CalibrationPhase.SETUP) }
-    var distanceText by remember { mutableStateOf(DEFAULT_CALIBRATION_DISTANCE_METERS.toString()) }
-    var steps by remember { mutableIntStateOf(0) }
-    var result by remember { mutableStateOf<StepLengthCalibration.Result?>(null) }
-    val distance = distanceText.replace(',', '.').toDoubleOrNull()
+    fun close(action: () -> Unit) {
+        viewModel.reset()
+        action()
+    }
 
     Text(
         text = stringResource(R.string.calibration_title),
@@ -363,14 +311,14 @@ private fun StepCalibration(onSave: (Double) -> Unit, onCancel: () -> Unit) {
         modifier = Modifier.semantics { heading() },
     )
 
-    if (!sensorsAvailable) {
+    if (!viewModel.sensorsAvailable) {
         Text(stringResource(R.string.calibration_no_sensors), modifier = Modifier.padding(top = 8.dp))
-        TextButton(onClick = onCancel) { Text(stringResource(R.string.common_back)) }
+        TextButton(onClick = { close(onCancel) }) { Text(stringResource(R.string.common_back)) }
         return
     }
 
     val walkingPrompt = stringResource(R.string.calibration_walking_spoken)
-    when (phase) {
+    when (state.phase) {
         CalibrationPhase.SETUP -> {
             Text(
                 text = stringResource(R.string.calibration_instructions),
@@ -378,12 +326,12 @@ private fun StepCalibration(onSave: (Double) -> Unit, onCancel: () -> Unit) {
                 modifier = Modifier.padding(top = 8.dp),
             )
             OutlinedTextField(
-                value = distanceText,
-                onValueChange = { distanceText = it },
+                value = state.distanceText,
+                onValueChange = viewModel::setDistanceText,
                 label = { Text(stringResource(R.string.calibration_distance_label)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = distance == null || distance < StepLengthCalibration.MIN_DISTANCE_METERS,
+                isError = !state.distanceValid,
                 supportingText = {
                     val minMeters = StepLengthCalibration.MIN_DISTANCE_METERS.roundToInt()
                     Text(pluralStringResource(R.plurals.calibration_distance_hint, minMeters, minMeters))
@@ -392,21 +340,16 @@ private fun StepCalibration(onSave: (Double) -> Unit, onCancel: () -> Unit) {
             )
             Button(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(top = 8.dp),
-                enabled = distance != null && distance >= StepLengthCalibration.MIN_DISTANCE_METERS,
+                enabled = state.distanceValid,
                 onClick = {
-                    steps = 0
-                    phase = CalibrationPhase.WALKING
+                    viewModel.startWalking()
                     say(walkingPrompt)
                 },
             ) { Text(stringResource(R.string.calibration_start)) }
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = onCancel) { Text(stringResource(R.string.common_cancel)) }
+            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { close(onCancel) }) { Text(stringResource(R.string.common_cancel)) }
         }
 
         CalibrationPhase.WALKING -> {
-            LaunchedEffect(Unit) {
-                // The stride passed in doesn't matter here — only the step count is used.
-                StepDetector(context).stepEvents().collect { steps++ }
-            }
             Text(
                 text = stringResource(R.string.calibration_walking),
                 style = MaterialTheme.typography.bodyLarge,
@@ -414,46 +357,44 @@ private fun StepCalibration(onSave: (Double) -> Unit, onCancel: () -> Unit) {
             )
             Button(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp).padding(top = 16.dp),
-                onClick = {
-                    val computed = StepLengthCalibration.compute(distance ?: 0.0, steps)
-                    result = computed
-                    phase = CalibrationPhase.RESULT
-                    say(resultMessage(context, computed))
-                },
+                onClick = { say(resultMessage(context, viewModel.finishWalking())) },
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(stringResource(R.string.calibration_done), style = MaterialTheme.typography.headlineMedium)
                     Text(
-                        text = pluralStringResource(R.plurals.calibration_step_count, steps, steps),
+                        text = pluralStringResource(R.plurals.calibration_step_count, state.steps, state.steps),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
             }
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { phase = CalibrationPhase.SETUP }) {
+            TextButton(modifier = Modifier.fillMaxWidth(), onClick = viewModel::backToSetup) {
                 Text(stringResource(R.string.common_cancel))
             }
         }
 
         CalibrationPhase.RESULT -> {
-            val current = result
+            val result = state.result
             Text(
-                text = current?.let { resultMessage(context, it) }.orEmpty(),
+                text = result?.let { resultMessage(context, it) }.orEmpty(),
                 style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Start,
                 modifier = Modifier
                     .padding(top = 12.dp)
                     .semantics { if (screenReaderOn) liveRegion = LiveRegionMode.Polite },
             )
-            if (current is StepLengthCalibration.Result.Success) {
-                Button(modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(top = 12.dp), onClick = { onSave(current.stepLengthMeters) }) {
+            if (result is StepLengthCalibration.Result.Success) {
+                Button(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(top = 12.dp),
+                    onClick = { close { onSave(result.stepLengthMeters) } },
+                ) {
                     Text(stringResource(R.string.common_save))
                 }
             }
-            OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), onClick = { phase = CalibrationPhase.SETUP }) {
+            OutlinedButton(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), onClick = viewModel::backToSetup) {
                 Text(stringResource(R.string.calibration_retry))
             }
-            TextButton(modifier = Modifier.fillMaxWidth(), onClick = onCancel) { Text(stringResource(R.string.common_cancel)) }
+            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { close(onCancel) }) { Text(stringResource(R.string.common_cancel)) }
         }
     }
 }
@@ -476,5 +417,3 @@ private fun resultMessage(context: Context, result: StepLengthCalibration.Result
 }
 
 private fun centimeters(meters: Double): Int = (meters * 100).roundToInt()
-
-private const val DEFAULT_CALIBRATION_DISTANCE_METERS = 10

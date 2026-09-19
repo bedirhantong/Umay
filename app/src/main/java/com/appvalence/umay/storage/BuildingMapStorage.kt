@@ -3,7 +3,10 @@ package com.appvalence.umay.storage
 import android.content.Context
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /** Where building maps live — an interface so [BuildingRepository] can be tested without a device. */
 interface BuildingMapStore {
@@ -27,7 +30,8 @@ interface BuildingMapStore {
  * Every method does disk I/O: call from a background thread (see
  * [BuildingRepository], the only intended caller).
  */
-class BuildingMapStorage(context: Context) : BuildingMapStore {
+@Singleton
+class BuildingMapStorage @Inject constructor(@ApplicationContext context: Context) : BuildingMapStore {
     private val directory = File(context.filesDir, DIRECTORY_NAME).apply { mkdirs() }
     private val exportDirectory = File(context.cacheDir, EXPORT_DIRECTORY_NAME)
 
