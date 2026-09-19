@@ -320,6 +320,34 @@
     <string name="files_crash_share_description">Bu çökme kaydını paylaş</string>
     <string name="files_crash_delete_description">Bu çökme kaydını sil</string>
 
+    <!-- Shared map pool (SharedMapPoolSection) -->
+    <string name="cloud_pool_title">Paylaşımlı harita havuzu</string>
+    <string name="cloud_pool_body">Bir bina haritasını herkese açarsan, aynı binaya giden başka biri onu tekrar taramak zorunda kalmaz. Yayınlanan haritalar herkese açıktır; kaldırmak istediğinde bu ekrandan kaldırabilirsin.</string>
+    <string name="cloud_offline">İnternet yok. Bağlanınca burada binaları görebilir, kendi haritalarını herkese açabilirsin. Şimdilik yukarıdaki dışa/içe aktarma ile devam edebilirsin.</string>
+    <string name="cloud_no_local_buildings">Herkese açabileceğin bir haritan yok. Önce Beacon Tarayıcı ile bir bina çıkar.</string>
+    <string name="cloud_status_published">Herkese açık</string>
+    <string name="cloud_status_local_only">Sadece bu cihazda</string>
+    <string name="cloud_publish_description">%1$s binasını herkese aç</string>
+    <string name="cloud_unpublish_description">%1$s binasının paylaşımını kaldır</string>
+    <string name="cloud_publish_confirm_title">\'%1$s\' herkese açılsın mı?</string>
+    <string name="cloud_publish_confirm_body">Bu haritayı indirip görebilir. İçinde isimlendirdiğin yer adları ve Bluetooth sinyal bilgileri olur, kişisel bir bilgi olmaz. İstediğin zaman bu ekrandan kaldırabilirsin.</string>
+    <string name="cloud_publish_confirm_action">Herkese aç</string>
+    <string name="cloud_publish_success">\'%1$s\' herkese açıldı.</string>
+    <string name="cloud_unpublish_confirm_title">Paylaşım kaldırılsın mı?</string>
+    <string name="cloud_unpublish_confirm_body">\'%1$s\' artık herkese açık listede görünmeyecek. Cihazındaki harita olduğu gibi kalır.</string>
+    <string name="cloud_discover_title">Keşfet</string>
+    <string name="cloud_refresh">Listeyi yenile</string>
+    <string name="cloud_pool_empty">Henüz herkese açılmış bir bina yok.</string>
+    <string name="cloud_download_description">%1$s haritasını indir</string>
+    <string name="cloud_download_success">\'%1$s\' haritan eklendi.</string>
+    <string name="cloud_map_corrupt">İndirilen harita bozuk görünüyor.</string>
+    <string name="cloud_error_no_connection">İnternete ulaşılamadı. Bağlantını kontrol edip tekrar dene.</string>
+    <string name="cloud_error_not_found">Bu harita artık orada değil, kaldırılmış olabilir.</string>
+    <string name="cloud_error_too_large">Bu harita paylaşım için fazla büyük.</string>
+    <string name="cloud_error_invalid_map">Harita bozuk görünüyor, paylaşılamadı.</string>
+    <string name="cloud_error_not_owner">Bu haritayı sadece onu ilk yükleyen cihaz kaldırabilir.</string>
+    <string name="cloud_error_other">Bir şeyler ters gitti: %1$s</string>
+
     <!-- Building import -->
     <string name="import_success_title">İçe aktarıldı</string>
     <string name="import_success_body">\'%1$s\' haritası eklendi (%2$s).</string>

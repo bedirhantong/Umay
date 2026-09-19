@@ -69,7 +69,7 @@ class FirestoreBuildingMapRepository(
             ?: return Result.remoteFailure(RemoteMapFailure.Other("Bozuk harita verisi"))
     }.recoverFirestoreFailure()
 
-    override suspend fun publishBuildingMap(map: BuildingMap): Result<Unit> = runCatching {
+    override suspend fun publishBuildingMap(map: BuildingMap): Result<String> = runCatching {
         val problems = BuildingMapJson.problems(map)
         if (problems.isNotEmpty()) return Result.remoteFailure(RemoteMapFailure.InvalidMap(problems))
 
@@ -90,6 +90,7 @@ class FirestoreBuildingMapRepository(
                 FIELD_UPDATED_AT to System.currentTimeMillis(),
             ),
         )
+        id
     }.recoverFirestoreFailure()
 
     override suspend fun unpublishBuildingMap(id: String): Result<Unit> = runCatching {
