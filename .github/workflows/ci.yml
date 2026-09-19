@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, development]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test, lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Pull requests reuse the cache main and development build; they never write to it.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/development' }}
+
+      # The real Firebase config is kept out of this public repository. The
+      # placeholder lets everything build and be tested; only the shared map
+      # pool needs the real one, and it's never exercised by these tests.
+      - name: Use placeholder Firebase config
+        run: cp app/google-services.json.example app/google-services.json
+
+      - name: Unit tests
+        run: >
+          ./gradlew --stacktrace
+          :core-model:test
+          :positioning:testDebugUnitTest
+          :perception:testDebugUnitTest
+          :orchestrator:testDebugUnitTest
+          :feedback:testDebugUnitTest
+          :cloud:testDebugUnitTest
+          :app:testDebugUnitTest
+
+      - name: Lint
+        run: ./gradlew --stacktrace :app:lintDebug
+
+      - name: Build debug APK
+        run: ./gradlew --stacktrace :app:assembleDebug
+
+      - name: Upload test and lint reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            **/build/reports/
+            **/build/test-results/
+          retention-days: 7
