@@ -6,6 +6,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import com.appvalence.umay.coremodel.StepEvent
+import com.appvalence.umay.positioning.SensorThread
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -61,20 +62,22 @@ class StepDetector(context: Context, private val stepLengthMeters: Double = AVER
             return@callbackFlow
         }
 
+        // Everything below is touched only from SensorThread, one event at a time.
         var lastStepTimestampMs = 0L
         var currentHeadingDeg = 0f
         var lastHeadingDeg = 0f
         var runningBaseline = SensorManager.GRAVITY_EARTH.toDouble()
         var awaitingFall = false
         var lastAccelTimestampNs = 0L
+        // Reused for every rotation event (~50 a second) instead of allocated per event.
+        val rotationMatrix = FloatArray(9)
+        val orientation = FloatArray(3)
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 when (event.sensor.type) {
                     Sensor.TYPE_GAME_ROTATION_VECTOR -> {
-                        val rotationMatrix = FloatArray(9)
                         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
-                        val orientation = FloatArray(3)
                         SensorManager.getOrientation(rotationMatrix, orientation)
                         val degrees = Math.toDegrees(orientation[0].toDouble()).toFloat()
                         currentHeadingDeg = if (degrees < 0f) degrees + 360f else degrees
@@ -137,8 +140,8 @@ class StepDetector(context: Context, private val stepLengthMeters: Double = AVER
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
         }
 
-        sensorManager.registerListener(listener, accel, SensorManager.SENSOR_DELAY_GAME)
-        sensorManager.registerListener(listener, rotation, SensorManager.SENSOR_DELAY_GAME)
+        sensorManager.registerListener(listener, accel, SensorManager.SENSOR_DELAY_GAME, SensorThread.handler)
+        sensorManager.registerListener(listener, rotation, SensorManager.SENSOR_DELAY_GAME, SensorThread.handler)
 
         awaitClose { sensorManager.unregisterListener(listener) }
     }

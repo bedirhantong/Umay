@@ -3,6 +3,7 @@ package com.appvalence.umay.diagnostics
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.appvalence.umay.common.newestFirst
 import com.appvalence.umay.navigation.NavigationSessions
 import java.io.File
 import java.text.SimpleDateFormat
@@ -39,9 +40,10 @@ object CrashLog {
         }
     }
 
+    /** Newest first. Disk I/O: call off the main thread. */
     fun list(context: Context): List<File> =
         directory(context).listFiles { file -> file.extension == EXTENSION }
-            ?.sortedByDescending { it.lastModified() }
+            ?.newestFirst()
             .orEmpty()
 
     fun delete(context: Context, file: File): Boolean = file.parentFile == directory(context) && file.delete()

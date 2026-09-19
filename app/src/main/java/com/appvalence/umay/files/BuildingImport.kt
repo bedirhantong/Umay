@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.appvalence.umay.R
+import com.appvalence.umay.appGraph
 import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
@@ -61,19 +62,21 @@ class BuildingImporter internal constructor(
  * losing a local survey by accident is not something to do silently.
  */
 @Composable
-fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): BuildingImporter {
+fun rememberBuildingImporter(): BuildingImporter {
     val context = LocalContext.current
+    val buildings = context.appGraph.buildings
     val scope = rememberCoroutineScope()
     var pendingOverwrite by remember { mutableStateOf<BuildingMap?>(null) }
     var message by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     fun save(map: BuildingMap) {
-        message = if (BuildingMapStorage(context).save(map)) {
-            onImported(map)
-            context.getString(R.string.import_success_title) to
-                context.getString(R.string.import_success_body, map.id, context.buildingSummary(map.floors.size, map.floors.sumOf { it.nodes.size }))
-        } else {
-            context.getString(R.string.import_save_failed_title) to context.getString(R.string.import_save_failed_body)
+        scope.launch {
+            message = if (buildings.save(map)) {
+                context.getString(R.string.import_success_title) to
+                    context.getString(R.string.import_success_body, map.id, context.buildingSummary(map.floors.size, map.floors.sumOf { it.nodes.size }))
+            } else {
+                context.getString(R.string.import_save_failed_title) to context.getString(R.string.import_save_failed_body)
+            }
         }
     }
 
@@ -82,7 +85,7 @@ fun rememberBuildingImporter(onImported: (BuildingMap) -> Unit): BuildingImporte
             when (val read = readBuildingMap(context, uri)) {
                 is ImportRead.Rejected -> message = context.getString(R.string.import_failed_title) to read.reason
                 is ImportRead.Parsed ->
-                    if (BuildingMapStorage(context).exists(read.map.id)) pendingOverwrite = read.map else save(read.map)
+                    if (buildings.exists(read.map.id)) pendingOverwrite = read.map else save(read.map)
             }
         }
     }

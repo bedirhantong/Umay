@@ -5,13 +5,29 @@ import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
 import java.io.File
 
+/** Where building maps live — an interface so [BuildingRepository] can be tested without a device. */
+interface BuildingMapStore {
+    fun listBuildings(): List<BuildingMap>
+
+    /** Returns true on success; false (never throws) if the write failed — e.g. storage full. */
+    fun save(map: BuildingMap): Boolean
+    fun exists(buildingId: String): Boolean
+    fun delete(buildingId: String): Boolean
+
+    /** A shareable copy of [map] for another device; null if it couldn't be written. */
+    fun exportCopy(map: BuildingMap): File?
+}
+
 /**
  * Persists every surveyed [BuildingMap] this app knows about — one JSON file
  * per building, named after [BuildingMap.id], under the app's private
  * storage. Multiple buildings can be surveyed and kept side by side; saving
  * again under the same id overwrites that one building only.
+ *
+ * Every method does disk I/O: call from a background thread (see
+ * [BuildingRepository], the only intended caller).
  */
-class BuildingMapStorage(context: Context) {
+class BuildingMapStorage(context: Context) : BuildingMapStore {
     private val directory = File(context.filesDir, DIRECTORY_NAME).apply { mkdirs() }
     private val exportDirectory = File(context.cacheDir, EXPORT_DIRECTORY_NAME)
 
@@ -20,8 +36,7 @@ class BuildingMapStorage(context: Context) {
         migrateUnhashedFileNames()
     }
 
-    /** Returns true on success; false (never throws) if the disk write failed — e.g. storage full. */
-    fun save(map: BuildingMap): Boolean =
+    override fun save(map: BuildingMap): Boolean =
         runCatching { fileFor(map.id).writeText(BuildingMapJson.encode(map)) }.isSuccess
 
     fun load(buildingId: String): BuildingMap? {
@@ -30,11 +45,11 @@ class BuildingMapStorage(context: Context) {
         return runCatching { BuildingMapJson.decode(file.readText()) }.getOrNull()
     }
 
-    fun exists(buildingId: String): Boolean = fileFor(buildingId).exists()
+    override fun exists(buildingId: String): Boolean = fileFor(buildingId).exists()
 
-    fun delete(buildingId: String): Boolean = fileFor(buildingId).delete()
+    override fun delete(buildingId: String): Boolean = fileFor(buildingId).delete()
 
-    fun listBuildings(): List<BuildingMap> =
+    override fun listBuildings(): List<BuildingMap> =
         directory.listFiles { file -> file.extension == "json" }
             ?.mapNotNull { file -> runCatching { BuildingMapJson.decode(file.readText()) }.getOrNull() }
             ?.sortedBy { it.id }
@@ -46,7 +61,7 @@ class BuildingMapStorage(context: Context) {
      * [shareFiles]. Lives in the cache directory: it's a throwaway copy, the
      * real one stays in [directory]. Null if the write failed.
      */
-    fun exportCopy(map: BuildingMap): File? = runCatching {
+    override fun exportCopy(map: BuildingMap): File? = runCatching {
         exportDirectory.mkdirs()
         File(exportDirectory, "${sanitizeFileName(map.id)}$EXPORT_SUFFIX").apply {
             writeText(BuildingMapJson.encode(map))

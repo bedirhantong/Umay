@@ -33,6 +33,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,10 +48,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,9 +67,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.appvalence.umay.R
+import com.appvalence.umay.appGraph
 import com.appvalence.umay.common.PermissionRationale
-import com.appvalence.umay.common.createSpeechController
 import com.appvalence.umay.common.countText
+import com.appvalence.umay.common.rememberAppSpeech
+import com.appvalence.umay.common.throttleLatest
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
@@ -83,9 +88,13 @@ import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
 import com.appvalence.umay.positioning.trilateration.BeaconSurveyResult
 import com.appvalence.umay.positioning.trilateration.BeaconSurveySolver
 import com.appvalence.umay.settings.UserSettings
-import com.appvalence.umay.storage.BuildingMapStorage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 /**
@@ -101,17 +110,57 @@ import kotlin.math.roundToInt
 private object BeaconSurveyLog {
     val discovered = mutableStateMapOf<String, BleBeaconReading>()
     val trajectory = mutableStateListOf<Position>()
-    val rawReadings = mutableStateListOf<BleBeaconReading>()
+
+    // Every BLE sighting of the whole walk — often tens of thousands. Deliberately a
+    // plain list, not snapshot state: as state, each of the dozens of sightings a
+    // second redrew the recording card, and the list only grew for the whole walk.
+    // The screen shows [rawReadingCount] instead, refreshed a couple of times a second.
+    // Main thread only.
+    val rawReadings = ArrayList<BleBeaconReading>()
+    var rawReadingCount by mutableIntStateOf(0)
+
     val taggedWaypoints = mutableStateListOf<TaggedWaypoint>()
     var isRecording by mutableStateOf(false)
     var results by mutableStateOf<List<BeaconSurveyResult>>(emptyList())
     var hasSolved by mutableStateOf(false)
+    var solving by mutableStateOf(false)
 
     // Manually marked by the operator when taking stairs/an elevator (no barometer-based
     // floor detection yet). PDR has no vertical axis, so a floor change starts a fresh
     // (x, y) origin instead of letting stairwell walking distort the current floor's shape.
     var currentFloor by mutableStateOf(0)
+
+    // Solving outlives the screen, like the rest of this log: leaving the tab while the
+    // map is being computed must not throw the result away.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /** Matches every sighting against the walk off the main thread — see [BeaconSurveySolver.solve]. */
+    fun solve() {
+        val trajectorySnapshot = trajectory.toList()
+        val readingsSnapshot = rawReadings.toList()
+        rawReadingCount = readingsSnapshot.size
+        solving = true
+        scope.launch {
+            results = withContext(Dispatchers.Default) { BeaconSurveySolver.solve(trajectorySnapshot, readingsSnapshot) }
+            hasSolved = true
+            solving = false
+        }
+    }
+
+    fun clear() {
+        trajectory.clear()
+        rawReadings.clear()
+        rawReadingCount = 0
+        taggedWaypoints.clear()
+        results = emptyList()
+        hasSolved = false
+        currentFloor = 0
+    }
 }
+
+// BLE sightings change far faster than anyone can read a list; this is how often the
+// screen follows them.
+private const val BEACON_UI_REFRESH_MS = 500L
 
 private val REQUIRED_BLE_PERMISSIONS = buildList {
     add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -190,12 +239,16 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         onDispose { if (isRecording) scanner.stop() }
     }
 
-    val beacons by scanner.beaconUpdates().collectAsState(initial = emptyList())
+    // Created once (not on every recomposition, which restarted the collection each
+    // time) and throttled: read only where it's shown or used, so a sighting doesn't
+    // redraw the whole screen — see BEACON_UI_REFRESH_MS.
+    val beaconUpdates = remember(scanner) { scanner.beaconUpdates().throttleLatest(BEACON_UI_REFRESH_MS) }
+    val beaconsState = beaconUpdates.collectAsState(initial = emptyList())
     val scanState by scanner.scanState().collectAsState(initial = BleScanState.Idle)
 
     val discoveredBeacons = BeaconSurveyLog.discovered
-    LaunchedEffect(scanner) {
-        scanner.beaconUpdates().collect { list ->
+    LaunchedEffect(beaconUpdates) {
+        beaconUpdates.collect { list ->
             list.filter { it.uuid != null }.forEach { discoveredBeacons[it.beaconId] = it }
         }
     }
@@ -212,8 +265,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
     val hasBarometer = remember { BarometerSensor.isAvailable(context) }
     val barometer = remember { BarometerSensor(context) }
     val floorTracker = remember { BarometricFloorTracker() }
-    val speech = remember { createSpeechController(context) }
-    DisposableEffect(Unit) { onDispose { speech.shutdown() } }
+    val speech = rememberAppSpeech()
     var lastAutoFloorChange by remember { mutableStateOf<String?>(null) }
     val trajectory = BeaconSurveyLog.trajectory
     val rawReadings = BeaconSurveyLog.rawReadings
@@ -232,6 +284,12 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                 }
             }
             launch { scanner.rawReadingUpdates().collect { reading -> rawReadings.add(reading) } }
+            launch {
+                while (true) {
+                    BeaconSurveyLog.rawReadingCount = rawReadings.size
+                    delay(BEACON_UI_REFRESH_MS)
+                }
+            }
             if (hasBarometer) {
                 launch {
                     floorTracker.resetBaseline()
@@ -251,17 +309,6 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
     }
 
     var showOnlyIBeacon by remember { mutableStateOf(true) }
-    val visibleBeacons = if (showOnlyIBeacon) beacons.filter { it.uuid != null } else beacons
-
-    val uuidGroups = remember(beacons) {
-        beacons.filter { it.uuid != null }
-            .groupBy { it.uuid!! }
-            .map { (uuid, readings) ->
-                UuidGroup(uuid = uuid, distinctMinors = readings.mapNotNull { it.minor }.toSet().size, sightingCount = readings.size)
-            }
-            .sortedByDescending { it.distinctMinors }
-    }
-
     var showAdvanced by remember { mutableStateOf(false) }
 
     LazyColumn(modifier = modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -276,14 +323,10 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         }
 
         item {
-            val solve = {
-                BeaconSurveyLog.results = BeaconSurveySolver.solve(trajectory, rawReadings)
-                BeaconSurveyLog.hasSolved = true
-            }
             RecordingCard(
                 isRecording = BeaconSurveyLog.isRecording,
                 trajectoryPointCount = trajectory.size,
-                rawReadingCount = rawReadings.size,
+                rawReadingCount = BeaconSurveyLog.rawReadingCount,
                 taggedWaypointCount = BeaconSurveyLog.taggedWaypoints.size,
                 currentFloor = BeaconSurveyLog.currentFloor,
                 strideCalibrated = strideCalibrated,
@@ -294,7 +337,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                     BeaconSurveyLog.isRecording = false
                     // Stopping is exactly when there's something new to solve; requiring a
                     // separate manual step right after is friction nobody needs.
-                    solve()
+                    BeaconSurveyLog.solve()
                 },
                 onFloorChange = { delta ->
                     BeaconSurveyLog.currentFloor += delta
@@ -302,14 +345,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                     floorTracker.resetBaseline()
                     lastAutoFloorChange = null
                 },
-                onClear = {
-                    trajectory.clear()
-                    rawReadings.clear()
-                    BeaconSurveyLog.taggedWaypoints.clear()
-                    BeaconSurveyLog.results = emptyList()
-                    BeaconSurveyLog.hasSolved = false
-                    BeaconSurveyLog.currentFloor = 0
-                },
+                onClear = BeaconSurveyLog::clear,
             )
         }
 
@@ -320,7 +356,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                     onTag = { name, type ->
                         val position = trajectory.lastOrNull { it.floor == BeaconSurveyLog.currentFloor }
                         if (position != null) {
-                            val fingerprint = beacons.filter { it.uuid != null }.map { RadioFingerprint(it.beaconId, it.rssi.toDouble()) }
+                            val fingerprint = beaconsState.value.filter { it.uuid != null }.map { RadioFingerprint(it.beaconId, it.rssi.toDouble()) }
                             BeaconSurveyLog.taggedWaypoints.add(TaggedWaypoint(name, position.x, position.y, position.floor, fingerprint, type))
                         }
                     },
@@ -337,7 +373,9 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        if (BeaconSurveyLog.hasSolved && !BeaconSurveyLog.isRecording) {
+        if (BeaconSurveyLog.solving) {
+            item { CircularProgressIndicator() }
+        } else if (BeaconSurveyLog.hasSolved && !BeaconSurveyLog.isRecording) {
             item {
                 SaveMapCard(
                     context = context,
@@ -360,6 +398,15 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         }
 
         if (showAdvanced) {
+            val beacons = beaconsState.value
+            val visibleBeacons = if (showOnlyIBeacon) beacons.filter { it.uuid != null } else beacons
+            val uuidGroups = beacons.filter { it.uuid != null }
+                .groupBy { it.uuid!! }
+                .map { (uuid, readings) ->
+                    UuidGroup(uuid = uuid, distinctMinors = readings.mapNotNull { it.minor }.toSet().size, sightingCount = readings.size)
+                }
+                .sortedByDescending { it.distinctMinors }
+
             item {
                 DiscoveredHeader(
                     discoveredCount = discoveredBeacons.size,
@@ -627,7 +674,10 @@ private fun SaveMapCard(
 ) {
     var saveMessage by remember { mutableStateOf<String?>(null) }
     var saveFailed by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
     var buildingName by remember { mutableStateOf("") }
+    val buildings = context.appGraph.buildings
+    val scope = rememberCoroutineScope()
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(modifier = Modifier.padding(16.dp)) {
             if (results.isEmpty() && taggedWaypoints.isEmpty()) {
@@ -662,27 +712,35 @@ private fun SaveMapCard(
             )
             Button(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                enabled = buildingName.isNotBlank(),
+                enabled = buildingName.isNotBlank() && !saving,
                 onClick = {
-                    val map = BeaconMapBuilder.buildFromWaypoints(
-                        buildingId = buildingName.trim(),
-                        taggedWaypoints = taggedWaypoints,
-                        beaconResults = results,
-                        anchorName = { floor, number -> context.getString(R.string.survey_anchor_name, floor, number) },
-                    ).copy(surveyStepLengthMeters = stepLengthMeters)
-                    val saved = BuildingMapStorage(context).save(map)
-                    saveFailed = !saved
-                    saveMessage = if (saved) {
-                        val nodeCount = map.floors.sumOf { it.nodes.size }
-                        val edgeCount = map.floors.sumOf { it.edges.size }
-                        context.getString(
-                            R.string.survey_saved,
-                            context.countText(R.plurals.count_points, nodeCount),
-                            context.countText(R.plurals.count_connections, edgeCount),
-                            context.countText(R.plurals.count_floors, map.floors.size),
-                        )
-                    } else {
-                        context.getString(R.string.survey_save_failed)
+                    val buildingId = buildingName.trim()
+                    val waypoints = taggedWaypoints.toList()
+                    saving = true
+                    scope.launch {
+                        val map = withContext(Dispatchers.Default) {
+                            BeaconMapBuilder.buildFromWaypoints(
+                                buildingId = buildingId,
+                                taggedWaypoints = waypoints,
+                                beaconResults = results,
+                                anchorName = { floor, number -> context.getString(R.string.survey_anchor_name, floor, number) },
+                            ).copy(surveyStepLengthMeters = stepLengthMeters)
+                        }
+                        val saved = buildings.save(map)
+                        saving = false
+                        saveFailed = !saved
+                        saveMessage = if (saved) {
+                            val nodeCount = map.floors.sumOf { it.nodes.size }
+                            val edgeCount = map.floors.sumOf { it.edges.size }
+                            context.getString(
+                                R.string.survey_saved,
+                                context.countText(R.plurals.count_points, nodeCount),
+                                context.countText(R.plurals.count_connections, edgeCount),
+                                context.countText(R.plurals.count_floors, map.floors.size),
+                            )
+                        } else {
+                            context.getString(R.string.survey_save_failed)
+                        }
                     }
                 },
             ) {

@@ -544,7 +544,7 @@ class NavigationSession internal constructor(
         runCatching { appContext.unregisterReceiver(radioReceiver) }
         scope.cancel()
         scanner.stop()
-        if (cameraAttached) detector.unbind()
+        detector.release()
         speech.shutdown()
         haptics.stop()
         (signTextReader as? MlKitSignTextReader)?.close()
@@ -593,6 +593,8 @@ class NavigationSession internal constructor(
                 "BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS" to BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS,
                 "BarometricFloorChangeDetector.CONFIRM_FRACTION" to BarometricFloorChangeDetector.CONFIRM_FRACTION,
                 "BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS" to BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS,
+                "CameraXObstacleDetector.NUM_THREADS" to CameraXObstacleDetector.NUM_THREADS.toDouble(),
+                "CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS" to CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS.toDouble(),
             ) + listOfNotNull(
                 // Omitted, not NaN, for maps saved before this was tracked.
                 buildingMap.surveyStepLengthMeters?.let { "map.surveyStepLengthMeters" to it },

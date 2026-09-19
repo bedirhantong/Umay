@@ -1,14 +1,17 @@
 rules_version = '2';
 
-// Umay's shared building-map pool (see cloud/RemoteBuildingMapRepository).
+// Umay's shared building-map pool (see cloud/FirestoreBuildingMapRepository).
 // No login screen exists in the app — every write is made under a silent
 // Firebase Anonymous Auth identity, which is what "ownerId" below refers to.
 // That's enough to stop a stranger from overwriting or deleting someone
 // else's published map, without asking a blind user to sign in to anything.
 //
-// Everything — including the map's own JSON — lives in this one Firestore
-// document; there is no Cloud Storage bucket in this project (see
-// isValidBuilding for why).
+// A publication is two documents with the same id, always written and deleted
+// together in one batch: a small summary in public_buildings (what the list
+// shows) and the map itself in public_building_maps (read only on download —
+// a query can't skip a document's fields, so a map kept in the summary would
+// be downloaded by everyone who merely browses the list). There is no Cloud
+// Storage bucket in this project (see FirestoreBuildingMapRepository for why).
 service cloud.firestore {
   match /databases/{database}/documents {
     match /public_buildings/{buildingId} {
@@ -16,14 +19,28 @@ service cloud.firestore {
 
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid
-        && isValidBuilding(request.resource.data);
+        && isValidSummary(request.resource.data);
 
       // The publisher can update their own listing (a re-survey); ownership
       // itself can never be reassigned by a write.
       allow update: if isSignedIn()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
-        && isValidBuilding(request.resource.data);
+        && isValidSummary(request.resource.data);
+
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /public_building_maps/{buildingId} {
+      allow read: if true;
+
+      // Only alongside a summary of the same id owned by the same person, as it
+      // stands once this write's batch has landed.
+      allow create, update: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && (resource == null || resource.data.ownerId == request.auth.uid)
+        && getAfter(/databases/$(database)/documents/public_buildings/$(buildingId)).data.ownerId == request.auth.uid
+        && isValidMap(request.resource.data);
 
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
@@ -41,16 +58,19 @@ service cloud.firestore {
   // Mirrors FirestoreBuildingMapRepository's own field set and
   // MAX_PUBLISHED_MAP_BYTES — a malformed or oversized document is rejected
   // server-side too, not just by the client that happens to be well-behaved.
-  // The map JSON lives directly in this document (mapJson) — Cloud Storage is not
-  // used at all, deliberately: since February 2026 it requires a linked billing
-  // account (Blaze) regardless of usage, and this project stays on the free Spark
-  // plan on purpose. A Firestore document has its own hard 1 MiB limit, which is
-  // why MAX_PUBLISHED_MAP_BYTES is well under that.
-  function isValidBuilding(data) {
-    return data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100
+  // A Firestore document has a hard 1 MiB limit, which is why 750000 sits well
+  // under that.
+  function isValidSummary(data) {
+    return data.keys().hasOnly(['ownerId', 'displayName', 'floorCount', 'nodeCount', 'sizeBytes', 'updatedAtMs'])
+      && data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100
       && data.floorCount is int && data.floorCount >= 0 && data.floorCount <= 200
       && data.nodeCount is int && data.nodeCount >= 0 && data.nodeCount <= 5000
       && data.sizeBytes is int && data.sizeBytes >= 0 && data.sizeBytes <= 750000
+      && data.updatedAtMs is int;
+  }
+
+  function isValidMap(data) {
+    return data.keys().hasOnly(['ownerId', 'mapJson', 'updatedAtMs'])
       && data.mapJson is string && data.mapJson.size() > 0 && data.mapJson.size() <= 750000
       && data.updatedAtMs is int;
   }

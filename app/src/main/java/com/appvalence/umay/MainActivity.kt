@@ -22,11 +22,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -83,15 +82,16 @@ class MainActivity : ComponentActivity() {
                     return@UmayTheme
                 }
 
-                // Bumped whenever a map is imported from outside, so screens that listed the
-                // buildings when they opened show the new one instead of a stale list.
-                var mapsVersion by remember { mutableIntStateOf(0) }
-                val importer = rememberBuildingImporter(onImported = { mapsVersion++ })
+                val importer = rememberBuildingImporter()
                 LaunchedEffect(incomingMapFile) {
                     val uri = incomingMapFile ?: return@LaunchedEffect
                     incomingMapFile = null
                     importer.importFrom(uri)
                 }
+
+                // Each tab's composition is thrown away when another tab is picked; this
+                // keeps what it had saved (its scroll position, say) for when it comes back.
+                val tabState = rememberSaveableStateHolder()
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity() {
                     },
                 ) { innerPadding ->
                     Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-                        key(mapsVersion) {
+                        tabState.SaveableStateProvider(selectedScreen.name) {
                             when (selectedScreen) {
                                 Screen.BEACON_SCANNER -> BeaconScannerScreen(modifier = Modifier.weight(1f))
                                 Screen.NAVIGATION -> NavigationScreen(modifier = Modifier.weight(1f))

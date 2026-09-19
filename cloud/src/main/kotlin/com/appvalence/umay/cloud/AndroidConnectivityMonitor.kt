@@ -33,9 +33,7 @@ class AndroidConnectivityMonitor(context: Context) : ConnectivityMonitor {
 
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                val validated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) &&
-                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                if (validated) validatedNetworks += network else validatedNetworks -= network
+                if (capabilities.isValidatedInternet()) validatedNetworks += network else validatedNetworks -= network
                 send()
             }
 
@@ -45,12 +43,22 @@ class AndroidConnectivityMonitor(context: Context) : ConnectivityMonitor {
             }
         }
 
+        // Seeded from what's connected right now: the callbacks for networks that already
+        // exist arrive a moment *after* registering, and an empty seed would flash
+        // "offline" on every screen that starts observing this while actually online.
+        manager.activeNetwork?.let { network ->
+            if (manager.getNetworkCapabilities(network)?.isValidatedInternet() == true) validatedNetworks += network
+        }
+
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
         manager.registerNetworkCallback(request, callback)
-        send() // the initial state, in case nothing changes right after
+        send()
 
         awaitClose { manager.unregisterNetworkCallback(callback) }
     }.distinctUntilChanged()
+
+    private fun NetworkCapabilities.isValidatedInternet(): Boolean =
+        hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) && hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }

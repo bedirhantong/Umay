@@ -27,7 +27,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,9 +45,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
+import com.appvalence.umay.common.rememberAppSpeech
 import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.common.VoiceStatusNotice
-import com.appvalence.umay.common.createSpeechController
 import com.appvalence.umay.positioning.baro.BarometerSensor
 
 private data class TourPage(val icon: ImageVector, @param:StringRes val title: Int, @param:StringRes val body: Int)
@@ -91,8 +90,7 @@ fun OnboardingTour(onFinish: () -> Unit, modifier: Modifier = Modifier) {
     val isLast = index == pages.lastIndex
 
     val screenReaderOn = rememberIsScreenReaderOn()
-    val tts = remember { createSpeechController(context) }
-    DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+    val tts = rememberAppSpeech()
 
     val title = stringResource(page.title)
     val body = stringResource(page.body)

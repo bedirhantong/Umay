@@ -38,13 +38,21 @@ data class BeaconSurveyResult(
  * assumption doesn't hold up in the field.
  */
 object BeaconSurveySolver {
+    /**
+     * CPU-heavy on a long survey (every BLE sighting, often tens of thousands of
+     * them, is matched against the trajectory) — call it off the main thread.
+     */
     fun solve(trajectory: List<Position>, readings: List<BleBeaconReading>): List<BeaconSurveyResult> {
         if (trajectory.isEmpty()) return emptyList()
+        // Already chronological in practice (poses are appended as steps happen), in
+        // which case this sort is a single linear pass; it's what makes the binary
+        // search in nearestPose valid regardless.
+        val poses = trajectory.sortedBy { it.timestampMs }
 
         return readings
             .filter { it.uuid != null && it.estimatedDistanceMeters >= 0 }
             .mapNotNull { reading ->
-                val pose = nearestPose(trajectory, reading.timestampMs) ?: return@mapNotNull null
+                val pose = nearestPose(poses, reading.timestampMs) ?: return@mapNotNull null
                 if (abs(pose.timestampMs - reading.timestampMs) > MAX_POSE_MATCH_AGE_MS) return@mapNotNull null
                 MatchedObservation(reading.beaconId, pose.floor, Trilateration.AnchorReading(pose.x, pose.y, reading.estimatedDistanceMeters))
             }
@@ -59,8 +67,24 @@ object BeaconSurveySolver {
             .sortedWith(compareBy({ it.floor }, { it.beaconId }))
     }
 
-    private fun nearestPose(trajectory: List<Position>, timestampMs: Long): Position? =
-        trajectory.minByOrNull { abs(it.timestampMs - timestampMs) }
+    // Binary search over time-sorted poses: a linear scan per reading made solving
+    // O(readings × poses), which on a long survey froze the app for seconds when
+    // recording stopped — longer the longer the walk.
+    internal fun nearestPose(sortedPoses: List<Position>, timestampMs: Long): Position? {
+        if (sortedPoses.isEmpty()) return null
+        val index = sortedPoses.binarySearchBy(timestampMs) { it.timestampMs }
+        if (index >= 0) return sortedPoses[index]
+        val insertionPoint = -index - 1
+        val before = sortedPoses.getOrNull(insertionPoint - 1)
+        val after = sortedPoses.getOrNull(insertionPoint)
+        return when {
+            before == null -> after
+            after == null -> before
+            // Ties go to the earlier pose, like the linear scan this replaced.
+            abs(after.timestampMs - timestampMs) < abs(before.timestampMs - timestampMs) -> after
+            else -> before
+        }
+    }
 
     private data class MatchedObservation(val beaconId: String, val floor: Int, val anchorReading: Trilateration.AnchorReading)
 

@@ -56,9 +56,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.appvalence.umay.R
+import com.appvalence.umay.common.rememberAppSpeech
 import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.common.VoiceStatusNotice
-import com.appvalence.umay.common.createSpeechController
 import com.appvalence.umay.coremodel.GuidanceCue
 import com.appvalence.umay.feedback.HapticFeedbackController
 import com.appvalence.umay.feedback.HapticPatterns
@@ -192,8 +192,7 @@ private fun SettingsCard(icon: ImageVector, title: String, content: @Composable 
 @Composable
 private fun VoiceSettings(settings: UserSettings) {
     val context = LocalContext.current
-    val tts = remember { createSpeechController(context) }
-    DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+    val tts = rememberAppSpeech()
     val status by tts.voiceStatus.collectAsState()
     var rate by remember { mutableFloatStateOf(settings.speechRate) }
 
@@ -347,8 +346,7 @@ private fun StepCalibration(onSave: (Double) -> Unit, onCancel: () -> Unit) {
     val context = LocalContext.current
     val sensorsAvailable = remember { StepDetector.isAvailable(context) }
     val screenReaderOn = rememberIsScreenReaderOn()
-    val tts = remember { createSpeechController(context) }
-    DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+    val tts = rememberAppSpeech()
     fun say(text: String) {
         if (!screenReaderOn) tts.speakNow(text)
     }
