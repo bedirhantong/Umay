@@ -57,7 +57,7 @@ class StepDetector(context: Context, private val stepLengthMeters: Double = AVER
             // simply missing hardware this app's whole positioning model depends on.
             // Callers should check isAvailable(context) up front (see NavigationScreen/
             // BeaconScannerScreen's permission-style gate) rather than rely on this catch.
-            close(IllegalStateException("Bu cihazda gerekli hareket sensörleri yok (ivmeölçer veya jiroskop eksik)"))
+            close(IllegalStateException("Required motion sensors missing (accelerometer or game rotation vector)"))
             return@callbackFlow
         }
 

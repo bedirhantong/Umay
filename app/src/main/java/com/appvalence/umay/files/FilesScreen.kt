@@ -79,7 +79,7 @@ fun FilesScreen(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedButton(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), onClick = importBuilding) {
+        OutlinedButton(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), onClick = importBuilding.pickFile) {
             Icon(Icons.Filled.FileOpen, contentDescription = null)
             Text(stringResource(R.string.common_import_building), modifier = Modifier.padding(start = 8.dp))
         }

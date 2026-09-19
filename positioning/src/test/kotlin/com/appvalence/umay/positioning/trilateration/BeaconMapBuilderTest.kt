@@ -23,6 +23,18 @@ class BeaconMapBuilderTest {
     }
 
     @Test
+    fun `unnamed beacon nodes are named by the caller, numbered per floor`() {
+        val results = listOf(
+            BeaconSurveyResult("b1", floor = 2, x = 0.0, y = 0.0, observationCount = 5),
+            BeaconSurveyResult("b2", floor = 2, x = 5.0, y = 0.0, observationCount = 5),
+        )
+
+        val map = BeaconMapBuilder.build("test-building", results, anchorName = { floor, number -> "F$floor-P$number" })
+
+        assertEquals(listOf("F2-P1", "F2-P2"), map.floors.single().nodes.map { it.name })
+    }
+
+    @Test
     fun `connects beacons within range but not beacons that are too far apart`() {
         val results = listOf(
             BeaconSurveyResult("near1", floor = 0, x = 0.0, y = 0.0, observationCount = 5),

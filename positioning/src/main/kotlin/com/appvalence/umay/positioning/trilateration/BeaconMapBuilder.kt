@@ -29,14 +29,22 @@ import kotlin.math.hypot
  * an RSSI fingerprint for [com.appvalence.umay.positioning.fingerprint.FingerprintMatcher].
  */
 object BeaconMapBuilder {
+    /**
+     * The name given to a beacon node nobody named (floor index, 1-based number) —
+     * a raw "uuid-major-minor" id means nothing to a person picking a destination.
+     * It's stored in the map, so the app passes one worded in the surveyor's language.
+     */
+    val DEFAULT_ANCHOR_NAME: (Int, Int) -> String = { floor, number -> "Floor $floor, point $number" }
+
     fun build(
         buildingId: String,
         results: List<BeaconSurveyResult>,
         maxEdgeDistanceMeters: Double = DEFAULT_MAX_EDGE_DISTANCE_METERS,
+        anchorName: (floorIndex: Int, number: Int) -> String = DEFAULT_ANCHOR_NAME,
     ): BuildingMap {
         val floors = results
             .groupBy { it.floor }
-            .map { (floorIndex, floorResults) -> buildFloor(floorIndex, floorResults, maxEdgeDistanceMeters) }
+            .map { (floorIndex, floorResults) -> buildFloor(floorIndex, floorResults, maxEdgeDistanceMeters, anchorName) }
             .sortedBy { it.floorIndex }
         return BuildingMap(id = buildingId, floors = floors)
     }
@@ -60,6 +68,7 @@ object BeaconMapBuilder {
         taggedWaypoints: List<TaggedWaypoint>,
         beaconResults: List<BeaconSurveyResult> = emptyList(),
         maxEdgeDistanceMeters: Double = DEFAULT_MAX_EDGE_DISTANCE_METERS,
+        anchorName: (floorIndex: Int, number: Int) -> String = DEFAULT_ANCHOR_NAME,
     ): BuildingMap {
         // Assigned once, up front, so the same id can be used both inside each
         // floor's node list and when detecting cross-floor transitions below.
@@ -73,7 +82,7 @@ object BeaconMapBuilder {
             val indices = waypointIndicesByFloor[floorIndex].orEmpty()
             val floorBeaconResults = beaconResultsByFloor[floorIndex].orEmpty()
             if (indices.isEmpty()) {
-                buildFloor(floorIndex, floorBeaconResults, maxEdgeDistanceMeters)
+                buildFloor(floorIndex, floorBeaconResults, maxEdgeDistanceMeters, anchorName)
             } else {
                 buildWaypointFloor(floorIndex, indices, taggedWaypoints, waypointNodeIds, floorBeaconResults)
             }
@@ -125,9 +134,14 @@ object BeaconMapBuilder {
         return FloorMap(floorIndex = floorIndex, nodes = waypointNodes + anchorNodes, edges = edges)
     }
 
-    private fun buildFloor(floorIndex: Int, results: List<BeaconSurveyResult>, maxEdgeDistanceMeters: Double): FloorMap {
+    private fun buildFloor(
+        floorIndex: Int,
+        results: List<BeaconSurveyResult>,
+        maxEdgeDistanceMeters: Double,
+        anchorName: (Int, Int) -> String,
+    ): FloorMap {
         // A raw beaconId ("uuid-major-minor") is meaningless to a person picking a
-        // destination in the UI — "Nokta 1" on the floor they're standing on isn't
+        // destination in the UI — a numbered point on the floor they're standing on isn't
         // pretty either, but at least it's something a human can read and choose.
         val nodes = results.mapIndexed { index, result ->
             MapNode(
@@ -135,7 +149,7 @@ object BeaconMapBuilder {
                 x = result.x,
                 y = result.y,
                 type = NodeType.BLE_ANCHOR,
-                name = "Kat $floorIndex, Nokta ${index + 1}",
+                name = anchorName(floorIndex, index + 1),
             )
         }
 

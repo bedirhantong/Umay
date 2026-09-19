@@ -36,6 +36,7 @@ import com.appvalence.umay.fieldlog.FieldLogRecorder
 import com.appvalence.umay.fieldlog.FieldLogStore
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
+import com.appvalence.umay.perception.CameraFailure
 import com.appvalence.umay.perception.CameraXObstacleDetector
 import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.baro.BarometricFloorChangeDetector
@@ -128,7 +129,18 @@ class NavigationSession internal constructor(
     // fingerprint corrections — alive with the screen off (see BeaconScanTargets).
     private val scanTargets = BeaconScanTargets.forBeaconIds(fingerprintBeaconIds)
 
-    private val detector = CameraXObstacleDetector(appContext, onBindFailed = { message -> _ui.update { it.copy(cameraWarning = message) } })
+    private val detector = CameraXObstacleDetector(
+        appContext,
+        onBindFailed = { failure ->
+            val message = appContext.getString(
+                when (failure) {
+                    CameraFailure.MODEL_UNAVAILABLE -> R.string.camera_failure_model
+                    CameraFailure.CAMERA_UNAVAILABLE -> R.string.camera_failure_camera
+                },
+            )
+            _ui.update { it.copy(cameraWarning = message) }
+        },
+    )
     private var cameraAttached = false
     private var cameraPauseAnnounced = false
 
@@ -187,6 +199,7 @@ class NavigationSession internal constructor(
             feedback = feedback,
             startNodeId = startNodeId,
             destinationNodeId = destinationNode.id,
+            phrases = ResourceGuidancePhrases(appContext),
         )
     }
 

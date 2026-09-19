@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.appvalence.umay.R
 import com.appvalence.umay.common.PermissionRationale
+import com.appvalence.umay.common.createSpeechController
 import com.appvalence.umay.common.countText
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.NodeType
@@ -72,6 +73,9 @@ import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.ble.BleBeaconScanner
+import com.appvalence.umay.positioning.baro.BarometerSensor
+import com.appvalence.umay.positioning.baro.BarometricFloorTracker
+import com.appvalence.umay.positioning.ble.BleScanFailure
 import com.appvalence.umay.positioning.ble.BleScanState
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import com.appvalence.umay.positioning.pdr.StepDetector
@@ -202,6 +206,15 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
     val stepLengthMeters = remember { UserSettings(context).stepLengthMeters }
     val strideCalibrated = remember { UserSettings(context).calibratedStepLengthMeters != null }
     val stepDetector = remember { StepDetector(context, stepLengthMeters) }
+
+    // With a barometer, floor changes are noticed on their own as the surveyor takes the
+    // stairs or an elevator; the +/- buttons stay for corrections (and for phones without one).
+    val hasBarometer = remember { BarometerSensor.isAvailable(context) }
+    val barometer = remember { BarometerSensor(context) }
+    val floorTracker = remember { BarometricFloorTracker() }
+    val speech = remember { createSpeechController(context) }
+    DisposableEffect(Unit) { onDispose { speech.shutdown() } }
+    var lastAutoFloorChange by remember { mutableStateOf<String?>(null) }
     val trajectory = BeaconSurveyLog.trajectory
     val rawReadings = BeaconSurveyLog.rawReadings
     LaunchedEffect(BeaconSurveyLog.isRecording) {
@@ -219,6 +232,21 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                 }
             }
             launch { scanner.rawReadingUpdates().collect { reading -> rawReadings.add(reading) } }
+            if (hasBarometer) {
+                launch {
+                    floorTracker.resetBaseline()
+                    barometer.readings().collect { reading ->
+                        val floors = floorTracker.onPressure(reading.hPa, reading.timestampMs)
+                        if (floors != 0) {
+                            BeaconSurveyLog.currentFloor += floors
+                            val floorName = context.getString(R.string.common_floor, BeaconSurveyLog.currentFloor)
+                            val message = context.getString(R.string.survey_floor_auto, floorName)
+                            lastAutoFloorChange = message
+                            speech.speakNow(message)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -240,7 +268,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
         if (scanState is BleScanState.Failed) {
             item {
                 Text(
-                    text = stringResource(R.string.survey_scan_failed, (scanState as BleScanState.Failed).reason),
+                    text = stringResource(R.string.survey_scan_failed, scanFailureText(scanState as BleScanState.Failed)),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -259,6 +287,8 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                 taggedWaypointCount = BeaconSurveyLog.taggedWaypoints.size,
                 currentFloor = BeaconSurveyLog.currentFloor,
                 strideCalibrated = strideCalibrated,
+                autoFloorDetection = hasBarometer,
+                lastAutoFloorChange = lastAutoFloorChange,
                 onStart = { BeaconSurveyLog.isRecording = true },
                 onStop = {
                     BeaconSurveyLog.isRecording = false
@@ -266,7 +296,12 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier) {
                     // separate manual step right after is friction nobody needs.
                     solve()
                 },
-                onFloorChange = { delta -> BeaconSurveyLog.currentFloor += delta },
+                onFloorChange = { delta ->
+                    BeaconSurveyLog.currentFloor += delta
+                    // A hand correction is the truth: measure further changes from here.
+                    floorTracker.resetBaseline()
+                    lastAutoFloorChange = null
+                },
                 onClear = {
                     trajectory.clear()
                     rawReadings.clear()
@@ -380,6 +415,8 @@ private fun RecordingCard(
     taggedWaypointCount: Int,
     currentFloor: Int,
     strideCalibrated: Boolean,
+    autoFloorDetection: Boolean,
+    lastAutoFloorChange: String?,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onFloorChange: (Int) -> Unit,
@@ -468,10 +505,18 @@ private fun RecordingCard(
                         Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.survey_floor_up))
                     }
                     Text(
-                        text = stringResource(R.string.survey_floor_hint),
+                        text = stringResource(if (autoFloorDetection) R.string.survey_floor_hint_auto else R.string.survey_floor_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+                lastAutoFloorChange?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
                 Button(
@@ -623,6 +668,7 @@ private fun SaveMapCard(
                         buildingId = buildingName.trim(),
                         taggedWaypoints = taggedWaypoints,
                         beaconResults = results,
+                        anchorName = { floor, number -> context.getString(R.string.survey_anchor_name, floor, number) },
                     ).copy(surveyStepLengthMeters = stepLengthMeters)
                     val saved = BuildingMapStorage(context).save(map)
                     saveFailed = !saved
@@ -711,6 +757,15 @@ private fun BleBeaconReading.toSurveyLine(): String {
     // language-neutral rather than going through string resources.
     val distance = if (estimatedDistanceMeters >= 0) "${estimatedDistanceMeters.round1()}m" else "?"
     return "uuid=$uuid major=$major minor=$minor mac=$macAddress rssi=${rssi}dBm distance=$distance"
+}
+
+@Composable
+private fun scanFailureText(failure: BleScanState.Failed): String = when (failure.reason) {
+    BleScanFailure.LOCATION_OFF -> stringResource(R.string.ble_failure_location_off)
+    BleScanFailure.BLUETOOTH_OFF -> stringResource(R.string.ble_failure_bluetooth_off)
+    BleScanFailure.UNSUPPORTED -> stringResource(R.string.ble_failure_unsupported)
+    BleScanFailure.PERMISSION_DENIED -> stringResource(R.string.ble_failure_permission)
+    BleScanFailure.SCAN_FAILED -> stringResource(R.string.ble_failure_scan, failure.errorCode ?: 0)
 }
 
 internal fun Double.round1(): Double = (this * 10).roundToInt() / 10.0
