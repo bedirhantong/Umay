@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.services)
 }
 
 // Release signing credentials never live in this repository — it's public. They come
@@ -80,6 +81,7 @@ dependencies {
     implementation(project(":perception"))
     implementation(project(":orchestrator"))
     implementation(project(":feedback"))
+    implementation(project(":cloud"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.core.ktx)

@@ -1,0 +1,57 @@
+rules_version = '2';
+
+// Umay's shared building-map pool (see cloud/RemoteBuildingMapRepository).
+// No login screen exists in the app — every write is made under a silent
+// Firebase Anonymous Auth identity, which is what "ownerId" below refers to.
+// That's enough to stop a stranger from overwriting or deleting someone
+// else's published map, without asking a blind user to sign in to anything.
+//
+// Everything — including the map's own JSON — lives in this one Firestore
+// document; there is no Cloud Storage bucket in this project (see
+// isValidBuilding for why).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /public_buildings/{buildingId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && isValidBuilding(request.resource.data);
+
+      // The publisher can update their own listing (a re-survey); ownership
+      // itself can never be reassigned by a write.
+      allow update: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && isValidBuilding(request.resource.data);
+
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Nothing else in this database is exposed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  // Mirrors FirestoreBuildingMapRepository's own field set and
+  // MAX_PUBLISHED_MAP_BYTES — a malformed or oversized document is rejected
+  // server-side too, not just by the client that happens to be well-behaved.
+  // The map JSON lives directly in this document (mapJson) — Cloud Storage is not
+  // used at all, deliberately: since February 2026 it requires a linked billing
+  // account (Blaze) regardless of usage, and this project stays on the free Spark
+  // plan on purpose. A Firestore document has its own hard 1 MiB limit, which is
+  // why MAX_PUBLISHED_MAP_BYTES is well under that.
+  function isValidBuilding(data) {
+    return data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100
+      && data.floorCount is int && data.floorCount >= 0 && data.floorCount <= 200
+      && data.nodeCount is int && data.nodeCount >= 0 && data.nodeCount <= 5000
+      && data.sizeBytes is int && data.sizeBytes >= 0 && data.sizeBytes <= 750000
+      && data.mapJson is string && data.mapJson.size() > 0 && data.mapJson.size() <= 750000
+      && data.updatedAtMs is int;
+  }
+}

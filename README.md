@@ -45,6 +45,7 @@ adımlardan anlaşılır, asansörde bir düğmeyle onaylanır.
 | `perception` | CameraX ve TensorFlow Lite (EfficientDet-Lite0) ile insan algılama, mesafe ve yön tahmini |
 | `orchestrator` | Katlar arası A* rota bulma, adım adım yönergeler, engel uyarıları, rotayı yeniden hesaplama |
 | `feedback` | Metin okuma (ses seçimi, ses odağı yönetimi) ve titreşim desenleri |
+| `cloud` | Paylaşımlı harita havuzu (Firestore, anonim kimlik doğrulama) ve bağlantı durumu takibi — yalnızca Firebase'in ücretsiz Spark katmanı kullanılır, Cloud Storage kullanılmaz |
 | `app` | Compose arayüzü, arka planda çalışan navigasyon oturumu, kayıt, saha kaydı |
 
 ## Derleme
