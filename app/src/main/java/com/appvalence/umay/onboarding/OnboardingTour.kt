@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -36,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -45,10 +45,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
-import com.appvalence.umay.common.rememberAppSpeech
 import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.common.VoiceStatusNotice
-import com.appvalence.umay.positioning.baro.BarometerSensor
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private data class TourPage(val icon: ImageVector, @param:StringRes val title: Int, @param:StringRes val body: Int)
 
@@ -65,9 +65,8 @@ private data class TourPage(val icon: ImageVector, @param:StringRes val title: I
  * Ayarlar.
  */
 @Composable
-fun OnboardingTour(onFinish: () -> Unit, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val hasBarometer = remember { BarometerSensor.isAvailable(context) }
+fun OnboardingTour(onFinish: () -> Unit, modifier: Modifier = Modifier, viewModel: OnboardingViewModel = hiltViewModel()) {
+    val hasBarometer = viewModel.hasBarometer
     val pages = remember(hasBarometer) {
         listOf(
             TourPage(Icons.Filled.Hearing, R.string.onboarding_welcome_title, R.string.onboarding_welcome_body),
@@ -90,13 +89,15 @@ fun OnboardingTour(onFinish: () -> Unit, modifier: Modifier = Modifier) {
     val isLast = index == pages.lastIndex
 
     val screenReaderOn = rememberIsScreenReaderOn()
-    val tts = rememberAppSpeech()
+    val voiceStatus by viewModel.voiceStatus.collectAsStateWithLifecycle()
+    // Whatever was being said is cut off on leaving; the shared voice itself stays up.
+    DisposableEffect(viewModel) { onDispose { viewModel.stopSpeaking() } }
 
     val title = stringResource(page.title)
     val body = stringResource(page.body)
     var replayCount by remember { mutableIntStateOf(0) }
     LaunchedEffect(index, replayCount, screenReaderOn) {
-        if (screenReaderOn) tts.stop() else tts.speakNow("$title. $body")
+        if (screenReaderOn) viewModel.stopSpeaking() else viewModel.speak("$title. $body")
     }
 
     Column(modifier = modifier.fillMaxSize().padding(24.dp)) {
@@ -108,13 +109,13 @@ fun OnboardingTour(onFinish: () -> Unit, modifier: Modifier = Modifier) {
             )
             if (!isLast) {
                 TextButton(onClick = {
-                    tts.stop()
+                    viewModel.stopSpeaking()
                     onFinish()
                 }) { Text(stringResource(R.string.onboarding_skip)) }
             }
         }
         // First thing a new user should know if the device can't speak Turkish properly.
-        VoiceStatusNotice(tts, modifier = Modifier.padding(top = 8.dp))
+        VoiceStatusNotice(voiceStatus, onRecheck = viewModel::refreshVoice, modifier = Modifier.padding(top = 8.dp))
 
         Column(
             modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -156,7 +157,7 @@ fun OnboardingTour(onFinish: () -> Unit, modifier: Modifier = Modifier) {
                 modifier = Modifier.weight(2f).heightIn(min = 56.dp),
                 onClick = {
                     if (isLast) {
-                        tts.stop()
+                        viewModel.stopSpeaking()
                         onFinish()
                     } else {
                         index++

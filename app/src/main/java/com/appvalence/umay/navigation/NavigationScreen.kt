@@ -51,7 +51,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -59,18 +59,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -78,8 +77,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.appvalence.umay.R
-import com.appvalence.umay.appGraph
 import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.common.VoiceStatusNotice
 import com.appvalence.umay.common.buildingSummary
@@ -88,12 +89,8 @@ import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
-import com.appvalence.umay.fieldlog.FieldLogStore
-import com.appvalence.umay.files.rememberBuildingImporter
-import com.appvalence.umay.positioning.pdr.StepDetector
-import com.appvalence.umay.settings.UserSettings
+import com.appvalence.umay.files.rememberMapFilePicker
 import com.appvalence.umay.survey.round1
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val NAVIGATION_PERMISSIONS = buildList {
@@ -123,23 +120,21 @@ private val OPTIONAL_NAVIGATION_PERMISSIONS = buildList {
  * end the walk.
  */
 @Composable
-fun NavigationScreen(modifier: Modifier = Modifier) {
+fun NavigationScreen(modifier: Modifier = Modifier, viewModel: NavigationViewModel = hiltViewModel()) {
     val context = LocalContext.current
-    val lifecycleOwner = context as LifecycleOwner
-    val buildingRepository = context.appGraph.buildings
-    val loadedBuildings by buildingRepository.buildings.collectAsState()
-    val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var hasPermissions by remember {
         mutableStateOf(NAVIGATION_PERMISSIONS.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED })
     }
-    var rationaleShown by remember { mutableStateOf(false) }
+    var rationaleShown by rememberSaveable { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         hasPermissions = NAVIGATION_PERMISSIONS.all { grants[it] ?: (ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED) }
     }
 
-    var selectedBuildingId by remember { mutableStateOf<String?>(null) }
-    val importBuilding = rememberBuildingImporter()
+    val pickMapFile = rememberMapFilePicker()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val activeSession by viewModel.activeSession.collectAsStateWithLifecycle()
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         if (!hasPermissions) {
@@ -152,6 +147,8 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                         rationaleShown = true
                         permissionLauncher.launch(NAVIGATION_PERMISSIONS + OPTIONAL_NAVIGATION_PERMISSIONS)
                     },
+                    speak = viewModel::speak,
+                    stopSpeaking = viewModel::stopSpeaking,
                 )
             } else {
                 EmptyState(
@@ -166,7 +163,7 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
             return@Column
         }
 
-        if (!remember { StepDetector.isAvailable(context) }) {
+        if (!viewModel.hasStepSensors) {
             EmptyState(
                 icon = Icons.Filled.LocationSearching,
                 title = stringResource(R.string.nav_unsupported_title),
@@ -177,14 +174,13 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
 
         // A walk already in progress (started earlier, screen since turned off, app
         // reopened from the notification...) takes over the screen, whatever else is set.
-        val activeSession by NavigationSessions.active.collectAsState()
         activeSession?.let { session ->
-            ActiveNavigationView(session, lifecycleOwner)
+            ActiveNavigationView(session, lifecycleOwner, keepScreenOn = viewModel.keepScreenOn)
             return@Column
         }
 
         // Still being read from disk (only ever on the very first screen after launch).
-        val buildings = loadedBuildings ?: return@Column
+        val buildings = state.buildings ?: return@Column
 
         if (buildings.isEmpty()) {
             EmptyState(
@@ -193,59 +189,49 @@ fun NavigationScreen(modifier: Modifier = Modifier) {
                 message = stringResource(R.string.nav_no_map_message),
                 modifier = Modifier.weight(1f),
             )
-            Button(modifier = Modifier.fillMaxWidth(), onClick = importBuilding.pickFile) {
+            Button(modifier = Modifier.fillMaxWidth(), onClick = pickMapFile) {
                 Icon(Icons.Filled.FileOpen, contentDescription = null)
                 Text(stringResource(R.string.common_import_building), modifier = Modifier.padding(start = 8.dp))
             }
             TextButton(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                onClick = buildingRepository::refresh,
+                onClick = viewModel::reloadBuildings,
             ) {
                 Text(stringResource(R.string.common_reload))
             }
             return@Column
         }
 
-        // Skip the picker entirely when there's only one building — that's the common
-        // case, and making someone choose from a list of one is pure friction.
-        val map = if (buildings.size == 1) buildings.single() else buildings.firstOrNull { it.id == selectedBuildingId }
-        if (map == null) {
+        val selected = state.selected
+        if (selected == null) {
             BuildingPicker(
                 buildings = buildings,
-                onSelect = { selectedBuildingId = it.id },
-                onDelete = { building -> scope.launch { buildingRepository.delete(building.id) } },
+                onSelect = { viewModel.selectBuilding(it.id) },
+                onDelete = { viewModel.deleteBuilding(it.id) },
             )
             return@Column
         }
 
-        val allNodes = map.floors.flatMap { it.nodes }
-        if (allNodes.isEmpty()) {
+        if (selected.nodes.isEmpty()) {
             EmptyState(icon = Icons.Filled.Map, title = stringResource(R.string.nav_empty_map_title), message = stringResource(R.string.nav_empty_map_message))
             return@Column
         }
-        val nodeFloor = remember(map) { map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap() }
-        val showFloorInLabels = map.floors.size > 1
-
-        var startIndex by remember(map.id) { mutableIntStateOf(0) }
-        var destinationIndex by remember(map.id) { mutableIntStateOf((allNodes.size - 1).coerceAtLeast(0)) }
         if (buildings.size > 1) {
-            TextButton(modifier = Modifier.padding(bottom = 8.dp), onClick = { selectedBuildingId = null }) {
-                Text(stringResource(R.string.nav_change_building, map.id))
+            TextButton(modifier = Modifier.padding(bottom = 8.dp), onClick = viewModel::changeBuilding) {
+                Text(stringResource(R.string.nav_change_building, selected.map.id))
             }
         }
         RoutePicker(
-            nodes = allNodes,
-            nodeFloor = nodeFloor,
-            showFloor = showFloorInLabels,
-            startIndex = startIndex,
-            destinationIndex = destinationIndex,
-            onStartChange = { startIndex = it },
-            onDestinationChange = { destinationIndex = it },
-            onBegin = {
-                NavigationSessions.start(context, map, startNodeId = allNodes[startIndex].id, destinationNode = allNodes[destinationIndex])
-            },
+            nodes = selected.nodes,
+            nodeFloor = selected.nodeFloor,
+            showFloor = selected.showFloorInLabels,
+            startIndex = selected.startIndex,
+            destinationIndex = selected.destinationIndex,
+            onStartChange = viewModel::setStart,
+            onDestinationChange = viewModel::setDestination,
+            onBegin = viewModel::begin,
         )
-        if (remember { FieldLogStore(context).isRecordingEnabled }) {
+        if (viewModel.isFieldLogRecording) {
             RecordingIndicator(
                 text = stringResource(R.string.nav_recording_on_hint),
                 modifier = Modifier.padding(top = 12.dp),
@@ -398,7 +384,7 @@ private fun NodeDropdown(
             label = { Text(label) },
             leadingIcon = { Icon(icon, contentDescription = null) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.exposedDropdownSize()) {
             nodes.forEachIndexed { index, node ->
@@ -441,9 +427,10 @@ private enum class NavigationStatus(@param:StringRes val label: Int, val contain
  * attachment: obstacle detection runs exactly while this screen is visible.
  */
 @Composable
-private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: LifecycleOwner) {
+private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: LifecycleOwner, keepScreenOn: Boolean) {
     val context = LocalContext.current
-    val ui by session.ui.collectAsState()
+    val ui by session.ui.collectAsStateWithLifecycle()
+    val voiceStatus by session.speech.voiceStatus.collectAsStateWithLifecycle()
 
     DisposableEffect(session, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -460,7 +447,7 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
             session.detachCamera()
         }
     }
-    KeepScreenOnIfRequested()
+    KeepScreenOnIfRequested(keepScreenOn)
 
     val currentState = ui.state
     val status = NavigationStatus.of(ui.phase)
@@ -491,7 +478,7 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
     Column(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             StatusBanner(status)
-            VoiceStatusNotice(session.speech, modifier = Modifier.padding(top = 8.dp))
+            VoiceStatusNotice(voiceStatus, onRecheck = session.speech::refreshVoice, modifier = Modifier.padding(top = 8.dp))
 
             if (!session.hasFingerprintedWaypoints) {
                 Text(
@@ -619,6 +606,7 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
 @Composable
 private fun StickyAssistantBar(session: NavigationSession, ui: NavigationSessionUi) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     var pendingQuestion by remember { mutableStateOf(false) }
     val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted && pendingQuestion) session.askQuestion()
@@ -649,7 +637,7 @@ private fun StickyAssistantBar(session: NavigationSession, ui: NavigationSession
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                         session.askQuestion()
                     } else {
-                        session.speech.speakNow(context.getString(R.string.voice_query_permission_message))
+                        session.speech.speakNow(resources.getString(R.string.voice_query_permission_message))
                         pendingQuestion = true
                         micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
@@ -669,9 +657,8 @@ private fun StickyAssistantBar(session: NavigationSession, ui: NavigationSession
  * serves no one who can't see it, and the battery serves everyone.
  */
 @Composable
-private fun KeepScreenOnIfRequested() {
+private fun KeepScreenOnIfRequested(keepOn: Boolean) {
     val context = LocalContext.current
-    val keepOn = remember { UserSettings(context).keepScreenOnDuringNavigation }
     val screenReaderOn = rememberIsScreenReaderOn()
     if (!keepOn) return
     val window = (context as? Activity)?.window ?: return
@@ -763,7 +750,7 @@ private fun mapDescription(context: Context, floorIndex: Int, progress: RoutePro
  */
 @Composable
 private fun GroundTruthControls(session: NavigationSession, currentFloorIndex: Int) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
     var choosing by remember { mutableStateOf(false) }
     var lastMark by remember { mutableStateOf<String?>(null) }
     val buildingMap = session.buildingMap
@@ -804,8 +791,8 @@ private fun GroundTruthControls(session: NavigationSession, currentFloorIndex: I
                                 .clickable {
                                     val event = session.markGroundTruth(node)
                                     lastMark = event?.errorMeters
-                                        ?.let { context.getString(R.string.nav_ground_truth_marked_error, node.name, it.round1().toString()) }
-                                        ?: context.getString(R.string.nav_ground_truth_marked_other_floor, node.name)
+                                        ?.let { resources.getString(R.string.nav_ground_truth_marked_error, node.name, it.round1().toString()) }
+                                        ?: resources.getString(R.string.nav_ground_truth_marked_other_floor, node.name)
                                     choosing = false
                                 }
                                 .padding(vertical = 12.dp),

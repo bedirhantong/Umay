@@ -1,15 +1,16 @@
 package com.appvalence.umay.cloudmap
 
-import android.content.Context
-import com.appvalence.umay.cloud.AndroidConnectivityMonitor
-import com.appvalence.umay.cloud.FirestoreBuildingMapRepository
+import com.appvalence.umay.cloud.ConnectivityMonitor
 import com.appvalence.umay.cloud.PublicBuildingSummary
 import com.appvalence.umay.cloud.RemoteBuildingMapRepository
 import com.appvalence.umay.cloud.RemoteMapFailure
 import com.appvalence.umay.cloud.asRemoteMapFailure
+import com.appvalence.umay.common.Clock
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.di.ApplicationScope
+import com.appvalence.umay.di.IoDispatcher
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,6 +20,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /** What the "Keşfet" list currently shows. */
 data class PoolListing(
@@ -30,44 +33,39 @@ data class PoolListing(
 
 /**
  * The shared map pool as the app sees it, living as long as the process rather
- * than as long as the Dosyalar screen is on screen.
+ * than as long as any screen.
  *
- * Owned per screen, all of this was rebuilt on every visit: a Firestore client,
- * a fresh network callback registration, and a full re-download of the public
- * listing. Here the listing is cached and only re-fetched once it's older than
+ * The listing is cached and only re-fetched once it's older than
  * [LISTING_MAX_AGE_MS] (or on an explicit "Yenile"), Firebase is only touched
- * once the pool is actually used, and connectivity is watched only while
- * someone is looking at it.
+ * once the pool is actually used — and then first on a background thread — and
+ * connectivity is watched only while someone is looking at it.
  *
- * Publishing and unpublishing run in the app's scope, not the screen's:
- * leaving the screen mid-publish used to cancel the local bookkeeping while
- * the write itself still reached the server, leaving a publication this
- * device no longer knew it owned (and so couldn't take down).
+ * Publishing and unpublishing run in the app's scope, not a screen's: leaving
+ * the screen mid-publish must not cancel the local bookkeeping while the write
+ * itself still reaches the server, which would leave a publication this device
+ * no longer knew it owned (and so couldn't take down).
  */
-class SharedMapPool(
-    context: Context,
-    private val scope: CoroutineScope,
-    repositoryFactory: () -> RemoteBuildingMapRepository = { FirestoreBuildingMapRepository() },
-    private val clock: () -> Long = System::currentTimeMillis,
+@Singleton
+class SharedMapPool @Inject constructor(
+    @param:ApplicationScope private val scope: CoroutineScope,
+    private val remoteRepository: dagger.Lazy<RemoteBuildingMapRepository>,
+    connectivity: ConnectivityMonitor,
+    private val published: PublishedBuildings,
+    private val clock: Clock,
+    @param:IoDispatcher private val io: CoroutineDispatcher,
 ) {
-    private val repository by lazy(repositoryFactory)
+    private suspend fun remote(): RemoteBuildingMapRepository = withContext(io) { remoteRepository.get() }
 
-    // Creating the Firestore/Auth clients sets Firebase up on first touch, which isn't
-    // free — so that first touch happens on a background thread, not the main one.
-    private suspend fun remote(): RemoteBuildingMapRepository = withContext(Dispatchers.IO) { repository }
+    val isOnline: StateFlow<Boolean> = connectivity.isOnline
+        .stateIn(scope, SharingStarted.WhileSubscribed(CONNECTIVITY_KEEPALIVE_MS), false)
 
-    private val published = PublishedBuildingsStore(context)
+    private val _listing = MutableStateFlow(PoolListing())
+    val listing: StateFlow<PoolListing> = _listing.asStateFlow()
 
     private val _publishedIds = MutableStateFlow(published.publishedLocalIds())
 
     /** Local building ids this device has published — observable, so rows update as soon as a publish lands. */
     val publishedIds: StateFlow<Set<String>> = _publishedIds.asStateFlow()
-
-    val isOnline: StateFlow<Boolean> = AndroidConnectivityMonitor(context).isOnline
-        .stateIn(scope, SharingStarted.WhileSubscribed(CONNECTIVITY_KEEPALIVE_MS), false)
-
-    private val _listing = MutableStateFlow(PoolListing())
-    val listing: StateFlow<PoolListing> = _listing.asStateFlow()
 
     // A refresh asked for while one is already in flight (say, right after a publish)
     // runs once that one finishes, instead of being dropped and leaving the list stale.
@@ -75,7 +73,7 @@ class SharedMapPool(
 
     fun refreshIfStale() {
         val current = _listing.value
-        val stale = current.fetchedAtMs == 0L || clock() - current.fetchedAtMs > LISTING_MAX_AGE_MS
+        val stale = current.fetchedAtMs == 0L || clock.nowMs() - current.fetchedAtMs > LISTING_MAX_AGE_MS
         if (stale || current.failure != null) refresh()
     }
 
@@ -87,7 +85,7 @@ class SharedMapPool(
         _listing.update { it.copy(loading = true, failure = null) }
         scope.launch {
             remote().listPublicBuildings()
-                .onSuccess { summaries -> _listing.value = PoolListing(summaries = summaries, fetchedAtMs = clock()) }
+                .onSuccess { summaries -> _listing.value = PoolListing(summaries = summaries, fetchedAtMs = clock.nowMs()) }
                 .onFailure { error -> _listing.update { it.copy(loading = false, failure = error.asRemoteMapFailure()) } }
             if (refreshPending) {
                 refreshPending = false

@@ -40,8 +40,8 @@ import kotlin.math.min
 fun SurveyMapCanvas(
     trajectory: List<Position>,
     results: List<BeaconSurveyResult>,
-    waypoints: List<TaggedWaypoint> = emptyList(),
     modifier: Modifier = Modifier,
+    waypoints: List<TaggedWaypoint> = emptyList(),
 ) {
     Column(modifier = modifier) {
         Text(text = stringResource(R.string.survey_preview_title), style = MaterialTheme.typography.titleSmall)

@@ -11,7 +11,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -39,16 +41,19 @@ fun PermissionRationale(
     title: String,
     message: String,
     onContinue: () -> Unit,
+    speak: (String) -> Unit,
+    stopSpeaking: () -> Unit,
     modifier: Modifier = Modifier,
     buttonLabel: String = stringResource(R.string.common_continue),
 ) {
-    val feedback = rememberAppSpeech()
     val screenReaderOn = rememberIsScreenReaderOn()
     LaunchedEffect(message, screenReaderOn) {
         // With TalkBack on, it reads the message (live region below) — speaking it here
         // too would put two voices on top of each other.
-        if (!screenReaderOn) feedback.speakNow(message)
+        if (!screenReaderOn) speak(message)
     }
+    val currentStopSpeaking = rememberUpdatedState(stopSpeaking)
+    DisposableEffect(Unit) { onDispose { currentStopSpeaking.value() } }
 
     Column(
         modifier = modifier.fillMaxSize().padding(24.dp),

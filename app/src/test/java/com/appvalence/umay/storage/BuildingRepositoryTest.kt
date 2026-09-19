@@ -1,6 +1,7 @@
 package com.appvalence.umay.storage
 
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.testing.FakeBuildingMapStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -11,41 +12,17 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BuildingRepositoryTest {
-    private class FakeStore(initial: List<BuildingMap> = emptyList()) : BuildingMapStore {
-        val files = initial.associateBy { it.id }.toMutableMap()
-        var listCalls = 0
-        var failWrites = false
-
-        override fun listBuildings(): List<BuildingMap> {
-            listCalls++
-            return files.values.sortedBy { it.id }
-        }
-
-        override fun save(map: BuildingMap): Boolean {
-            if (failWrites) return false
-            files[map.id] = map
-            return true
-        }
-
-        override fun exists(buildingId: String) = buildingId in files
-        override fun delete(buildingId: String) = files.remove(buildingId) != null
-        override fun exportCopy(map: BuildingMap): File? = null
-    }
-
     private fun building(id: String) = BuildingMap(id = id, floors = emptyList())
 
-    private fun TestScope.repositoryOver(store: FakeStore): BuildingRepository {
-        val dispatcher = StandardTestDispatcher(testScheduler)
-        return BuildingRepository({ store }, this, dispatcher)
-    }
+    private fun TestScope.repositoryOver(store: FakeBuildingMapStore) =
+        BuildingRepository({ store }, this, StandardTestDispatcher(testScheduler))
 
     @Test
     fun `nothing is known before the first load finishes`() = runTest {
-        val repository = repositoryOver(FakeStore(listOf(building("A"))))
+        val repository = repositoryOver(FakeBuildingMapStore(listOf(building("A"))))
         assertNull(repository.buildings.value)
 
         repository.refresh()
@@ -56,7 +33,7 @@ class BuildingRepositoryTest {
 
     @Test
     fun `saving adds the building in order without re-reading every other one`() = runTest {
-        val store = FakeStore(listOf(building("B")))
+        val store = FakeBuildingMapStore(listOf(building("B")))
         val repository = repositoryOver(store)
         repository.refresh()
         advanceUntilIdle()
@@ -70,7 +47,7 @@ class BuildingRepositoryTest {
 
     @Test
     fun `saving under an existing id replaces that building`() = runTest {
-        val repository = repositoryOver(FakeStore(listOf(building("A"))))
+        val repository = repositoryOver(FakeBuildingMapStore(listOf(building("A"))))
         repository.refresh()
         advanceUntilIdle()
 
@@ -82,7 +59,7 @@ class BuildingRepositoryTest {
 
     @Test
     fun `a failed write leaves the list untouched`() = runTest {
-        val store = FakeStore(listOf(building("A"))).apply { failWrites = true }
+        val store = FakeBuildingMapStore(listOf(building("A"))).apply { failWrites = true }
         val repository = repositoryOver(store)
         repository.refresh()
         advanceUntilIdle()
@@ -94,7 +71,7 @@ class BuildingRepositoryTest {
 
     @Test
     fun `deleting removes just that building`() = runTest {
-        val repository = repositoryOver(FakeStore(listOf(building("A"), building("B"))))
+        val repository = repositoryOver(FakeBuildingMapStore(listOf(building("A"), building("B"))))
         repository.refresh()
         advanceUntilIdle()
 
@@ -105,7 +82,7 @@ class BuildingRepositoryTest {
 
     @Test
     fun `a save made before the first load finishes isn't lost when it does`() = runTest {
-        val repository = repositoryOver(FakeStore(listOf(building("A"))))
+        val repository = repositoryOver(FakeBuildingMapStore(listOf(building("A"))))
 
         repository.refresh()
         repository.save(building("B"))

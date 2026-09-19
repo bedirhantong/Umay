@@ -13,7 +13,7 @@ import com.appvalence.umay.coremodel.NavigationAlert
  * produce nothing. A new pattern replaces whatever is still vibrating — the
  * newest alert is the one that matters. No-op on devices without a vibrator.
  */
-class HapticFeedbackController(context: Context) : FeedbackController {
+class HapticFeedbackController(context: Context) : FeedbackController, HapticPlayer {
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         context.getSystemService(VibratorManager::class.java)?.defaultVibrator
     } else {
@@ -21,13 +21,13 @@ class HapticFeedbackController(context: Context) : FeedbackController {
         context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     }
 
-    val isAvailable: Boolean get() = vibrator?.hasVibrator() == true
+    override val isAvailable: Boolean get() = vibrator?.hasVibrator() == true
 
     override fun emit(alert: NavigationAlert) {
         play(HapticPatterns.forCue(alert.cue) ?: return)
     }
 
-    fun play(pattern: HapticPattern) {
+    override fun play(pattern: HapticPattern) {
         val vibrator = vibrator?.takeIf { it.hasVibrator() } ?: return
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -44,7 +44,7 @@ class HapticFeedbackController(context: Context) : FeedbackController {
         }
     }
 
-    fun stop() {
+    override fun stop() {
         vibrator?.cancel()
     }
 

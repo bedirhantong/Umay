@@ -9,4 +9,6 @@ plugins {
     // resources the Firebase SDKs read at runtime. Applied only in :app, where that
     // file lives; :cloud can still use Firebase SDKs as a dependency of :app.
     alias(libs.plugins.google.services) apply false
+    alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.hilt) apply false
 }

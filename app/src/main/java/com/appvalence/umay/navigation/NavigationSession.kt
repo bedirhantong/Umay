@@ -13,7 +13,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
 import androidx.lifecycle.LifecycleOwner
 import com.appvalence.umay.R
-import com.appvalence.umay.common.createSpeechController
+import com.appvalence.umay.common.speechLocale
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.FieldLogEvent
@@ -32,8 +32,9 @@ import com.appvalence.umay.coremodel.SessionStartEvent
 import com.appvalence.umay.coremodel.StatusEvent
 import com.appvalence.umay.feedback.CompositeFeedbackController
 import com.appvalence.umay.feedback.HapticFeedbackController
+import com.appvalence.umay.feedback.TtsFeedbackController
 import com.appvalence.umay.fieldlog.FieldLogRecorder
-import com.appvalence.umay.fieldlog.FieldLogStore
+import com.appvalence.umay.fieldlog.FieldLogFiles
 import com.appvalence.umay.orchestrator.BuildingQueryMatcher
 import com.appvalence.umay.orchestrator.BuildingQueryResult
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
@@ -69,6 +70,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.math.roundToInt
 
 /** Everything the navigation screen (and the notification) shows about a running session. */
@@ -112,6 +116,8 @@ class NavigationSession internal constructor(
     val buildingMap: BuildingMap,
     val startNodeId: String,
     val destinationNode: MapNode,
+    private val settings: UserSettings,
+    fieldLogs: FieldLogFiles,
     private val onClosed: (NavigationSession) -> Unit,
 ) {
     private val appContext = context.applicationContext
@@ -123,10 +129,10 @@ class NavigationSession internal constructor(
     val destinationFloor: Int = nodeFloor[destinationNode.id] ?: 0
     val hasFingerprintedWaypoints: Boolean = allNodesById.values.any { it.fingerprint.isNotEmpty() }
 
-    private val settings = UserSettings(appContext)
     private val stepLengthMeters = settings.stepLengthMeters
 
-    val speech = createSpeechController(appContext)
+    // Its own voice rather than the app-wide one: it's shut down with the session.
+    val speech = TtsFeedbackController(appContext, speechLocale(appContext), settings.speechRate)
     private val haptics = HapticFeedbackController(appContext)
 
     // Every alert goes out as speech and, unless switched off in Ayarlar, as a vibration
@@ -177,9 +183,8 @@ class NavigationSession internal constructor(
     // Field-test log for this one session (see FieldLogRecorder) — null unless recording
     // was switched on in "Dosyalar". Everything records through `recorder?.`, so with
     // recording off none of this costs anything.
-    private val recorder: FieldLogRecorder? = FieldLogStore(appContext).let { store ->
-        if (store.isRecordingEnabled) FieldLogRecorder(store.newSessionFile(buildingMap.id)) else null
-    }
+    private val recorder: FieldLogRecorder? =
+        if (fieldLogs.isRecordingEnabled) FieldLogRecorder(fieldLogs.newSessionFile(buildingMap.id)) else null
     val isRecording: Boolean get() = recorder != null
     val recordingFailed: Boolean get() = recorder?.failed == true
 
@@ -613,21 +618,35 @@ class NavigationSession internal constructor(
  * The single active [NavigationSession], if any — process-wide, so it survives
  * the screen that started it and whichever screen (or notification) shows it
  * next. Main-thread only.
+ *
+ * A walk deliberately isn't owned by a ViewModel: it has to keep going with
+ * the screen off and the activity gone (see [NavigationService]). ViewModels
+ * observe [active] instead.
  */
-object NavigationSessions {
-    private val _active = MutableStateFlow<NavigationSession?>(null)
-    val active: StateFlow<NavigationSession?> = _active.asStateFlow()
+interface NavigationSessions {
+    val active: StateFlow<NavigationSession?>
 
-    fun start(context: Context, map: BuildingMap, startNodeId: String, destinationNode: MapNode): NavigationSession {
+    /** Starts a walk, ending any walk already in progress. */
+    fun start(map: BuildingMap, startNodeId: String, destinationNode: MapNode)
+}
+
+@Singleton
+class NavigationSessionManager @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    private val settings: UserSettings,
+    private val fieldLogs: FieldLogFiles,
+) : NavigationSessions {
+    private val _active = MutableStateFlow<NavigationSession?>(null)
+    override val active: StateFlow<NavigationSession?> = _active.asStateFlow()
+
+    override fun start(map: BuildingMap, startNodeId: String, destinationNode: MapNode) {
         _active.value?.stop("replaced")
-        val appContext = context.applicationContext
-        val session = NavigationSession(appContext, map, startNodeId, destinationNode, onClosed = { closed ->
+        val session = NavigationSession(context, map, startNodeId, destinationNode, settings, fieldLogs, onClosed = { closed ->
             if (_active.value === closed) _active.value = null
-            NavigationService.stop(appContext)
+            NavigationService.stop(context)
         })
         _active.value = session
         session.start()
-        NavigationService.start(appContext)
-        return session
+        NavigationService.start(context)
     }
 }
