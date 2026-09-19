@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -510,6 +511,19 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
         ) {
             Icon(Icons.Filled.Replay, contentDescription = null)
             Text(stringResource(R.string.nav_repeat), modifier = Modifier.padding(start = 8.dp))
+        }
+
+        // Fully offline (on-device OCR, see MlKitSignTextReader) — reads whatever the
+        // obstacle-detection camera currently sees, so it only makes sense while that's
+        // running. Disabled rather than hidden while a read is already in flight, so a
+        // second tap doesn't queue a confusing second announcement.
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(bottom = 12.dp),
+            enabled = !ui.readingSigns,
+            onClick = session::readSignsAloud,
+        ) {
+            Icon(Icons.Filled.TextFields, contentDescription = null)
+            Text(stringResource(R.string.nav_read_signs), modifier = Modifier.padding(start = 8.dp))
         }
 
         if (progress != null && status != NavigationStatus.ARRIVED) {
