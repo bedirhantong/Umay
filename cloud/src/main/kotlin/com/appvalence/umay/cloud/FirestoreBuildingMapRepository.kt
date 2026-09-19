@@ -12,23 +12,22 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * The whole map — not just its listing metadata — lives in one Firestore
- * document. There is deliberately no Cloud Storage bucket anywhere in this
- * project: since February 2026, Cloud Storage for Firebase requires a
- * linked billing account (the paid Blaze plan) regardless of how little is
- * actually used, and this app stays on the free Spark plan on purpose. A
- * Firestore document has its own hard 1 MiB limit, which is why
- * [MAX_PUBLISHED_MAP_BYTES] sits well under that.
+ * Each publication is two Firestore documents with the same id, written and
+ * deleted together in one batch:
+ * - `public_buildings/{id}`: the small summary the "Keşfet" list shows;
+ * - `public_building_maps/{id}`: the map itself (`mapJson`), read only when
+ *   someone actually downloads that one building.
+ * Firestore can't fetch a subset of a document's fields, so with the map in the
+ * summary document, browsing the pool would download every listed map in full:
+ * up to ~150 MB for a 200-building listing, against a free plan's 10 GB a month
+ * of downloads.
  *
- * The tradeoff this accepts: browsing the pool reads whole documents,
- * including their `mapJson`, not just the small summary fields — Firestore
- * has no way to fetch a subset of a document's fields on a query, so
- * [listPublicBuildings] only *uses* the summary fields in code, but the
- * server-side read (and its cost against the free quota) is still by
- * document, not by field. At the pool sizes this project can reach on
- * Spark's free quotas (50k reads/day), that's not a real cost — but it's
- * why nothing here should be mistaken for how a large-scale version of this
- * feature would have to be built.
+ * There is deliberately no Cloud Storage bucket anywhere in this project:
+ * since February 2026, Cloud Storage for Firebase requires a linked billing
+ * account (the paid Blaze plan) regardless of how little is actually used, and
+ * this app stays on the free Spark plan on purpose. A Firestore document has
+ * its own hard 1 MiB limit, which is why [MAX_PUBLISHED_MAP_BYTES] sits well
+ * under that.
  *
  * There's no login screen anywhere in the app; [publishBuildingMap] and
  * [unpublishBuildingMap] sign in anonymously (see [FirebaseAuth.signInAnonymously])
@@ -43,6 +42,7 @@ class FirestoreBuildingMapRepository(
 ) : RemoteBuildingMapRepository {
 
     private val collection get() = firestore.collection(BUILDINGS_COLLECTION)
+    private val mapsCollection get() = firestore.collection(MAPS_COLLECTION)
 
     override suspend fun listPublicBuildings(): Result<List<PublicBuildingSummary>> = runCatching {
         val snapshot = collection
@@ -63,8 +63,8 @@ class FirestoreBuildingMapRepository(
     }.recoverFirestoreFailure()
 
     override suspend fun downloadBuildingMap(id: String): Result<BuildingMap> = runCatching {
-        val doc = collection.document(id).getSuspending()
-        val json = doc.getString(FIELD_MAP_JSON) ?: return Result.remoteFailure(RemoteMapFailure.NotFound)
+        val json = mapsCollection.document(id).getSuspending().getString(FIELD_MAP_JSON)
+            ?: return Result.remoteFailure(RemoteMapFailure.NotFound)
         runCatching { BuildingMapJson.decode(json) }.getOrNull()
             ?: return Result.remoteFailure(RemoteMapFailure.Other("Bozuk harita verisi"))
     }.recoverFirestoreFailure()
@@ -79,23 +79,39 @@ class FirestoreBuildingMapRepository(
 
         val uid = ensureSignedIn()
         val id = sanitizeBuildingDocumentId(map.id)
-        collection.document(id).setSuspending(
-            mapOf(
-                FIELD_OWNER_ID to uid,
-                FIELD_DISPLAY_NAME to map.id,
-                FIELD_FLOOR_COUNT to map.floors.size,
-                FIELD_NODE_COUNT to map.floors.sumOf { it.nodes.size },
-                FIELD_SIZE_BYTES to encodedBytes,
-                FIELD_MAP_JSON to encoded,
-                FIELD_UPDATED_AT to System.currentTimeMillis(),
-            ),
-        )
+        val now = System.currentTimeMillis()
+        // One batch: the listing never shows a building whose map isn't there yet, and
+        // firestore.rules can check that both documents belong to the same person.
+        firestore.batch()
+            .set(
+                collection.document(id),
+                mapOf(
+                    FIELD_OWNER_ID to uid,
+                    FIELD_DISPLAY_NAME to map.id,
+                    FIELD_FLOOR_COUNT to map.floors.size,
+                    FIELD_NODE_COUNT to map.floors.sumOf { it.nodes.size },
+                    FIELD_SIZE_BYTES to encodedBytes,
+                    FIELD_UPDATED_AT to now,
+                ),
+            )
+            .set(
+                mapsCollection.document(id),
+                mapOf(
+                    FIELD_OWNER_ID to uid,
+                    FIELD_MAP_JSON to encoded,
+                    FIELD_UPDATED_AT to now,
+                ),
+            )
+            .commitSuspending()
         id
     }.recoverFirestoreFailure()
 
     override suspend fun unpublishBuildingMap(id: String): Result<Unit> = runCatching {
         ensureSignedIn()
-        collection.document(id).deleteSuspending()
+        firestore.batch()
+            .delete(collection.document(id))
+            .delete(mapsCollection.document(id))
+            .commitSuspending()
     }.recoverFirestoreFailure()
 
     // Anonymous sign-in is silent and deviceless — no UI, no credential the person has to
@@ -107,6 +123,7 @@ class FirestoreBuildingMapRepository(
 
     companion object {
         private const val BUILDINGS_COLLECTION = "public_buildings"
+        private const val MAPS_COLLECTION = "public_building_maps"
         private const val FIELD_OWNER_ID = "ownerId"
         private const val FIELD_DISPLAY_NAME = "displayName"
         private const val FIELD_FLOOR_COUNT = "floorCount"
@@ -181,16 +198,9 @@ private suspend fun com.google.firebase.firestore.DocumentReference.getSuspendin
             .addOnFailureListener { continuation.resumeWithException(it) }
     }
 
-private suspend fun com.google.firebase.firestore.DocumentReference.setSuspending(data: Map<String, Any>) =
+private suspend fun com.google.firebase.firestore.WriteBatch.commitSuspending() =
     suspendCancellableCoroutine<Unit> { continuation ->
-        set(data)
-            .addOnSuccessListener { continuation.resume(Unit) }
-            .addOnFailureListener { continuation.resumeWithException(it) }
-    }
-
-private suspend fun com.google.firebase.firestore.DocumentReference.deleteSuspending() =
-    suspendCancellableCoroutine<Unit> { continuation ->
-        delete()
+        commit()
             .addOnSuccessListener { continuation.resume(Unit) }
             .addOnFailureListener { continuation.resumeWithException(it) }
     }
