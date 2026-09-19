@@ -7,4 +7,9 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- What shows before the first frame is drawn (the launch "splash" on older
+         Android versions): the same color Material 3's background uses, so launching
+         doesn't flash a different color first. Night variant in values-night/. -->
+    <color name="window_background">#FFFEF7FF</color>
 </resources>

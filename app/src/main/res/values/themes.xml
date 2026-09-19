@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
-    <style name="Theme.Umay" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Umay" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Matches the first Compose frame in both light and dark mode (see
+             window_background), so launching never flashes a color the app isn't. -->
+        <item name="android:windowBackground">@color/window_background</item>
+        <!-- The app draws its own dark theme; without this, Android 10+ would also
+             auto-darken this (nominally light) theme's window on top of it. -->
+        <item name="android:forceDarkAllowed" tools:targetApi="29">false</item>
+    </style>
 </resources>
