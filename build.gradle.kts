@@ -5,4 +5,8 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
+    // Reads app/google-services.json (gitignored — see README) and generates the
+    // resources the Firebase SDKs read at runtime. Applied only in :app, where that
+    // file lives; :cloud can still use Firebase SDKs as a dependency of :app.
+    alias(libs.plugins.google.services) apply false
 }

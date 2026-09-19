@@ -13,6 +13,8 @@ cameraX = "1.5.1"
 tfliteTaskVision = "0.4.4"
 kotlinxSerialization = "1.8.1"
 mlkitTextRecognition = "16.0.1"
+googleServices = "4.5.0"
+firebaseBom = "34.19.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -43,6 +45,15 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 # On-device only (downloads its small model once via Google Play Services, then never
 # calls out again) — free, no billing account, works with no connection at all.
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+# Deliberately just Firestore + Anonymous Auth: both stay on the free Spark tier,
+# no billing account required. Cloud Storage is NOT added — since February 2026 it
+# requires the paid Blaze plan regardless of usage, so published maps live directly
+# in Firestore documents instead (see FirestoreBuildingMapRepository). Firebase AI
+# Logic (Gemini) is NOT added either — also Blaze-only. Add either only behind an
+# explicit, budgeted decision (see :cloud's module doc).
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -50,4 +61,5 @@ android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 
