@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.LocationSearching
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
@@ -524,6 +525,41 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
         ) {
             Icon(Icons.Filled.TextFields, contentDescription = null)
             Text(stringResource(R.string.nav_read_signs), modifier = Modifier.padding(start = 8.dp))
+        }
+
+        // Fully offline (BuildingQueryMatcher runs against this building's own graph, no
+        // cloud, no language model) — only needs RECORD_AUDIO, asked for here rather than
+        // upfront with camera/location, and only the first time this button is actually
+        // used. Speaking the reason before the system dialog follows the same rule as
+        // every other permission ask in this app: a blind user can't read the dialog's
+        // fine print, so the *why* has to be said out loud regardless.
+        var pendingQuestion by remember { mutableStateOf(false) }
+        val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted && pendingQuestion) session.askQuestion()
+            pendingQuestion = false
+        }
+        OutlinedButton(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(bottom = 12.dp),
+            enabled = !ui.askingQuestion,
+            onClick = {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    session.askQuestion()
+                } else {
+                    session.speech.speakNow(context.getString(R.string.voice_query_permission_message))
+                    pendingQuestion = true
+                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
+        ) {
+            Icon(Icons.Filled.Mic, contentDescription = null)
+            Text(stringResource(R.string.nav_ask_question), modifier = Modifier.padding(start = 8.dp))
+        }
+        ui.lastQuestionAnswer?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
         }
 
         if (progress != null && status != NavigationStatus.ARRIVED) {
