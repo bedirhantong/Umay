@@ -4,6 +4,9 @@
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Only for "Bir şey sor" (voice query) — requested on-demand when that button is
+         first tapped, not upfront with the rest (see NavigationScreen). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Navigation keeps running with the screen off via a foreground service; its
          ongoing notification is how the user (and Android) can see and stop it. -->

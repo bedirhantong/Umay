@@ -34,6 +34,8 @@ import com.appvalence.umay.feedback.CompositeFeedbackController
 import com.appvalence.umay.feedback.HapticFeedbackController
 import com.appvalence.umay.fieldlog.FieldLogRecorder
 import com.appvalence.umay.fieldlog.FieldLogStore
+import com.appvalence.umay.orchestrator.BuildingQueryMatcher
+import com.appvalence.umay.orchestrator.BuildingQueryResult
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
 import com.appvalence.umay.perception.CameraFailure
@@ -53,6 +55,9 @@ import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import com.appvalence.umay.positioning.pdr.StepDetector
 import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
 import com.appvalence.umay.settings.UserSettings
+import com.appvalence.umay.voice.SpeechRecognitionFailure
+import com.appvalence.umay.voice.SpeechRecognitionResult
+import com.appvalence.umay.voice.SpeechToText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +82,8 @@ data class NavigationSessionUi(
     val barometerClimbMeters: Double? = null,
     val readingSigns: Boolean = false,
     val lastSignReading: String? = null,
+    val askingQuestion: Boolean = false,
+    val lastQuestionAnswer: String? = null,
 )
 
 /**
@@ -151,6 +158,12 @@ class NavigationSession internal constructor(
     // On-device, offline, free (see MlKitSignTextReader) — reads whatever frame the
     // obstacle detector last saw rather than binding a second camera session.
     private val signTextReader: SignTextReader = MlKitSignTextReader()
+
+    // Local, free, on-device question answering (see BuildingQueryMatcher) — only
+    // RECORD_AUDIO is needed for speech-to-text, no cloud, no connection, no language
+    // model. The transcript never leaves the device; it's matched against this
+    // building's own graph and thrown away.
+    private val speechToText = SpeechToText(appContext)
 
     // With a barometer, floor changes confirm themselves from air pressure — stairs and
     // elevators alike — so the footstep-count guess (NavigationOrchestrator's autoConfirm)
@@ -398,6 +411,64 @@ class NavigationSession internal constructor(
         _ui.update { it.copy(lastSignReading = message) }
         speech.speakNow(message)
         recorder?.record(GuidanceEvent(System.currentTimeMillis(), "sign-reading-${System.nanoTime()}", "INFO", message))
+    }
+
+    /**
+     * "Bir şey sor" — listens for a single question ("en yakın tuvalet nerede",
+     * "asansör nerede") and answers it against this building's own graph
+     * ([BuildingQueryMatcher]), entirely offline. Caller must already hold
+     * RECORD_AUDIO; this doesn't request it. A no-op while a question is
+     * already being asked.
+     */
+    fun askQuestion() {
+        if (_ui.value.askingQuestion) return
+        if (!speechToText.isAvailable()) {
+            answerQuestion(appContext.getString(R.string.voice_query_not_available))
+            return
+        }
+        _ui.update { it.copy(askingQuestion = true) }
+        speech.speakNow(appContext.getString(R.string.voice_query_listening))
+        scope.launch {
+            when (val heard = speechToText.listenOnce()) {
+                is SpeechRecognitionResult.Recognized -> {
+                    val position = _ui.value.state?.position
+                    when (val result = BuildingQueryMatcher.match(heard.text, allNodesById.values.toList(), nodeFloor, position)) {
+                        is BuildingQueryResult.Found -> {
+                            val distanceMeters = result.distanceMeters
+                            answerQuestion(
+                                if (distanceMeters != null) {
+                                    appContext.getString(R.string.voice_query_answer_with_distance, result.node.name, formatMeters(distanceMeters))
+                                } else {
+                                    appContext.getString(R.string.voice_query_answer_no_distance, result.node.name)
+                                },
+                            )
+                        }
+                        BuildingQueryResult.NotUnderstood -> answerQuestion(appContext.getString(R.string.voice_query_not_understood))
+                    }
+                }
+                is SpeechRecognitionResult.Failed -> answerQuestion(
+                    appContext.getString(
+                        when (heard.reason) {
+                            SpeechRecognitionFailure.NOT_AVAILABLE -> R.string.voice_query_not_available
+                            SpeechRecognitionFailure.NO_SPEECH -> R.string.voice_query_no_speech
+                            SpeechRecognitionFailure.PERMISSION_DENIED -> R.string.voice_query_permission_denied
+                            SpeechRecognitionFailure.OTHER -> R.string.voice_query_error
+                        },
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun formatMeters(distanceMeters: Double): String {
+        val rounded = distanceMeters.roundToInt().coerceAtLeast(1)
+        return appContext.resources.getQuantityString(R.plurals.say_meters, rounded, rounded)
+    }
+
+    private fun answerQuestion(message: String) {
+        _ui.update { it.copy(askingQuestion = false, lastQuestionAnswer = message) }
+        speech.speakNow(message)
+        recorder?.record(GuidanceEvent(System.currentTimeMillis(), "voice-query-${System.nanoTime()}", "INFO", message))
     }
 
     /** Field-test ground truth (see GroundTruthEvent); null when not recording. */

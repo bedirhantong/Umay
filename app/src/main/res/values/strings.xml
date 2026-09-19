@@ -134,6 +134,18 @@
         <item quantity="one">Hedefe yaklaşık %1$d metre kaldı.</item>
         <item quantity="other">Hedefe yaklaşık %1$d metre kaldı.</item>
     </plurals>
+
+    <!-- Voice query: "Bir şey sor" (see BuildingQueryMatcher, SpeechToText) -->
+    <string name="nav_ask_question">Bir şey sor</string>
+    <string name="voice_query_permission_message">Sorduğun soruları duyup haritada arayabilmem için mikrofon iznine ihtiyacım var. Ses kaydı cihazından dışarı çıkmaz, hemen metne çevrilip atılır.</string>
+    <string name="voice_query_listening">Dinliyorum.</string>
+    <string name="voice_query_answer_with_distance">%1$s, yaklaşık %2$s uzakta.</string>
+    <string name="voice_query_answer_no_distance">%1$s var, ama şu an ne kadar uzakta olduğunu söyleyemiyorum.</string>
+    <string name="voice_query_not_understood">Anlayamadım, farklı bir şekilde sorabilir misin?</string>
+    <string name="voice_query_no_speech">Bir şey duyamadım.</string>
+    <string name="voice_query_not_available">Bu cihazda konuşarak soru sorma özelliği kullanılamıyor.</string>
+    <string name="voice_query_permission_denied">Mikrofon izni verilmedi.</string>
+    <string name="voice_query_error">Bir şeyler ters gitti, tekrar dener misin?</string>
     <string name="nav_progress_next">Sonraki</string>
     <string name="nav_progress_destination">Hedefe</string>
     <string name="nav_progress_floor_change">Kat değişimi</string>
