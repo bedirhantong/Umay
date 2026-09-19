@@ -113,6 +113,9 @@
     <string name="nav_camera_warning">%1$s. Engel algılama olmadan devam ediliyor.</string>
     <string name="camera_failure_model">Engel algılama modeli yüklenemedi</string>
     <string name="camera_failure_camera">Kamera başlatılamadı</string>
+    <string name="nav_read_signs">Çevredeki yazıyı oku</string>
+    <string name="sign_reading_no_camera">Kamera şu an bir görüntü vermiyor, engel algılamanın açık olması gerekiyor.</string>
+    <string name="sign_reading_nothing_found">Okunabilir bir yazı bulamadım.</string>
     <string name="nav_floor_change_up">Kat değiştirdim (yukarı, Kat %1$d)</string>
     <string name="nav_floor_change_down">Kat değiştirdim (aşağı, Kat %1$d)</string>
     <string name="nav_floor_change_barometer_hint">Basınç sensörü kat değişimini kendisi algılayacak. Algılamazsa bu düğmeye dokun.</string>

@@ -38,6 +38,8 @@ import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
 import com.appvalence.umay.perception.CameraFailure
 import com.appvalence.umay.perception.CameraXObstacleDetector
+import com.appvalence.umay.perception.MlKitSignTextReader
+import com.appvalence.umay.perception.SignTextReader
 import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.baro.BarometricFloorChangeDetector
 import com.appvalence.umay.positioning.ble.BeaconScanTargets
@@ -73,6 +75,8 @@ data class NavigationSessionUi(
     val cameraWarning: String? = null,
     val fingerprintCorrections: Int = 0,
     val barometerClimbMeters: Double? = null,
+    val readingSigns: Boolean = false,
+    val lastSignReading: String? = null,
 )
 
 /**
@@ -143,6 +147,10 @@ class NavigationSession internal constructor(
     )
     private var cameraAttached = false
     private var cameraPauseAnnounced = false
+
+    // On-device, offline, free (see MlKitSignTextReader) — reads whatever frame the
+    // obstacle detector last saw rather than binding a second camera session.
+    private val signTextReader: SignTextReader = MlKitSignTextReader()
 
     // With a barometer, floor changes confirm themselves from air pressure — stairs and
     // elevators alike — so the footstep-count guess (NavigationOrchestrator's autoConfirm)
@@ -365,6 +373,33 @@ class NavigationSession internal constructor(
         recorder?.record(GuidanceEvent(System.currentTimeMillis(), "repeat-request", "INFO", text))
     }
 
+    /**
+     * "What does this say" — reads any text in the camera's current view (a room
+     * number, a sign) and speaks it. Works fully offline, no cloud involved. A no-op
+     * while a read is already in flight, so an impatient double-tap doesn't queue two.
+     */
+    fun readSignsAloud() {
+        if (_ui.value.readingSigns) return
+        val frame = detector.latestFrameOrNull()
+        if (frame == null) {
+            speakSignReadingResult(appContext.getString(R.string.sign_reading_no_camera))
+            return
+        }
+        _ui.update { it.copy(readingSigns = true) }
+        scope.launch {
+            val texts = signTextReader.read(frame)
+            _ui.update { it.copy(readingSigns = false) }
+            val message = if (texts.isEmpty()) appContext.getString(R.string.sign_reading_nothing_found) else texts.joinToString(". ")
+            speakSignReadingResult(message)
+        }
+    }
+
+    private fun speakSignReadingResult(message: String) {
+        _ui.update { it.copy(lastSignReading = message) }
+        speech.speakNow(message)
+        recorder?.record(GuidanceEvent(System.currentTimeMillis(), "sign-reading-${System.nanoTime()}", "INFO", message))
+    }
+
     /** Field-test ground truth (see GroundTruthEvent); null when not recording. */
     fun markGroundTruth(node: MapNode): GroundTruthEvent? {
         val recorder = recorder ?: return null
@@ -441,6 +476,7 @@ class NavigationSession internal constructor(
         if (cameraAttached) detector.unbind()
         speech.shutdown()
         haptics.stop()
+        (signTextReader as? MlKitSignTextReader)?.close()
         recorder?.record(SessionEndEvent(System.currentTimeMillis(), endReason))
         recorder?.close()
         onClosed(this)

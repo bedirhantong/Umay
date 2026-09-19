@@ -24,6 +24,7 @@ import org.tensorflow.lite.task.vision.detector.ObjectDetector
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Faz 1 obstacle detector: CameraX ImageAnalysis feeding a TFLite EfficientDet-Lite0
@@ -50,6 +51,12 @@ class CameraXObstacleDetector(
     private var objectDetector: ObjectDetector? = null
     private var cameraProvider: ProcessCameraProvider? = null
 
+    // The most recent upright frame this detector processed, for on-demand secondary
+    // readers (sign text) that want a look at what the camera currently sees without
+    // binding a second camera session — CameraX only allows one binding at a time, so
+    // every consumer in this app shares this one instead of fighting it for the camera.
+    private val latestFrame = AtomicReference<Bitmap?>(null)
+
     init {
         // NavigationOrchestrator combine()s this with the position stream, which only
         // emits once *both* sources have emitted at least once — without a seed value,
@@ -60,6 +67,9 @@ class CameraXObstacleDetector(
     }
 
     override fun obstacleUpdates(): SharedFlow<List<DetectedObstacle>> = obstacles.asSharedFlow()
+
+    /** The camera's current view, upright — null before the first frame or after [unbind]. See [SignTextReader]. */
+    fun latestFrameOrNull(): Bitmap? = latestFrame.get()
 
     /**
      * Binds with a visible camera preview (e.g. the "Engel Algılama" debug screen, where
@@ -152,6 +162,7 @@ class CameraXObstacleDetector(
         objectDetector = null
         tracker = ObstacleTracker()
         obstacles.tryEmit(emptyList())
+        latestFrame.set(null)
     }
 
     private fun analyzeFrame(imageProxy: ImageProxy, detector: ObjectDetector) {
@@ -159,6 +170,7 @@ class CameraXObstacleDetector(
         try {
             val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             val uprightBitmap = imageProxy.toBitmap().rotated(rotationDegrees)
+            latestFrame.set(uprightBitmap)
             val tensorImage = TensorImage.fromBitmap(uprightBitmap)
 
             val rawDetections = detector.detect(tensorImage)
