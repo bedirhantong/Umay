@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gizlilik politikası - Umay</title>
+<meta name="description" content="Umay hangi verileri işler, hangilerini işlemez: kamera görüntüsü kaydedilmez, hesap ve reklam yoktur, veriler cihazda kalır.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/atkinson-next-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+<a class="skip" href="#icerik">Ana içeriğe geç</a>
+<header class="site"><div class="wrap">
+<a class="brand" href="index.html"><img src="img/favicon.svg" alt="" width="32" height="32">Umay</a>
+<nav class="site" aria-label="Ana gezinme"><ul><li><a href="index.html">Ana sayfa</a></li><li><a href="index.html#nasil">Nasıl çalışır</a></li><li><a href="index.html#kurumlar">Kurumlar için</a></li><li><a href="gizlilik.html" aria-current="page">Gizlilik</a></li><li><a href="destek.html">Destek</a></li><li><a href="veri-silme.html">Veri silme</a></li></ul></nav>
+</div></header>
+<main id="icerik" class="doc"><div class="wrap narrow">
+<h1>Gizlilik politikası</h1>
+<p class="meta">Umay (com.appvalence.umay) &middot; Son güncelleme: 20 Eylül 2026 &middot; <a href="en/privacy.html" hreflang="en" lang="en">English</a></p>
+
+<h2>Kısaca</h2>
+<ul>
+<li>Umay bir hesap istemez. Ad, e-posta ya da telefon numarası toplamaz.</li>
+<li>Kamera görüntüsü yalnızca o an, cihazda işlenir. Kaydedilmez, saklanmaz, gönderilmez.</li>
+<li>Reklam ve kullanım analizi yoktur.</li>
+<li>Haritalar, ayarlar ve kayıtlar cihazınızda durur. Cihazdan yalnızca siz bir haritayı &ldquo;herkese aç&rdquo; dediğinizde ya da bir dosyayı kendiniz paylaştığınızda çıkar.</li>
+</ul>
+
+<h2>Kimiz</h2>
+<p>Umay, açık kaynaklı bir projedir; geliştiricisi Bedirhan Tong'dur (AppValence). Kaynak kodu <a href="https://github.com/bedirhantong/Umay">GitHub'da</a> herkese açıktır; bu politikada yazan her şey kodla doğrulanabilir. İletişim için <a href="destek.html">destek sayfasına</a> bakın.</p>
+
+<h2>İzinler ve neden gerektikleri</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>İzin</th><th>Ne için</th><th>Veriye ne olur</th></tr></thead>
+<tbody>
+<tr><td>Kamera</td><td>Önünüzdeki insanları algılamak ve tabelalardaki yazıyı okumak.</td><td>Kare cihazda, bellekte işlenir ve atılır. Kaydedilmez, gönderilmez. İnsan algılama ve yazı okuma cihaz üzerinde çalışır.</td></tr>
+<tr><td>Konum</td><td>Android, Bluetooth işaretçilerini taramak için konum iznini şart koşar. Yönlendirme sürerken ön plan hizmeti de bu izinle çalışır.</td><td>Umay GPS konumunuzu toplamaz, saklamaz, göndermez. Bina içindeki konum, adım sensörlerinden ve Bluetooth sinyallerinden cihazda hesaplanır.</td></tr>
+<tr><td>Bluetooth</td><td>Binadaki işaretçileri (beacon) tarayıp konumu düzeltmek.</td><td>Sinyal gücü cihazda kullanılır. Yalnızca harita çıkarırken haritaya yazılır.</td></tr>
+<tr><td>Mikrofon</td><td>&ldquo;Bir şey sor&rdquo; düğmesine bastığınızda sorunuzu dinlemek.</td><td>Yalnızca düğmeye bastığınızda dinler. Umay sesi kaydetmez, saklamaz. Sesi metne çeviren, telefonunuzdaki konuşma tanıma hizmetidir (bkz. aşağıda).</td></tr>
+<tr><td>Bildirim</td><td>Yönlendirme sürerken ekran kapalıyken çalışabilmek için gösterilen bildirim.</td><td>Veri işlenmez.</td></tr>
+<tr><td>Titreşim</td><td>Yönergeleri titreşimle bildirmek.</td><td>Veri işlenmez.</td></tr>
+</tbody></table></div>
+
+<h2>Sesli sorular</h2>
+<p>&ldquo;Bir şey sor&rdquo; özelliği, Android'in konuşma tanıma servisini kullanır. Umay bu servise kendi bir sunucusundan bağlanmaz. Sesin cihazda mı yoksa sunucuda mı metne çevrildiği, telefonunuzda seçili konuşma tanıma hizmetine (çoğu cihazda Google) ve onun ayarlarına bağlıdır; bu, o hizmetin gizlilik politikasına tabidir. Metne dönüşen soru, yalnızca cihazdaki bina haritasında eşleştirilir ve hemen atılır. Umay ne sesi ne metni saklar.</p>
+
+<h2>Cihazınızda saklanan veriler</h2>
+<ul>
+<li><strong>Bina haritaları:</strong> çıkardığınız ya da içe aktardığınız haritalar (yer adları, kat bilgisi, Bluetooth sinyal parmak izleri).</li>
+<li><strong>Ayarlar:</strong> konuşma hızı, adım uzunluğu ve benzeri tercihler.</li>
+<li><strong>Saha kaydı (varsayılan olarak kapalı):</strong> Dosyalar ekranından açarsanız, yönlendirme sırasında bina içi konum, adım, sinyal gücü, hava basıncı ve verilen yönergeler bir dosyaya yazılır. Görüntü ya da ses içermez. Dosya, siz paylaşana kadar cihazınızdan çıkmaz.</li>
+<li><strong>Çökme kayıtları:</strong> uygulama çökerse hata izi cihazda bir dosyaya yazılır. Kendiliğinden gönderilmez; isterseniz siz paylaşırsınız.</li>
+</ul>
+<p>Haritalar ve ayarlar, Android'in kendi yedekleme özelliği açıksa Google hesabınızın yedeğine dahil edilebilir. Saha kayıtları ve çökme kayıtları yedeğe dahil edilmez. Bu yedekleme Android'in bir özelliğidir, Umay'ın sunucusuna veri gitmez.</p>
+<p>Tüm bu verileri Dosyalar ekranından silebilir ya da uygulamayı kaldırarak yok edebilirsiniz.</p>
+
+<h2>Paylaşımlı harita havuzu</h2>
+<p>Bu özellik tamamen isteğe bağlıdır. Havuzdaki binaları görmek ve indirmek için giriş gerekmez. Bir haritayı &ldquo;herkese aç&rdquo; dediğinizde şunlar yüklenir:</p>
+<ul>
+<li>bina adı, kat sayısı, nokta sayısı ve dosya boyutu,</li>
+<li>haritanın kendisi: isimlendirdiğiniz yer adları, bina içi koordinatlar ve Bluetooth sinyal bilgileri,</li>
+<li>güncelleme zamanı ve rastgele üretilmiş anonim bir kimlik.</li>
+</ul>
+<p><strong>Yüklenen harita herkes tarafından okunabilir ve indirilebilir.</strong> Bina ya da yer adlarına kişisel bilgi (adınız, adresiniz) yazmayın. Uygulama, yayınlamadan önce sizden onay ister.</p>
+<p>Yayınlama için Firebase Anonim Kimlik Doğrulaması kullanılır; e-posta, ad ya da telefon istenmez. Bu anonim kimlik, sizi tanıyan hiçbir bilgiyle ilişkili değildir ve yalnızca haritayı sonradan kaldırabilmeniz içindir. Paylaşımı Dosyalar &gt; Paylaşımlı harita havuzu bölümünden kaldırabilirsiniz; bunu yalnızca haritayı yükleyen cihaz yapabilir. Ayrıntı için <a href="veri-silme.html">veri silme sayfasına</a> bakın.</p>
+
+<h2>Üçüncü taraflar</h2>
+<ul>
+<li><strong>Google Firebase (Cloud Firestore ve Anonim Kimlik Doğrulama):</strong> yalnızca paylaşımlı harita havuzunu kullanırken. Google, hizmeti sunarken IP adresi gibi teknik verileri kendi politikası uyarınca işleyebilir.</li>
+<li><strong>Google ML Kit metin tanıma:</strong> tabela yazılarını cihaz üzerinde okur; görüntü cihazdan çıkmaz.</li>
+<li><strong>Telefonunuzun konuşma tanıma ve metin okuma hizmetleri:</strong> yukarıda anlatıldığı gibi, cihazınızdaki hizmetlerdir.</li>
+</ul>
+<p>Umay reklam ağı, kullanım analizi ya da çökme raporlama hizmeti kullanmaz.</p>
+
+<h2>Verilerinizi neden ve nasıl işliyoruz</h2>
+<p>Yukarıdaki verilerin çoğu yalnızca cihazınızda işlenir ve bize ulaşmaz. Bize ulaşan tek veri, sizin isteğinizle yayınladığınız harita bilgisidir; amacı, aynı binaya giden başkalarının binayı yeniden taramak zorunda kalmamasıdır. Yasal dayanak, bu paylaşıma verdiğiniz açık onaydır.</p>
+
+<h2>Haklarınız</h2>
+<p>6698 sayılı Kişisel Verilerin Korunması Kanunu'nun 11. maddesi uyarınca; verilerinizin işlenip işlenmediğini öğrenme, bilgi isteme, düzeltme ve silme talep etme haklarına sahipsiniz. Yayınladığınız haritayı uygulamadan kendiniz kaldırabilirsiniz; bunun mümkün olmadığı durumlarda <a href="veri-silme.html">veri silme sayfasındaki</a> adımları izleyin.</p>
+
+<h2>Çocuklar</h2>
+<p>Umay çocuklara yönelik değildir ve çocuklardan bilerek veri toplamaz.</p>
+
+<h2>Değişiklikler</h2>
+<p>Bu politika değişirse yeni sürüm bu sayfada, güncelleme tarihiyle yayınlanır. Geçmiş sürümlerin tamamı <a href="https://github.com/bedirhantong/Umay">GitHub</a> geçmişinde görülebilir.</p>
+
+<h2>İletişim</h2>
+<p>Sorularınız için <a href="destek.html">destek sayfasına</a> ya da <a href="https://github.com/bedirhantong/Umay/issues">GitHub'daki konu bildirimlerine</a> bakın.</p>
+</div></main>
+<footer class="site"><div class="wrap">
+<ul><li><a href="gizlilik.html">Gizlilik politikası</a></li><li><a href="destek.html">Destek</a></li><li><a href="veri-silme.html">Veri silme</a></li><li><a href="en/privacy.html">Privacy policy (English)</a></li><li><a href="https://github.com/bedirhantong/Umay">Kaynak kodu</a></li></ul>
+<p>Umay bir yardımcıdır; beyaz baston ya da rehber köpeğin yerini tutmaz.</p>
+<p>Umay özgür yazılımdır (GPL-3.0).</p>
+</div></footer>
+</body>
+</html>

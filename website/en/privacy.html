@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy - Umay</title>
+<meta name="description" content="What data Umay processes and what it does not: camera frames are not recorded, there are no accounts or ads, and data stays on the device.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="../img/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="../fonts/atkinson-next-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body>
+<a class="skip" href="#icerik">Skip to content</a>
+<header class="site"><div class="wrap">
+<a class="brand" href="../index.html"><img src="../img/favicon.svg" alt="" width="32" height="32">Umay</a>
+<nav class="site" aria-label="Main"><ul><li><a href="../index.html">Ana sayfa (TR)</a></li><li><a href="privacy.html" aria-current="page">Privacy policy</a></li><li><a href="../destek.html">Support (TR)</a></li></ul></nav>
+</div></header>
+<main id="icerik" class="doc"><div class="wrap narrow">
+<h1>Privacy policy</h1>
+<p class="meta">Umay (com.appvalence.umay) &middot; Last updated: 20 September 2026 &middot; <a href="../gizlilik.html" hreflang="tr" lang="tr">Türkçe</a> is the original text.</p>
+
+<h2>In short</h2>
+<ul>
+<li>Umay asks for no account. It collects no name, e-mail address or phone number.</li>
+<li>Camera frames are processed on the device only, at the moment they are seen. They are not recorded, stored or sent.</li>
+<li>There are no ads and no usage analytics.</li>
+<li>Maps, settings and logs stay on your device. Data leaves it only when you choose to publish a map or share a file yourself.</li>
+</ul>
+
+<h2>Who we are</h2>
+<p>Umay is an open-source project by Bedirhan Tong (AppValence). The source code is public on <a href="https://github.com/bedirhantong/Umay">GitHub</a>, so everything below can be checked against the code. See the <a href="../destek.html">support page</a> to get in touch.</p>
+
+<h2>Permissions and why they are needed</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Permission</th><th>Purpose</th><th>What happens to the data</th></tr></thead>
+<tbody>
+<tr><td>Camera</td><td>Detect people in front of you and read text on signs.</td><td>Frames are processed in memory on the device and discarded. Not recorded, not sent. People detection and text reading run on the device.</td></tr>
+<tr><td>Location</td><td>Android requires the location permission to scan for Bluetooth beacons. The foreground guidance service also runs under it.</td><td>Umay does not collect, store or send your GPS location. Indoor position is computed on the device from step sensors and Bluetooth signals.</td></tr>
+<tr><td>Bluetooth</td><td>Scan the beacons in a building to correct the position.</td><td>Signal strength is used on the device. It is written to a map only while a map is being surveyed.</td></tr>
+<tr><td>Microphone</td><td>Listen to your question when you tap &ldquo;Ask something&rdquo;.</td><td>Listens only after you tap the button. Umay does not record or store audio. Turning speech into text is done by the speech recognition service on your phone (see below).</td></tr>
+<tr><td>Notifications</td><td>The notice shown while guidance runs, so it can continue with the screen off.</td><td>No data is processed.</td></tr>
+<tr><td>Vibration</td><td>Signal instructions by vibration.</td><td>No data is processed.</td></tr>
+</tbody></table></div>
+
+<h2>Spoken questions</h2>
+<p>&ldquo;Ask something&rdquo; uses Android's speech recognition service. Umay does not connect to a server of its own for this. Whether your speech is transcribed on the device or on a server depends on the recognition service selected on your phone (on most phones, Google's) and its settings, and is governed by that service's privacy policy. The transcript is matched only against the building map on the device and then discarded. Umay stores neither the audio nor the text.</p>
+
+<h2>Data stored on your device</h2>
+<ul>
+<li><strong>Building maps:</strong> maps you surveyed or imported (place names, floor information, Bluetooth signal fingerprints).</li>
+<li><strong>Settings:</strong> speech rate, step length and similar preferences.</li>
+<li><strong>Field log (off by default):</strong> if you turn it on in the Files screen, indoor position, steps, signal strength, air pressure and the instructions given are written to a file during guidance. It contains no images or audio. The file does not leave your device until you share it.</li>
+<li><strong>Crash reports:</strong> if the app crashes, the stack trace is written to a file on the device. It is never sent automatically; you can share it if you wish.</li>
+</ul>
+<p>Maps and settings may be included in your Google account backup if Android's own backup is turned on. Field logs and crash reports are excluded from backup. This is an Android feature; no data goes to a Umay server.</p>
+<p>You can delete all of this from the Files screen, or by uninstalling the app.</p>
+
+<h2>Shared map pool</h2>
+<p>This feature is optional. Browsing and downloading buildings in the pool requires no sign-in. When you choose to make a map public, the following is uploaded:</p>
+<ul>
+<li>the building name, floor count, point count and file size,</li>
+<li>the map itself: the place names you gave, indoor coordinates and Bluetooth signal information,</li>
+<li>the update time and a randomly generated anonymous identifier.</li>
+</ul>
+<p><strong>An uploaded map can be read and downloaded by anyone.</strong> Do not put personal information (your name, home address) in building or place names. The app asks for confirmation before publishing.</p>
+<p>Publishing uses Firebase Anonymous Authentication; no e-mail, name or phone number is requested. The anonymous identifier is not tied to anything that identifies you and exists only so that you can remove the map later. You can unpublish from Files &gt; Shared map pool; only the device that uploaded the map can do this. See the <a href="../veri-silme.html">data deletion page</a> (in Turkish) for what to do if that is not possible.</p>
+
+<h2>Third parties</h2>
+<ul>
+<li><strong>Google Firebase (Cloud Firestore and Anonymous Authentication):</strong> only when you use the shared map pool. Google may process technical data such as the IP address under its own policy.</li>
+<li><strong>Google ML Kit text recognition:</strong> reads sign text on the device; images do not leave the device.</li>
+<li><strong>Your phone's speech recognition and text-to-speech services:</strong> services on your device, as described above.</li>
+</ul>
+<p>Umay uses no ad network, no usage analytics and no crash-reporting service.</p>
+
+<h2>Your rights</h2>
+<p>You can ask whether data about you is processed, request information, and request correction or deletion. You can remove a map you published from within the app. If that is not possible, follow the steps on the <a href="../veri-silme.html">data deletion page</a>. If you are in Turkey, Article 11 of Law No. 6698 (KVKK) applies.</p>
+
+<h2>Children</h2>
+<p>Umay is not directed at children and does not knowingly collect data from children.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version is published on this page with its date. Earlier versions are visible in the <a href="https://github.com/bedirhantong/Umay">GitHub</a> history.</p>
+
+<h2>Contact</h2>
+<p>See the <a href="../destek.html">support page</a> or <a href="https://github.com/bedirhantong/Umay/issues">GitHub issues</a>.</p>
+</div></main>
+<footer class="site"><div class="wrap">
+<ul><li><a href="../index.html">Umay (Türkçe)</a></li><li><a href="privacy.html">Privacy policy</a></li><li><a href="https://github.com/bedirhantong/Umay">Source code</a></li></ul>
+<p>Umay is an aid. It does not replace a white cane or a guide dog.</p>
+<p>Umay is free software (GPL-3.0).</p>
+</div></footer>
+</body>
+</html>

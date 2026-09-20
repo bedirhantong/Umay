@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Umay: Kapalı Alan Yönlendirme Asistanı</title>
+<meta name="description" content="Umay, görme engelli kişileri binaların içinde sesli yönergeler ve titreşim desenleriyle yönlendiren açık kaynaklı bir Android uygulamasıdır.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/atkinson-next-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+<a class="skip" href="#icerik">Ana içeriğe geç</a>
+<header class="site"><div class="wrap">
+<a class="brand" href="index.html"><img src="img/favicon.svg" alt="" width="32" height="32">Umay</a>
+<nav class="site" aria-label="Ana gezinme"><ul><li><a href="index.html" aria-current="page">Ana sayfa</a></li><li><a href="index.html#nasil">Nasıl çalışır</a></li><li><a href="index.html#kurumlar">Kurumlar için</a></li><li><a href="gizlilik.html">Gizlilik</a></li><li><a href="destek.html">Destek</a></li><li><a href="veri-silme.html">Veri silme</a></li></ul></nav>
+</div></header>
+<main id="icerik">
+<section class="hero"><div class="wrap">
+<div>
+<h1>GPS bitince Umay başlar.</h1>
+<p class="sub">Umay, görme engelli kişilere binaların içinde sesle ve titreşimle yol gösteren açık kaynaklı bir Android uygulamasıdır. Hastane, kampüs ya da metro istasyonunda konumu adımlardan ve Bluetooth işaretçilerinden bulur.</p>
+<div class="actions">
+<a class="btn solid" href="#nasil">Nasıl çalışır</a>
+<a class="btn" href="#kurumlar">Kurumlar için</a>
+</div>
+<p class="status">Google Play sürümü hazırlanıyor.</p>
+</div>
+<figure>
+<svg class="plan" viewBox="0 0 680 520" role="img" aria-labelledby="plan-t plan-d">
+<title id="plan-t">Örnek bir bina planı</title>
+<desc id="plan-d">Girişten koridor boyunca ilerleyen kırmızı bir rota, koridordaki üç Bluetooth işaretçisi ve tuvalet odasındaki hedef.</desc>
+<rect class="hall" x="10" y="220" width="660" height="80"/>
+<path class="wall" d="M10 240V10H670V510H10V280"/>
+<path class="wall" d="M10 220H100M140 220H320M360 220H520M560 220H670"/>
+<path class="wall" d="M10 300H70M110 300H300M340 300H500M540 300H670"/>
+<path class="divider" d="M230 10V220M450 10V220M200 300V510M420 300V510"/>
+<g class="stairs"><path d="M590 30H660M590 46H660M590 62H660M590 78H660M590 94H660"/></g>
+<text x="24" y="40">Poliklinik</text><text x="244" y="40">Asansör</text><text x="464" y="40">Bekleme</text>
+<text x="24" y="330">Kayıt</text><text x="214" y="330">Tuvalet</text><text x="434" y="330">Eczane</text>
+<text x="590" y="122">Merdiven</text>
+<g><circle class="ring" cx="130" cy="240" r="22"/><circle class="ring" cx="130" cy="240" r="12"/><circle class="beacon" cx="130" cy="240" r="5"/>
+<circle class="ring" cx="330" cy="240" r="22"/><circle class="ring" cx="330" cy="240" r="12"/><circle class="beacon" cx="330" cy="240" r="5"/>
+<circle class="ring" cx="530" cy="240" r="22"/><circle class="ring" cx="530" cy="240" r="12"/><circle class="beacon" cx="530" cy="240" r="5"/></g>
+<path class="route" pathLength="1" d="M10 262H320V392"/>
+<circle class="you" cx="10" cy="262" r="7"/>
+<g class="dest"><circle class="dest-ring" cx="320" cy="404" r="16"/><circle class="dest-dot" cx="320" cy="404" r="6"/></g>
+</svg>
+<figcaption>Örnek bir bina. Mavi noktalar Bluetooth işaretçileri, kırmızı çizgi örnek bir rota.</figcaption>
+</figure>
+</div></section>
+
+<section class="block" id="ozellikler"><div class="wrap">
+<h2>Ekrana bakmadan yol bulmak için</h2>
+<p class="lead">Umay'ın her işi, telefonu cepte tutarak kullanılabilmesi için sese ve dokunuşa dayanır.</p>
+<dl class="spec">
+<div><dt>Hedefe sesle götürür</dt><dd>Adım adım, Türkçe konuşma sesiyle. Konuşma hızı ayarlanır; son yönerge tek dokunuşla tekrar edilir.</dd></div>
+<div><dt>Dönüşleri titreşimle bildirir</dt><dd>Her yönerge türünün kendine ait bir titreşim deseni vardır. Ayarlardaki rehberden hepsini önceden deneyebilirsiniz.</dd></div>
+<div><dt>Önünüzdeki insanı uyarır</dt><dd>Telefonun kamerası hemen önünüzdeki insanları algılar. Görüntü cihazda işlenir, kaydedilmez.</dd></div>
+<div><dt>Katlar arasında da yol bulur</dt><dd>Merdiven ve asansör dahil. Telefonda basınç sensörü varsa kat değişimi kendiliğinden algılanır.</dd></div>
+<div><dt>Yazıyı okur, soruyu yanıtlar</dt><dd>Tabelalardaki yazıyı cihaz üzerinde okur. Sesle sorduğunuz soruları binanın kendi haritasına göre yanıtlar.</dd></div>
+<div><dt>Ekran kapalıyken sürer</dt><dd>Telefon cebinizdeyken yönlendirme devam eder. Ekran kapalıyken kamera çalışamaz; konum ve yönergeler sürer.</dd></div>
+</dl>
+<div class="notice">
+<h3>Umay bir yardımcıdır, bir hareket aracı değildir</h3>
+<p>Beyaz baston ya da rehber köpeğin yerini tutmaz. Kamera yalnızca insanları algılar ve birini kaçırabilir. Merdiven, kapı ve rampalar ancak haritayı çıkaran kişi işaretlediyse bilinir. Konum tahmini ara sıra birkaç metre sapabilir.</p>
+</div>
+</div></section>
+
+<section class="block band" id="nasil"><div class="wrap">
+<h2>Nasıl çalışır</h2>
+<p class="lead">Binalarda GPS çalışmaz. Umay konumu iki kaynaktan birleştirir: adım saymadan ve Bluetooth işaretçilerinden.</p>
+<ol class="steps">
+<li><h3>Bina haritalanır</h3><p>Bir kişi Beacon Tarayıcı ile binada bir kez yürür, yerlere isim verir; kapı, merdiven, asansör ve rampaları işaretler.</p></li>
+<li><h3>Hedef seçilir</h3><p>Kullanıcı gitmek istediği yeri seçer. Rota gerekirse katlar arasında hesaplanır.</p></li>
+<li><h3>Konum bulunur</h3><p>Adımlar telefonun sensörleriyle sayılır. Haritalanan noktalardaki işaretçilerin sinyali, biriken sapmayı düzeltir.</p></li>
+<li><h3>Yönerge verilir</h3><p>Yol sesle anlatılır, dönüşler titreşimle bildirilir, kamera önünüzdeki insanları uyarır.</p></li>
+</ol>
+<div class="beacon-note"><p><strong>Binada Bluetooth beacon olması gerekir.</strong> Beacon olmayan bir yerde Umay yalnızca adım sayabilir ve konum zamanla sapar. Güvenilir yönlendirme için beacon yerleştirilmesi ve binanın haritasının çıkarılması gerekir.</p></div>
+</div></section>
+
+<section class="block" id="uygulama"><div class="wrap">
+<h2>Uygulama</h2>
+<p class="lead">Büyük, sabit konumlu düğmeler; her ekran tek işi yapar.</p>
+<div class="app">
+<figure class="main"><img src="img/01-aktif-navigasyon.jpg" width="540" height="960" alt="Navigasyon ekranı: konum aranıyor, yönlendirmeyi durdur düğmesi, çevredeki yazıyı oku ve bir şey sor düğmeleri."><figcaption>Navigasyon: yönergeler ve iki sabit düğme.</figcaption></figure>
+<div class="more-wrap"><div class="more">
+<figure><img src="img/04-haritalama.jpg" width="540" height="960" loading="lazy" alt="Beacon Tarayıcı ekranı: yürürken bir yere ad verilip kapı ya da merdiven olarak işaretleniyor."><figcaption>Haritalama</figcaption></figure>
+<figure><img src="img/dosyalar.jpg" width="540" height="960" loading="lazy" alt="Dosyalar ekranı: binalar ve paylaşımlı harita havuzu."><figcaption>Bina haritaları</figcaption></figure>
+<figure><img src="img/03-ayarlar.jpg" width="540" height="960" loading="lazy" alt="Ayarlar ekranı: konuşma hızı ve titreşim rehberi."><figcaption>Ayarlar</figcaption></figure>
+</div>
+<p class="small">Uygulamanın dört sekmesi var: Navigasyon, Beacon, Dosyalar ve Ayarlar. Bina haritası Beacon sekmesinde çıkarılır, Dosyalar sekmesinde paylaşılır; konuşma hızı ve titreşim rehberi Ayarlar'dadır.</p></div>
+</div>
+</div></section>
+
+<section class="block tint" id="kurumlar"><div class="wrap split">
+<div>
+<h2>Binanızı erişilebilir kılmak için</h2>
+<p class="lead">Hastane, üniversite, belediye binası, kütüphane ya da toplu taşıma noktası yöneticisiyseniz Umay'ı kendi binanızda denemek üç adımdır.</p>
+<p class="mt2"><a class="btn solid" href="destek.html">Birlikte çalışmak için yazın</a></p>
+<p class="small">Umay geliştirme aşamasında bir açık kaynak projedir. Herhangi bir kurumla pilot uygulama ya da iş birliği duyurusu yapılmamıştır.</p>
+</div>
+<table class="facts">
+<caption>Bir bina için gerekenler</caption>
+<tbody>
+<tr><th scope="row">1. Bluetooth işaretçileri</th><td>Koridorlara ve önemli noktalara yerleştirilir.</td></tr>
+<tr><th scope="row">2. Haritalama</th><td>Bir kişi binada bir kez yürür ve yerleri işaretler. Harita bir dosyadır.</td></tr>
+<tr><th scope="row">3. Paylaşım</th><td>Harita cihazlara dosya olarak aktarılır ya da paylaşımlı havuza eklenir.</td></tr>
+</tbody></table>
+</div></section>
+
+<section class="block" id="yolharitasi"><div class="wrap">
+<h2>Yol haritası</h2>
+<p class="lead">Planlanan işlerin tarihi yoktur; hazır olduklarında ölçümleriyle birlikte duyurulur.</p>
+<div class="tablewrap mt25"><table class="facts">
+<caption class="sr-only">Umay yol haritası</caption>
+<thead><tr><th scope="col">Durum</th><th scope="col">İş</th></tr></thead>
+<tbody>
+<tr><td class="status-now">Çalışıyor</td><td><strong>Sesli ve titreşimli yönlendirme, katlar arası rota, kamerayla insan uyarısı, harita paylaşımı.</strong></td></tr>
+<tr><td>Planlanan</td><td><strong>Gerçek binalarda saha doğrulaması.</strong> Konum doğruluğu gerçek yürüyüşlerle ve kullanıcı görüşleriyle ölçülür.</td></tr>
+<tr><td>Planlanan</td><td><strong>Yapay zekâ ile kapı ve merdiven algılama.</strong> Açık kaynak bir model, halka açık veri setleriyle geliştiriliyor. Henüz uygulamada değil.</td></tr>
+<tr><td>Planlanan</td><td><strong>Doğal dille hedef belirleme.</strong> &ldquo;En yakın tuvalete götür&rdquo; gibi.</td></tr>
+<tr><td>Planlanan</td><td><strong>Diğer diller.</strong> Uygulamanın metinleri çeviriye hazırdır.</td></tr>
+</tbody></table></div>
+</div></section>
+
+<section class="block tint" id="gizlilik"><div class="wrap">
+<p class="statement">Umay kamera görüntüsünü kaydetmez. Hesap, reklam ve kullanım analizi yoktur.</p>
+<ul class="ticks">
+<li>Kamera karesi yalnızca o an, cihazda işlenir ve atılır.</li>
+<li>Yapay zekâ modelini geliştirmek için de uygulamadan görüntü toplanmaz.</li>
+<li>Harita ve kayıtlar, siz paylaşmadıkça cihazınızdan çıkmaz.</li>
+</ul>
+<p class="small"><a href="gizlilik.html">Gizlilik politikasının tamamı</a> ve <a href="veri-silme.html">veri silme</a></p>
+</div></section>
+
+<section class="block band close" id="katki"><div class="wrap">
+<h2>Türkiye'de bina içi erişilebilirlik için ortak bir altyapı kuruyoruz</h2>
+<p class="lead">Umay, GNU Genel Kamu Lisansı sürüm 3 ile dağıtılır. Kaynak kodunu inceleyebilir, değiştirebilir ve paylaşabilirsiniz. Hata bildirimi, çeviri, test ve kod katkıları memnuniyetle karşılanır. Görme engelli kullanıcılardan ve uzmanlardan geri bildirim özellikle değerlidir.</p>
+<p class="actions mt2"><a class="btn solid" href="https://github.com/bedirhantong/Umay">Projeye GitHub'da bakın</a> <a class="btn" href="destek.html">Destek ve geri bildirim</a></p>
+</div></section>
+</main>
+<footer class="site"><div class="wrap">
+<ul><li><a href="gizlilik.html">Gizlilik politikası</a></li><li><a href="destek.html">Destek</a></li><li><a href="veri-silme.html">Veri silme</a></li><li><a href="en/privacy.html">Privacy policy (English)</a></li><li><a href="https://github.com/bedirhantong/Umay">Kaynak kodu</a></li></ul>
+<p>Umay bir yardımcıdır; beyaz baston ya da rehber köpeğin yerini tutmaz.</p>
+<p>Umay özgür yazılımdır (GPL-3.0).</p>
+</div></footer>
+</body>
+</html>
