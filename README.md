@@ -1,5 +1,7 @@
 # Umay
 
+[![CI](https://github.com/bedirhantong/Umay/actions/workflows/ci.yml/badge.svg)](https://github.com/bedirhantong/Umay/actions/workflows/ci.yml)
+
 Umay, görme engelli kişiler için geliştirilmiş, bina içinde yol gösteren bir
 Android uygulamasıdır. Kişiyi gitmek istediği yere sesli yönergeler ve her
 biri farklı titreşim desenleriyle götürür. Kamerayla hemen önündeki insanlara
@@ -46,12 +48,24 @@ adımlardan anlaşılır, asansörde bir düğmeyle onaylanır.
 | `orchestrator` | Katlar arası A* rota bulma, adım adım yönergeler, engel uyarıları, rotayı yeniden hesaplama |
 | `feedback` | Metin okuma (ses seçimi, ses odağı yönetimi) ve titreşim desenleri |
 | `cloud` | Paylaşımlı harita havuzu (Firestore, anonim kimlik doğrulama) ve bağlantı durumu takibi — yalnızca Firebase'in ücretsiz Spark katmanı kullanılır, Cloud Storage kullanılmaz |
-| `app` | Compose arayüzü, arka planda çalışan navigasyon oturumu, kayıt, saha kaydı |
+| `app` | Compose arayüzü (MVVM, Hilt), arka planda çalışan navigasyon oturumu, harita çıkarma, saha kaydı |
 
 ## Derleme
 
 Gereksinimler: JDK 17 ya da daha yeni bir sürüm (`core-model` için JDK 11 de
 kullanılır) ve 36 platformu yüklü Android SDK.
+
+Firebase yapılandırması (`app/google-services.json`) bu depoda yoktur. Derlemek
+için örnek dosyayı kopyalayın:
+
+```sh
+cp app/google-services.json.example app/google-services.json
+```
+
+Bu örnek dosyayla uygulamanın tamamı derlenir ve çalışır; yalnızca paylaşımlı
+harita havuzu bağlanamaz. Havuzu denemek için kendi Firebase projenizi
+oluşturup ondan indirdiğiniz dosyayı kullanın ve `firestore.rules` kurallarını
+o projeye yükleyin.
 
 ```sh
 ./gradlew :app:assembleDebug          # debug APK
@@ -83,12 +97,14 @@ Tahmine dayanan ayar değerleri bu kayıtlarla gerçek yürüyüşlere göre
 ayarlanır. Çökme kayıtları da cihazda tutulur. Kullanıcı paylaşmadıkça hiçbir
 veri cihazdan çıkmaz.
 
+Her pull request'te aynı testler, lint ve debug derlemesi GitHub Actions'ta
+otomatik çalışır.
+
 ## Katkıda bulunmak
 
-Hata bildirimleri (issue) ve pull request'ler memnuniyetle karşılanır. Pull
-request açmadan önce lütfen testleri ve lint'i çalıştırın. Yönergelerin
-davranışını değiştiren bir değişiklikte, gerçek bir cihazda nasıl test
-ettiğinizi de anlatın.
+Hata bildirimleri (issue) ve pull request'ler memnuniyetle karşılanır.
+Nereden başlayacağınız, kod düzeni ve pull request süreci için
+[CONTRIBUTING.md](CONTRIBUTING.md) dosyasına bakın.
 
 ## Lisans
 
