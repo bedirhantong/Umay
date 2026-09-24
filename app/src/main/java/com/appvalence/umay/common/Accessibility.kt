@@ -1,6 +1,7 @@
 package com.appvalence.umay.common
 
 import android.content.Context
+import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -30,4 +31,18 @@ fun rememberIsScreenReaderOn(): Boolean {
         onDispose { manager.removeTouchExplorationStateChangeListener(listener) }
     }
     return enabled
+}
+
+/**
+ * Whether the system-wide "remove animations" accessibility setting is on
+ * (mirrored by the animator duration scale developer setting). Purely
+ * decorative motion — page-transition slides, crossfades — should collapse
+ * to an instant cut instead of fighting a preference the user already set.
+ */
+@Composable
+fun rememberIsReduceMotionEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }
 }
