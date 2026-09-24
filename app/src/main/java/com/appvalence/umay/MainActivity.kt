@@ -36,6 +36,7 @@ import com.appvalence.umay.files.BuildingImportDialogs
 import com.appvalence.umay.files.BuildingImportViewModel
 import com.appvalence.umay.files.FilesScreen
 import com.appvalence.umay.navigation.NavigationScreen
+import com.appvalence.umay.onboarding.OnboardingNextStep
 import com.appvalence.umay.onboarding.OnboardingTour
 import com.appvalence.umay.settings.SettingsScreen
 import com.appvalence.umay.survey.BeaconScannerScreen
@@ -65,18 +66,31 @@ class MainActivity : ComponentActivity() {
             UmayTheme {
                 val mainViewModel: MainViewModel = hiltViewModel()
                 val showTour by mainViewModel.showTour.collectAsStateWithLifecycle()
-                if (showTour) {
-                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                        OnboardingTour(onFinish = mainViewModel::onTourFinished, modifier = Modifier.padding(innerPadding))
-                    }
-                    return@UmayTheme
-                }
 
                 // Navigasyon is the actual product experience for the end user (find a
                 // destination, get guided there); Beacon Tarayıcı is a setup tool for
                 // whoever installs and surveys the building, so the app starts on
                 // Navigasyon the way a mapping app opens on the map, not on a settings page.
                 var selectedScreen by rememberSaveable { mutableStateOf(Screen.NAVIGATION) }
+
+                if (showTour) {
+                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                        OnboardingTour(
+                            onFinish = { next ->
+                                mainViewModel.onTourFinished()
+                                // Whichever setup step the tour ended on becomes the tab the
+                                // user lands on, instead of making them find it themselves.
+                                selectedScreen = when (next) {
+                                    OnboardingNextStep.SURVEY -> Screen.BEACON_SCANNER
+                                    OnboardingNextStep.CALIBRATION -> Screen.SETTINGS
+                                    null -> Screen.NAVIGATION
+                                }
+                            },
+                            modifier = Modifier.padding(innerPadding),
+                        )
+                    }
+                    return@UmayTheme
+                }
                 // Each tab's composition is thrown away when another tab is picked; this
                 // keeps what it had saved (its scroll position, say) for when it comes back.
                 // Screen state that matters lives in the (activity-scoped) ViewModels.
