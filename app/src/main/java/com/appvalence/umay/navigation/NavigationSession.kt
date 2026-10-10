@@ -22,8 +22,8 @@ import com.appvalence.umay.coremodel.FloorChangePhase
 import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.coremodel.GuidanceEvent
 import com.appvalence.umay.coremodel.MapNode
-import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.MarkerSighting
+import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.PositionEvent
 import com.appvalence.umay.coremodel.PositionStream
 import com.appvalence.umay.coremodel.PressureEvent
@@ -34,13 +34,17 @@ import com.appvalence.umay.coremodel.StatusEvent
 import com.appvalence.umay.feedback.CompositeFeedbackController
 import com.appvalence.umay.feedback.HapticFeedbackController
 import com.appvalence.umay.feedback.TtsFeedbackController
-import com.appvalence.umay.fieldlog.FieldLogRecorder
 import com.appvalence.umay.fieldlog.FieldLogFiles
+import com.appvalence.umay.fieldlog.FieldLogRecorder
 import com.appvalence.umay.orchestrator.BuildingQueryMatcher
 import com.appvalence.umay.orchestrator.BuildingQueryResult
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
+import com.appvalence.umay.perception.CameraAim
+import com.appvalence.umay.perception.CameraAimJudge
 import com.appvalence.umay.perception.CameraFailure
+import com.appvalence.umay.perception.CameraPower
+import com.appvalence.umay.perception.CameraPowerPolicy
 import com.appvalence.umay.perception.CameraXObstacleDetector
 import com.appvalence.umay.perception.MlKitSignTextReader
 import com.appvalence.umay.perception.SignTextReader
@@ -58,9 +62,14 @@ import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.voice.SpeechRecognitionFailure
 import com.appvalence.umay.voice.SpeechRecognitionResult
 import com.appvalence.umay.voice.SpeechToText
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,10 +79,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import dagger.hilt.android.qualifiers.ApplicationContext
-import javax.inject.Inject
-import javax.inject.Singleton
-import kotlin.math.roundToInt
 
 /** Everything the navigation screen (and the notification) shows about a running session. */
 data class NavigationSessionUi(
@@ -160,6 +165,13 @@ class NavigationSession internal constructor(
     )
     private var cameraAttached = false
     private var cameraPauseAnnounced = false
+
+    // How much the camera may run (heat, battery: see CameraPowerPolicy) and whether it's
+    // aimed where it can see anything (see CameraAimJudge). Main thread only.
+    private val conditions = DeviceConditions(appContext)
+    private var cameraPower = CameraPower.FULL
+    private var screenOwner: LifecycleOwner? = null
+    private var aimJob: Job? = null
 
     // On-device, offline, free (see MlKitSignTextReader) — reads whatever frame the
     // obstacle detector last saw rather than binding a second camera session.
@@ -259,6 +271,7 @@ class NavigationSession internal constructor(
         scope.launch { runGuidance() }
         if (recorder != null) scope.launch { logRssi(recorder) }
         if (hasBarometer) scope.launch { watchBarometer() }
+        scope.launch { conditions.power().collect { applyCameraPower(CameraPowerPolicy.decide(it.thermalStatus, it.batteryPercent, it.charging)) } }
     }
 
     private suspend fun runGuidance() {
@@ -493,10 +506,61 @@ class NavigationSession internal constructor(
     fun attachCamera(lifecycleOwner: LifecycleOwner) {
         if (closed || cameraAttached) return
         cameraAttached = true
+        screenOwner = lifecycleOwner
         // No preview surface — nothing to show for a raw camera feed, and detection runs on
-        // ImageAnalysis frames either way.
-        detector.bind(lifecycleOwner)
+        // ImageAnalysis frames either way. Too hot, it waits until the phone cools down.
+        if (cameraPower != CameraPower.OFF) {
+            detector.bind(lifecycleOwner)
+            watchAim()
+        }
         if (cameraPauseAnnounced) announce(R.string.nav_camera_resumed)
+    }
+
+    private fun applyCameraPower(power: CameraPower) {
+        if (closed || power == cameraPower) return
+        val previous = cameraPower
+        cameraPower = power
+        detector.setFrameInterval(if (power == CameraPower.REDUCED) CameraPowerPolicy.REDUCED_FRAME_INTERVAL_MS else CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS)
+        recorder?.record(StatusEvent(System.currentTimeMillis(), "CAMERA_${power.name}"))
+        when {
+            power == CameraPower.OFF -> {
+                if (cameraAttached) {
+                    detector.unbind()
+                    aimJob?.cancel()
+                }
+                announce(R.string.nav_camera_hot)
+            }
+            previous == CameraPower.OFF -> {
+                screenOwner?.takeIf { cameraAttached }?.let {
+                    detector.bind(it)
+                    watchAim()
+                }
+                announce(R.string.nav_camera_cooled)
+            }
+            power == CameraPower.REDUCED -> announce(R.string.nav_camera_saving)
+        }
+    }
+
+    /**
+     * While the camera looks, says so when it's aimed at the floor or the ceiling (the
+     * phone tipped in a hand or a chest strap), and again every [AIM_REPEAT_MS] it stays so.
+     */
+    private fun watchAim() {
+        aimJob?.cancel()
+        val judge = CameraAimJudge()
+        var lastToldMs = 0L
+        aimJob = scope.launch {
+            conditions.gravity().collect { gravity ->
+                val aim = judge.update(gravity[1], gravity[2])
+                val now = System.currentTimeMillis()
+                if (aim != CameraAim.OK && now - lastToldMs >= AIM_REPEAT_MS) {
+                    lastToldMs = now
+                    announce(if (aim == CameraAim.TOO_LOW) R.string.nav_aim_too_low else R.string.nav_aim_too_high)
+                } else if (aim == CameraAim.OK) {
+                    lastToldMs = 0L
+                }
+            }
+        }
     }
 
     /**
@@ -507,6 +571,8 @@ class NavigationSession internal constructor(
     fun detachCamera() {
         if (closed || !cameraAttached) return
         cameraAttached = false
+        screenOwner = null
+        aimJob?.cancel()
         detector.unbind()
         announce(if (cameraPauseAnnounced) R.string.nav_camera_paused else R.string.nav_camera_paused_first)
         cameraPauseAnnounced = true
@@ -637,6 +703,7 @@ class NavigationSession internal constructor(
         const val TAG = "NavigationSession"
         const val PRESSURE_LOG_INTERVAL_MS = 1_000L
         const val MARKER_ANNOUNCE_INTERVAL_MS = 30_000L
+        const val AIM_REPEAT_MS = 15_000L
     }
 }
 

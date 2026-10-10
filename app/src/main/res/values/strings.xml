@@ -136,6 +136,11 @@
     <string name="nav_camera_paused_first">Engel algılama duraklatıldı, çünkü ekran kapalıyken kamera çalışamaz. Konum ve yönergeler devam ediyor. Engel algılamanın da sürmesi için Ayarlar\'dan ekranı açık tutmayı seçebilirsin.</string>
     <string name="nav_camera_paused">Engel algılama duraklatıldı. Konum ve yönergeler devam ediyor.</string>
     <string name="nav_camera_resumed">Engel algılama yeniden açık.</string>
+    <string name="nav_camera_hot">Telefon çok ısındı, engel algılama bir süreliğine kapatıldı. Konum ve yönergeler devam ediyor.</string>
+    <string name="nav_camera_cooled">Telefon soğudu, engel algılama yeniden açık.</string>
+    <string name="nav_camera_saving">Pil azaldı ya da telefon ısınıyor; kamera pil korumak için daha seyrek bakıyor.</string>
+    <string name="nav_aim_too_low">Telefonu biraz kaldır, kamera yere bakıyor.</string>
+    <string name="nav_aim_too_high">Telefonu biraz indir, kamera tavana bakıyor.</string>
     <string name="nav_radio_lost">Bluetooth ya da konum kapalı. Konumunu şimdilik sadece adımlarından takip ediyorum, zamanla sapabilir. İkisini de açarsan kendiliğinden düzeltmeye devam ederim.</string>
     <string name="nav_radio_back">Bluetooth ve konum açık, konum düzeltmesi devam ediyor.</string>
     <string name="notification_channel_name">Yönlendirme</string>

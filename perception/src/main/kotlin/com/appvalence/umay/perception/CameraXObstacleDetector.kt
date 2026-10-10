@@ -97,6 +97,11 @@ class CameraXObstacleDetector(
 
     override fun markerSightings(): SharedFlow<MarkerSighting> = markers.asSharedFlow()
 
+    /** Looks at frames at most every [intervalMs] (see CameraPowerPolicy); takes effect on the next frame. */
+    fun setFrameInterval(intervalMs: Long) {
+        frameThrottle.minIntervalMs = intervalMs
+    }
+
     /** The camera's current view, upright — null before the first frame or after [unbind]. See [SignTextReader]. */
     fun latestFrameOrNull(): Bitmap? = latestFrame.get()
 
