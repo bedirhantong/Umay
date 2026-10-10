@@ -13,6 +13,7 @@ class SurveyDraftJsonTest {
         trajectory = listOf(Position(1.0, 2.0, 1, 90.0, 0.1, PositionSource.MAP_MATCHED, 5L)),
         taggedWaypoints = listOf(TaggedWaypoint("Kapı", 1.0, 2.0, 1, listOf(RadioFingerprint("b1", -60.0)), NodeType.DOOR, trajectoryIndex = 1)),
         wallMaps = mapOf(1 to OccupancyRaster.of(0.1, 0.0, 0.0, 2, 1, byteArrayOf(OccupancyRaster.FREE, OccupancyRaster.OCCUPIED))),
+        radioSamples = mapOf(1 to listOf(RadioSample(1.0, 2.0, listOf(RadioFingerprint("b1", -61.0))))),
         savedAtMs = 99L,
     )
 

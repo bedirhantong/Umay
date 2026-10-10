@@ -149,4 +149,36 @@ class GraphParticleFilterTest {
 
         assertTrue(hypot(end.x - 0.0, end.y - 7.0) < 1.5, "ended at $end")
     }
+
+    @Test
+    fun `every scan pulls a mis-scaled walk back toward where the beacons say it is`() {
+        val start = node("A", 0.0, 0.0)
+        val end = node("Z", 0.0, 30.0)
+        // The walker's true stride is 0.7 m, but the phone thinks it's 0.6 m: 14% short.
+        val trueSteps = stepsAlong(listOf(start, end), stride = 0.7).take(36)
+        val trueY = trueSteps.indices.map { (it + 1) * 0.7 }
+        val scans = trueY.map { y ->
+            listOf("b1", "b2").map { id ->
+                BleBeaconReading(id, "", null, "u", 1, 1, com.appvalence.umay.positioning.fingerprint.corridorRssi(id, y).toInt(), -59, 1.0, 0L)
+            }
+        }
+        fun walk(withRadioMap: Boolean): Double {
+            val base = corridorMap(start, end)
+            val map = if (!withRadioMap) base else base.copy(floors = base.floors.map { it.copy(radioMap = com.appvalence.umay.positioning.fingerprint.corridorRadioMap()) })
+            val filter = GraphParticleFilter(map, "A", random = Random(21))
+            var estimate = 0.0
+            trueSteps.forEachIndexed { i, step ->
+                estimate = filter.onStep(step.copy(stepLengthMeters = 0.6)).y
+                filter.onBeaconReadings(scans[i].map { it.copy(timestampMs = step.timestampMs) }, step.timestampMs + 1_100L * i)
+                estimate = filter.estimate().y
+            }
+            return kotlin.math.abs(estimate - trueY.last())
+        }
+
+        val withoutRadio = walk(withRadioMap = false)
+        val withRadio = walk(withRadioMap = true)
+
+        assertTrue(withoutRadio > 2.5, "dead reckoning alone was expected to fall behind, was off by $withoutRadio")
+        assertTrue(withRadio < 1.5, "the radio map should have kept it within 1.5 m, was off by $withRadio")
+    }
 }

@@ -50,6 +50,18 @@ data class FloorMap(
     // The camera-measured wall map of this floor, when it was surveyed with one
     // (null for maps recorded by footsteps alone, and every map saved before this).
     val occupancy: OccupancyRaster? = null,
+    // Beacon signatures recorded every few metres along the surveyed path, not just
+    // at named places — what lets positioning use every scan, not only confident
+    // matches. Empty for maps surveyed before this.
+    val radioMap: List<RadioSample> = emptyList(),
+)
+
+/** The beacons heard at one spot of a floor during the survey (see [FloorMap.radioMap]). */
+@Serializable
+data class RadioSample(
+    val x: Double,
+    val y: Double,
+    val fingerprint: List<RadioFingerprint>,
 )
 
 // A stairs/elevator crossing between two nodes on different floors — the only way

@@ -7,6 +7,7 @@ import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
+import com.appvalence.umay.coremodel.RadioSample
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.mapping.PathSimplifier
 import java.util.UUID
@@ -72,6 +73,7 @@ object BeaconMapBuilder {
         maxEdgeDistanceMeters: Double = DEFAULT_MAX_EDGE_DISTANCE_METERS,
         anchorName: (floorIndex: Int, number: Int) -> String = DEFAULT_ANCHOR_NAME,
         trajectory: List<Position> = emptyList(),
+        radioSamples: Map<Int, List<RadioSample>> = emptyMap(),
     ): BuildingMap {
         // Assigned once, up front, so the same id can be used both inside each
         // floor's node list and when detecting cross-floor transitions below.
@@ -104,7 +106,11 @@ object BeaconMapBuilder {
             )
         }
 
-        return BuildingMap(id = buildingId, floors = floors, floorTransitions = transitions)
+        return BuildingMap(
+            id = buildingId,
+            floors = floors.map { it.copy(radioMap = radioSamples[it.floorIndex].orEmpty()) },
+            floorTransitions = transitions,
+        )
     }
 
     private fun buildWaypointFloor(

@@ -435,4 +435,21 @@ class SurveyRecorderTest {
         assertEquals(null, drafts.draft)
         assertEquals(1, drafts.deleted)
     }
+
+    @Test
+    fun `a beacon signature is taken every few metres of the walk and kept in the draft`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        scanner.beacons.value = listOf(iBeacon("b1", -60), iBeacon("b2", -70))
+        advanceTimeBy(SurveyRecorder.UI_REFRESH_MS + 1)
+        recorder.start()
+
+        repeat(10) { step() } // 7 m
+        advanceTimeBy(SurveyRecorder.DRAFT_INTERVAL_MS + 1)
+
+        val samples = recorder.state.value.radioSamples.getValue(0)
+        assertEquals(2, samples.size)
+        assertEquals(listOf("b1", "b2"), samples.first().fingerprint.map { it.beaconId })
+        assertEquals(samples, drafts.draft!!.radioSamples.getValue(0))
+        recorder.stop()
+    }
 }

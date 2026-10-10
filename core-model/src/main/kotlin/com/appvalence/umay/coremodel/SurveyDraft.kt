@@ -22,6 +22,7 @@ data class SurveyDraft(
     val trajectory: List<Position> = emptyList(),
     val taggedWaypoints: List<TaggedWaypoint> = emptyList(),
     val wallMaps: Map<Int, OccupancyRaster> = emptyMap(),
+    val radioSamples: Map<Int, List<RadioSample>> = emptyMap(),
     val savedAtMs: Long,
 )
 

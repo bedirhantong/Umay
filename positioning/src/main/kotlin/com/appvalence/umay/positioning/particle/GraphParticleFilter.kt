@@ -7,6 +7,7 @@ import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.StepEvent
 import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
+import com.appvalence.umay.positioning.fingerprint.RadioMap
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -80,6 +81,17 @@ class GraphParticleFilter(
         val reseedDistanceMeters: Double = 6.0,
         /** Fraction of the cloud replaced when re-seeding, so a single false match can't erase it. */
         val reseedFraction: Double = 0.5,
+        /** RSSI spread around what the radio map expects: fading and body shadowing, after smoothing. */
+        val radioSigmaDb: Double = 6.0,
+        /**
+         * How much one scan's fit to the radio map counts, in "beacons' worth": the fit is
+         * a per-beacon mean, so this caps how sure a single scan can make the cloud.
+         */
+        val radioEvidenceWeight: Double = 3.0,
+        /** Fit given to a particle away from every radio sample: unremarkable, neither good nor bad. */
+        val radioUnknownLogLikelihood: Double = -0.7,
+        /** Scans repeat the same smoothed values many times a second; one counts per this. */
+        val minRadioEvidenceIntervalMs: Long = 1_000L,
     )
 
     /** One fingerprint match that was applied, and where the cloud ended up because of it. */
@@ -126,6 +138,12 @@ class GraphParticleFilter(
         floor.floorIndex to floor.nodes.filter { it.fingerprint.isNotEmpty() }
     }
 
+    // Signatures recorded along the surveyed path (see RadioMap); empty for older maps.
+    private val radioMaps: Map<Int, RadioMap> = map.floors
+        .filter { it.radioMap.isNotEmpty() }
+        .associate { it.floorIndex to RadioMap(it.radioMap) }
+    private var lastRadioEvidenceMs = Long.MIN_VALUE
+
     var floor: Int = floorOfNode[startNodeId] ?: 0
         private set
 
@@ -163,6 +181,7 @@ class GraphParticleFilter(
      * pulls the cloud toward it. Null when nothing was applied.
      */
     fun onBeaconReadings(readings: List<BleBeaconReading>, timestampMs: Long): Correction? {
+        applyRadioEvidence(readings, timestampMs)
         if (lastFingerprintAppliedMs != Long.MIN_VALUE &&
             timestampMs - lastFingerprintAppliedMs < config.minFingerprintIntervalMs
         ) {
@@ -277,6 +296,24 @@ class GraphParticleFilter(
 
     private fun bestEdgeFrom(node: MapNode, headingDeg: Double): Edge? =
         edgesFrom[node.id]?.minByOrNull { angleBetween(headingDeg, it.bearingDeg) }
+
+    /**
+     * Every scan, not just a confident match, says something: weight each particle by
+     * how well the scan fits what the radio map expects where that particle is.
+     */
+    private fun applyRadioEvidence(readings: List<BleBeaconReading>, timestampMs: Long) {
+        val radioMap = radioMaps[floor] ?: return
+        if (lastRadioEvidenceMs != Long.MIN_VALUE && timestampMs - lastRadioEvidenceMs < config.minRadioEvidenceIntervalMs) return
+        val live = readings.filter { it.beaconId in radioMap.beaconIds }.associate { it.beaconId to it.rssi.toDouble() }
+        if (live.size < FingerprintMatcher.MIN_SHARED_BEACONS) return
+        lastRadioEvidenceMs = timestampMs
+        lastTimestampMs = timestampMs
+        for (p in particles) {
+            val fit = radioMap.logLikelihood(live, p.x, p.y, config.radioSigmaDb) ?: config.radioUnknownLogLikelihood
+            p.logWeight += config.radioEvidenceWeight * fit
+        }
+        normalizeAndMaybeResample()
+    }
 
     private fun observeNear(node: MapNode) {
         val closest = particles.minOf { hypot(it.x - node.x, it.y - node.y) }

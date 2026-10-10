@@ -7,6 +7,7 @@ import com.appvalence.umay.common.DeviceCapabilities
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.di.DefaultDispatcher
 import com.appvalence.umay.feedback.Speaker
+import com.appvalence.umay.positioning.fingerprint.RadioMapBudget
 import com.appvalence.umay.positioning.mapping.WallMapBudget
 import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
 import com.appvalence.umay.settings.UserSettings
@@ -105,6 +106,7 @@ class SurveyViewModel @Inject constructor(
                     beaconResults = survey.results,
                     anchorName = anchorName,
                     trajectory = survey.trajectory,
+                    radioSamples = RadioMapBudget.fit(survey.radioSamples),
                 )
                 val wallMaps = WallMapBudget.fit(survey.wallMaps)
                 built.copy(

@@ -12,6 +12,7 @@ import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.RadioFingerprint
+import com.appvalence.umay.coremodel.RadioSample
 import com.appvalence.umay.coremodel.SurveyDraft
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.di.ApplicationScope
@@ -21,6 +22,7 @@ import com.appvalence.umay.feedback.Speaker
 import com.appvalence.umay.positioning.baro.BarometricFloorTracker
 import com.appvalence.umay.positioning.ble.BeaconScanner
 import com.appvalence.umay.positioning.ble.BleScanState
+import com.appvalence.umay.positioning.fingerprint.RadioSampler
 import com.appvalence.umay.positioning.mapping.ArPoseAligner
 import com.appvalence.umay.positioning.mapping.DepthProjector
 import com.appvalence.umay.positioning.mapping.FloorHeightEstimator
@@ -77,6 +79,8 @@ data class SurveyState(
     val wallMaps: Map<Int, OccupancyRaster> = emptyMap(),
     /** This walk was brought back from disk after the app was ended mid-survey. */
     val restoredFromDraft: Boolean = false,
+    /** Beacon signatures taken every few metres along the path, per floor (see [RadioSampler]). */
+    val radioSamples: Map<Int, List<RadioSample>> = emptyMap(),
 )
 
 /** Says out loud what the surveyor should know without looking at the screen. */
@@ -164,6 +168,9 @@ class SurveyRecorder @Inject constructor(
 
     // How many of [rawReadings] are already in the draft on disk.
     private var flushedReadings = 0
+
+    // Fed from the footstep collector (main) or the camera one (mapping), never both at once.
+    private val radioSampler = RadioSampler()
 
     // Camera mapping state: touched only on [mapping].
     private var aligner = ArPoseAligner()
@@ -253,7 +260,14 @@ class SurveyRecorder @Inject constructor(
             }
             val pose = pdr.integrate(step)
             _state.update { it.copy(trajectory = it.trajectory + pose) }
+            sampleRadio(pose)
         }
+    }
+
+    /** A beacon signature every few metres of the walk, not only at named places. */
+    private fun sampleRadio(position: Position) {
+        val sample = synchronized(radioSampler) { radioSampler.offer(position, _state.value.beacons) } ?: return
+        _state.update { it.copy(radioSamples = it.radioSamples + (position.floor to (it.radioSamples[position.floor].orEmpty() + sample))) }
     }
 
     /**
@@ -283,6 +297,7 @@ class SurveyRecorder @Inject constructor(
                 val moved = last == null || last.floor != floor || hypot(last.x - position.x, last.y - position.y) >= TRAJECTORY_SPACING_METERS
                 current.copy(livePosition = position, trajectory = if (moved) current.trajectory + position else current.trajectory)
             }
+            sampleRadio(position)
 
             val depth = sample.depth ?: return@collect
             val toSurvey = aligner.transform ?: return@collect
@@ -378,6 +393,7 @@ class SurveyRecorder @Inject constructor(
                 trajectory = current.trajectory,
                 taggedWaypoints = current.taggedWaypoints,
                 wallMaps = current.wallMaps,
+                radioSamples = current.radioSamples,
                 savedAtMs = System.currentTimeMillis(),
             ),
         )
@@ -411,6 +427,7 @@ class SurveyRecorder @Inject constructor(
                 trajectory = draft.trajectory,
                 taggedWaypoints = draft.taggedWaypoints,
                 wallMaps = draft.wallMaps,
+                radioSamples = draft.radioSamples,
                 rawReadingCount = rawReadings.size,
                 restoredFromDraft = true,
             )
@@ -457,6 +474,7 @@ class SurveyRecorder @Inject constructor(
         if (recordingJob != null) return
         rawReadings.clear()
         flushedReadings = 0
+        synchronized(radioSampler) { radioSampler.reset() }
         scope.launch { drafts.delete() }
         // A new walk gets a new camera frame and empty wall maps.
         if (_state.value.mode == SurveyMode.CAMERA) camera.close()
