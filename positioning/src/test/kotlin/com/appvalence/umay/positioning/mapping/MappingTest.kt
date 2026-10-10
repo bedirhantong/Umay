@@ -270,3 +270,43 @@ class PathSimplifierTest {
         assertEquals(listOf(walk.first(), walk.last()), PathSimplifier.simplify(walk, 0.5))
     }
 }
+
+class WallMapBudgetTest {
+
+    /** A noisy floor (no long runs), so it encodes large. */
+    private fun noisyFloor(size: Int, cell: Double = 0.1) = OccupancyRaster.of(
+        cell, 0.0, 0.0, size, size,
+        ByteArray(size * size) { if ((it * 7919) % 3 == 0) OccupancyRaster.OCCUPIED else OccupancyRaster.FREE },
+    )
+
+    @Test
+    fun `maps already within budget are left alone`() {
+        val small = mapOf(0 to noisyFloor(20))
+
+        assertEquals(small, WallMapBudget.fit(small, maxEncodedChars = 100_000))
+    }
+
+    @Test
+    fun `the largest floor is coarsened until everything fits, walls kept`() {
+        val maps = mapOf(0 to noisyFloor(400), 1 to noisyFloor(40))
+
+        val fitted = WallMapBudget.fit(maps, maxEncodedChars = 60_000)
+
+        assertTrue(fitted.values.sumOf { it.cells.length } <= 60_000)
+        assertTrue(fitted.getValue(0).cellSizeMeters > 0.1)
+        assertEquals(0.1, fitted.getValue(1).cellSizeMeters, 1e-9)
+        assertTrue(fitted.getValue(0).decodeCells()!!.any { it == OccupancyRaster.OCCUPIED })
+    }
+
+    @Test
+    fun `a floor that can't fit even coarsened is dropped rather than blurred`() {
+        // Stripes four cells wide: still stripes at 40 cm, so they never collapse to nothing.
+        val striped = OccupancyRaster.of(0.1, 0.0, 0.0, 400, 400, ByteArray(400 * 400) {
+            if ((it / 400 / 4) % 2 == 0) OccupancyRaster.OCCUPIED else OccupancyRaster.FREE
+        })
+
+        val fitted = WallMapBudget.fit(mapOf(0 to striped), maxEncodedChars = 10)
+
+        assertTrue(fitted.isEmpty())
+    }
+}
