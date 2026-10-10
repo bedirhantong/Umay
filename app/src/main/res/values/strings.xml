@@ -262,7 +262,8 @@
     <string name="survey_mode_needs_install">Kamerayla haritalamak için \"Google Play Services for AR\" uygulaması gerekiyor.</string>
     <string name="survey_mode_install">Yükle</string>
     <string name="survey_mode_install_failed">Yükleme yapılamadı. Adım sayarak haritalayabilirsin.</string>
-    <string name="survey_mode_unsupported">Bu telefon kamerayla haritalamayı desteklemiyor; yol adım sayarak ölçülecek.</string>
+    <string name="survey_mode_unsupported">Bu telefon modeli kamerayla haritalamayı desteklemiyor: kamerası olsa da Google\'ın ARCore için test edip onayladığı modeller arasında değil. Yol adım sayarak ölçülecek.</string>
+    <string name="survey_mode_unknown">Kamerayla haritalama desteği kontrol edilemedi. Telefon internete bağlıyken tekrar dene. \"Google Play Services for AR\" yüklü değilse Play Store\'dan yüklemeyi de deneyebilirsin.</string>
     <string name="survey_camera_permission_denied">Kamera izni verilmedi. Kamerayla haritalamak için izin ver ya da adım sayarak haritala.</string>
     <string name="survey_camera_starting">Kamera başlatılıyor… Telefonu yavaşça biraz sağa sola çevir.</string>
     <string name="survey_camera_tracking">Kamera konumu izliyor.</string>

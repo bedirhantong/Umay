@@ -13,7 +13,15 @@ enum class ArAvailability {
 
     /** Supported, but "Google Play Services for AR" is missing or too old: [ArSurveyCamera.requestInstall] fixes it. */
     NEEDS_INSTALL,
+
+    /** This phone model isn't on Google's list of ARCore devices, camera or not. */
     UNSUPPORTED,
+
+    /**
+     * ARCore couldn't tell (an error, or a time-out: with ARCore not installed it asks
+     * the Play Store, which needs the internet). Worth checking again, or installing.
+     */
+    UNKNOWN,
 }
 
 enum class ArInstallResult { INSTALLED, IN_PROGRESS, DECLINED, FAILED }

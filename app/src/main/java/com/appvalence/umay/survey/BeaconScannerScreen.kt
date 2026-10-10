@@ -259,6 +259,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
                                     it == ArInstallResult.FAILED || it == ArInstallResult.DECLINED
                                 }
                             },
+                            onRecheck = viewModel::recheckCameraSupport,
                             cameraDenied = cameraDenied,
                             installFailed = installFailed,
                         )
@@ -518,6 +519,7 @@ private fun SurveyModeSection(
     selected: SurveyMode,
     onSelect: (SurveyMode) -> Unit,
     onInstall: () -> Unit,
+    onRecheck: () -> Unit,
     cameraDenied: Boolean,
     installFailed: Boolean,
 ) {
@@ -543,6 +545,7 @@ private fun SurveyModeSection(
             ArAvailability.CHECKING -> R.string.survey_mode_checking
             ArAvailability.NEEDS_INSTALL -> R.string.survey_mode_needs_install
             ArAvailability.UNSUPPORTED -> R.string.survey_mode_unsupported
+            ArAvailability.UNKNOWN -> R.string.survey_mode_unknown
         }
         Text(
             text = stringResource(explanation),
@@ -550,8 +553,14 @@ private fun SurveyModeSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
-        if (availability == ArAvailability.READY || availability == ArAvailability.NEEDS_INSTALL) {
+        if (availability == ArAvailability.READY || availability == ArAvailability.NEEDS_INSTALL || availability == ArAvailability.UNKNOWN) {
             ArCoreDisclosure(modifier = Modifier.padding(top = 4.dp))
+        }
+        if (availability == ArAvailability.UNKNOWN) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onRecheck) { Text(stringResource(R.string.common_retry)) }
+                TextButton(onClick = onInstall) { Text(stringResource(R.string.survey_mode_install)) }
+            }
         }
         if (availability == ArAvailability.NEEDS_INSTALL) {
             TextButton(onClick = onInstall) { Text(stringResource(R.string.survey_mode_install)) }

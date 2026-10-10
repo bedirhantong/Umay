@@ -75,6 +75,9 @@ class SurveyViewModel @Inject constructor(
         recorder.setScreenVisible(visible)
     }
 
+    /** Asks ARCore again, after a check that got no answer. */
+    fun recheckCameraSupport() = camera.checkAvailability()
+
     fun installCameraSupport(activity: Activity): ArInstallResult = camera.requestInstall(activity, userRequested = true)
 
     fun stopRecording() = recorder.stop()

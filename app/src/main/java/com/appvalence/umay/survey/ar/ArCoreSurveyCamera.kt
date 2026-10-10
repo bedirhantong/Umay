@@ -82,10 +82,14 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
 
     override fun checkAvailability() {
         try {
-            ArCoreApk.getInstance().checkAvailabilityAsync(context) { _availability.value = it.toAvailability() }
+            ArCoreApk.getInstance().checkAvailabilityAsync(context) { availability ->
+                // The raw answer, for telling "this phone can't" from "couldn't check" in a bug report.
+                Log.i(TAG, "ARCore availability: $availability")
+                _availability.value = availabilityOf(availability)
+            }
         } catch (e: RuntimeException) {
             Log.w(TAG, "ARCore availability check failed", e)
-            _availability.value = ArAvailability.UNSUPPORTED
+            _availability.value = ArAvailability.UNKNOWN
         }
     }
 
@@ -325,12 +329,6 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
         _status.value = ArCameraStatus.Failed(failure)
     }
 
-    private fun ArCoreApk.Availability.toAvailability(): ArAvailability = when (this) {
-        ArCoreApk.Availability.SUPPORTED_INSTALLED -> ArAvailability.READY
-        ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD, ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED -> ArAvailability.NEEDS_INSTALL
-        ArCoreApk.Availability.UNKNOWN_CHECKING -> ArAvailability.CHECKING
-        else -> ArAvailability.UNSUPPORTED
-    }
 
     private fun TrackingFailureReason.toProblem(): ArTrackingProblem = when (this) {
         TrackingFailureReason.INSUFFICIENT_LIGHT -> ArTrackingProblem.INSUFFICIENT_LIGHT
@@ -350,6 +348,18 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
         // A few depth images a second is plenty at walking speed, and keeps the phone cool.
         const val DEPTH_INTERVAL_MS = 200L
     }
+}
+
+/**
+ * ARCore's answer, as the survey screen needs it. Only "not capable" means the
+ * phone can't: an error or a time-out only means the check didn't get an answer.
+ */
+internal fun availabilityOf(availability: ArCoreApk.Availability): ArAvailability = when (availability) {
+    ArCoreApk.Availability.SUPPORTED_INSTALLED -> ArAvailability.READY
+    ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD, ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED -> ArAvailability.NEEDS_INSTALL
+    ArCoreApk.Availability.UNKNOWN_CHECKING -> ArAvailability.CHECKING
+    ArCoreApk.Availability.UNSUPPORTED_DEVICE_NOT_CAPABLE -> ArAvailability.UNSUPPORTED
+    ArCoreApk.Availability.UNKNOWN_ERROR, ArCoreApk.Availability.UNKNOWN_TIMED_OUT -> ArAvailability.UNKNOWN
 }
 
 /** A 1×1 offscreen EGL surface, current on the thread that created it, and the camera texture ARCore streams into. */
