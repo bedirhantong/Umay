@@ -299,7 +299,7 @@
     <string name="survey_type_elevator">Asansör</string>
     <string name="survey_type_ramp">Rampa</string>
     <string name="survey_tag_title">Bulunduğun yeri isimlendir</string>
-    <string name="survey_tag_body">\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. Kapı, merdiven, asansör ya da rampa gibi bir tehlike veya kat geçişiyse türünü de seç: kamera bunları göremez, navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir.</string>
+    <string name="survey_tag_body">\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. Kapı, merdiven, asansör ya da rampa gibi bir tehlike veya kat geçişiyse türünü de seç: kamera bunları göremez, navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir. Bir kavşağa ya da merdivene geri döndüğünde ona aynı adı yeniden ver: Umay ikisini tek yer sayar ve koridorları orada birleştirir.</string>
     <string name="survey_tag_name_label">Yer adı</string>
     <string name="survey_tag_button">İşaretle</string>
     <string name="survey_tagged_with_type">%1$s (%2$s, kat %3$d)</string>

@@ -198,4 +198,62 @@ class BeaconMapBuilderTest {
         assertTrue(floor.nodes.none { it.type == NodeType.CORRIDOR })
         assertEquals(1, floor.edges.size)
     }
+
+    private fun tag(name: String, x: Double, y: Double, floor: Int = 0, rssi: Double = -60.0, type: NodeType = NodeType.WAYPOINT) =
+        TaggedWaypoint(name, x, y, floor, listOf(com.appvalence.umay.coremodel.RadioFingerprint("b1", rssi)), type)
+
+    @Test
+    fun `coming back to a place and naming it again joins the walk's branches there`() {
+        // A T: walk from the entrance to the junction, down the left arm, back to the
+        // junction (named again, a little off by dead reckoning), then down the right arm.
+        val waypoints = listOf(
+            tag("Giriş", 0.0, 0.0),
+            tag("Kavşak", 0.0, 10.0, rssi = -60.0),
+            tag("Sol oda", -10.0, 10.0),
+            tag(" kavşak ", 0.8, 10.6, rssi = -70.0),
+            tag("Sağ oda", 10.0, 10.0),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints).floors.single()
+
+        assertEquals(4, floor.nodes.size)
+        val junction = floor.nodes.single { it.name == "Kavşak" }
+        assertEquals(0.4, junction.x, 1e-9)
+        assertEquals(-65.0, junction.fingerprint.single().rssi, 1e-9)
+        val junctionLinks = floor.edges.count { it.fromId == junction.id || it.toId == junction.id }
+        assertEquals(3, junctionLinks)
+        assertEquals(3, floor.edges.size)
+    }
+
+    @Test
+    fun `two places either side of a trip to another floor are not connected`() {
+        // Up the east stairs, along the upper corridor, down the west stairs.
+        val waypoints = listOf(
+            tag("Doğu merdiven alt", 0.0, 0.0, type = NodeType.STAIRS),
+            tag("Doğu merdiven üst", 0.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Batı merdiven üst", 30.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Batı merdiven alt", 30.0, 0.0, type = NodeType.STAIRS),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("b", waypoints)
+
+        assertTrue(map.floors.single { it.floorIndex == 0 }.edges.isEmpty(), "a straight line from one staircase to the other through the ground floor")
+        assertEquals(2, map.floorTransitions.size)
+    }
+
+    @Test
+    fun `down the same stairs that were walked up is one crossing`() {
+        val waypoints = listOf(
+            tag("Merdiven alt", 0.0, 0.0, type = NodeType.STAIRS),
+            tag("Merdiven üst", 0.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Oda", 5.0, 0.0, floor = 1),
+            tag("Merdiven üst", 0.5, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Merdiven alt", 0.5, 0.0, type = NodeType.STAIRS),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("b", waypoints)
+
+        assertEquals(1, map.floorTransitions.size)
+        assertEquals(2, map.floors.single { it.floorIndex == 1 }.nodes.size)
+    }
 }
