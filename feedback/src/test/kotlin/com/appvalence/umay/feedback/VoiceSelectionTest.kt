@@ -27,6 +27,11 @@ class VoiceSelectionTest {
     }
 
     @Test
+    fun `never picks a network voice, which would send every sentence to a server`() {
+        assertNull(VoiceSelection.pick(listOf(voice("tr-network", "tr-TR", network = true)), turkish))
+    }
+
+    @Test
     fun `prefers the highest quality among otherwise equal voices`() {
         val voices = listOf(voice("tr-low", "tr-TR", quality = 200), voice("tr-high", "tr-TR", quality = 400))
 

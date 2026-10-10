@@ -9,6 +9,7 @@
     <string name="voice_missing_data">Türkçe konuşma sesi bu cihazda henüz indirilmemiş. Yönergeler yabancı aksanlı bir sesle okunabilir. Doğal bir Türkçe ses için ses paketini yükle.</string>
     <string name="voice_not_supported">Bu cihazın konuşma motoru Türkçe desteklemiyor, yönergeler yabancı aksanlı okunabilir. Ayarlardan Türkçe destekleyen bir motor (örneğin Google Konuşma Hizmetleri) seçip Türkçe sesi yükle.</string>
     <string name="voice_engine_unavailable">Bu cihazda çalışan bir metin okuma (konuşma) motoru bulunamadı, sesli yönergeler verilemiyor. Ayarlardan bir konuşma motoru etkinleştir.</string>
+    <string name="voice_network_only">Bu cihazdaki Türkçe ses internet üzerinden okunuyor: yönergelerin metni ses motorunun sunucusuna gidiyor ve internet olmayan yerde ses kesiliyor. İnternetsiz Türkçe sesi yükle.</string>
     <string name="voice_install">Türkçe sesi yükle</string>
     <string name="voice_ready">Türkçe ses hazır.</string>
     <string name="voice_checking">Konuşma sesi kontrol ediliyor…</string>

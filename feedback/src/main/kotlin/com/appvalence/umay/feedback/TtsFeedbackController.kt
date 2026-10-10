@@ -33,6 +33,12 @@ enum class VoiceStatus {
     /** The installed TTS engine has no voice for the language at all. */
     NOT_SUPPORTED,
 
+    /**
+     * The only voice for the language synthesizes on the engine's server: guidance is
+     * spoken, but its text leaves the phone until an on-device voice is installed.
+     */
+    NETWORK_ONLY,
+
     /** No working TTS engine on the device. */
     ENGINE_UNAVAILABLE,
 }
@@ -191,7 +197,8 @@ class TtsFeedbackController(
         return when (tts.setLanguage(speechLocale)) {
             TextToSpeech.LANG_MISSING_DATA -> VoiceStatus.MISSING_DATA
             TextToSpeech.LANG_NOT_SUPPORTED -> VoiceStatus.NOT_SUPPORTED
-            else -> VoiceStatus.READY
+            // The engine's own pick for the language may be one it synthesizes online.
+            else -> if (runCatching { tts.voice?.isNetworkConnectionRequired }.getOrNull() == true) VoiceStatus.NETWORK_ONLY else VoiceStatus.READY
         }
     }
 
