@@ -44,13 +44,18 @@ jobs:
           :perception:testDebugUnitTest
           :orchestrator:testDebugUnitTest
           :feedback:testDebugUnitTest
-          :cloud:testDebugUnitTest
-          :app:testDebugUnitTest
+          :cloud-firebase:testDebugUnitTest
+          :app:testStandardDebugUnitTest
+
+      # The institution build promises that nothing leaves the device; this fails the
+      # run if its merged manifest or dependencies ever say otherwise.
+      - name: Institution build privacy
+        run: ./gradlew --stacktrace :app:verifyInstitutionReleasePrivacy
 
       - name: Lint
-        run: ./gradlew --stacktrace :app:lintDebug
+        run: ./gradlew --stacktrace :app:lintStandardDebug :app:lintInstitutionDebug
 
-      - name: Build debug APK
+      - name: Build debug APKs
         run: ./gradlew --stacktrace :app:assembleDebug
 
       - name: Upload test and lint reports

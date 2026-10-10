@@ -1,5 +1,6 @@
 package com.appvalence.umay.files
 
+import com.appvalence.umay.common.Distribution
 import com.appvalence.umay.storage.BuildingRepository
 import com.appvalence.umay.testing.FakeBuildingMapStore
 import com.appvalence.umay.testing.FakeCrashReports
@@ -34,7 +35,7 @@ class FilesViewModelTest {
         logs = FakeFieldLogFiles(mutableListOf(folder.newFile("umay_a.jsonl"), folder.newFile("umay_b.jsonl")))
         crashes = FakeCrashReports(mutableListOf(folder.newFile("crash_1.txt")))
         val buildings = BuildingRepository({ store }, backgroundScope, main.dispatcher).apply { refresh() }
-        return FilesViewModel(buildings, logs, crashes, main.dispatcher).also { viewModel ->
+        return FilesViewModel(buildings, logs, crashes, main.dispatcher, Distribution(sharedMapPool = true)).also { viewModel ->
             backgroundScope.launch { viewModel.state.collect {} }
         }
     }

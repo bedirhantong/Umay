@@ -70,7 +70,7 @@ interface RemoteBuildingMapRepository {
     suspend fun unpublishBuildingMap(id: String): Result<Unit>
 }
 
-internal fun Result.Companion.remoteFailure(failure: RemoteMapFailure): Result<Nothing> = failure(RemoteMapException(failure))
+fun Result.Companion.remoteFailure(failure: RemoteMapFailure): Result<Nothing> = failure(RemoteMapException(failure))
 
 /** Carries a typed [RemoteMapFailure] through a [Result] without callers needing to catch exceptions. */
 class RemoteMapException(val failure: RemoteMapFailure) : Exception()

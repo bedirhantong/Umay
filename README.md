@@ -84,16 +84,30 @@ harita havuzu bağlanamaz. Havuzu denemek için kendi Firebase projenizi
 oluşturup ondan indirdiğiniz dosyayı kullanın ve `firestore.rules` kurallarını
 o projeye yükleyin.
 
+Uygulamanın iki dağıtımı vardır:
+
+- **standard:** Play Store'daki sürüm. Paylaşımlı harita havuzu Firebase
+  üzerinde çalışır.
+- **institution (kurum sürümü):** Bir kurumun kendi binası için. Hiçbir veri
+  cihazdan çıkmaz: APK'da Firebase yoktur, uygulamanın internet izni yoktur,
+  yedekleme kapalıdır. Haritalar telefonlar arasında dosyayla aktarılır.
+  Ayrıntılar [docs/GIZLILIK.md](docs/GIZLILIK.md) dosyasında. Kurum sürümü
+  `google-services.json` gerektirmez ve "Umay Kurum" adıyla, Play Store
+  sürümünün yanına ayrı bir uygulama olarak kurulur.
+
 ```sh
-./gradlew :app:assembleDebug          # debug APK
-./gradlew :app:installDebug           # bağlı cihaza yükle
+./gradlew :app:assembleStandardDebug        # debug APK
+./gradlew :app:installStandardDebug         # bağlı cihaza yükle
+./gradlew :app:assembleInstitutionRelease   # kurum sürümü
 ```
 
-Testler ve lint:
+Testler, lint ve kurum sürümünün gizlilik denetimi:
 
 ```sh
-./gradlew :core-model:test :positioning:test :perception:test \
-          :feedback:test :orchestrator:test :app:testDebugUnitTest :app:lintDebug
+./gradlew :core-model:test :positioning:testDebugUnitTest :perception:testDebugUnitTest \
+          :feedback:testDebugUnitTest :orchestrator:testDebugUnitTest \
+          :cloud-firebase:testDebugUnitTest :app:testStandardDebugUnitTest \
+          :app:verifyInstitutionReleasePrivacy :app:lintStandardDebug :app:lintInstitutionDebug
 ```
 
 Uygulamanın işe yaraması için gerçek bir cihaz gerekir: sensörler, Bluetooth

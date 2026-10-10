@@ -69,11 +69,13 @@ import java.util.Date
 fun FilesScreen(
     modifier: Modifier = Modifier,
     viewModel: FilesViewModel = hiltViewModel(),
-    poolViewModel: SharedMapPoolViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val pool by poolViewModel.state.collectAsStateWithLifecycle()
+    // The same answer for the whole life of the app (it's the build's), so this
+    // conditional call always takes the same branch.
+    val poolViewModel: SharedMapPoolViewModel? = if (viewModel.showsSharedMapPool) hiltViewModel() else null
+    val pool = poolViewModel?.state?.collectAsStateWithLifecycle()?.value
     val pickMapFile = rememberMapFilePicker()
     val dateTimeFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
 
@@ -125,9 +127,10 @@ fun FilesScreen(
             )
         }
 
-        item(key = "divider-pool") { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
-
-        sharedMapPoolItems(pool, state.buildings, poolViewModel)
+        if (pool != null && poolViewModel != null) {
+            item(key = "divider-pool") { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
+            sharedMapPoolItems(pool, state.buildings, poolViewModel)
+        }
 
         item(key = "divider-logs") { HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp)) }
 
@@ -219,7 +222,7 @@ fun FilesScreen(
         }
     }
 
-    SharedMapPoolDialogs(pool.dialogs, poolViewModel)
+    if (pool != null && poolViewModel != null) SharedMapPoolDialogs(pool.dialogs, poolViewModel)
 
     pendingCrashDelete?.let { report ->
         ConfirmDeleteDialog(

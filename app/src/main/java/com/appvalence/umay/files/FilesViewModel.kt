@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appvalence.umay.common.StoredFile
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.common.Distribution
 import com.appvalence.umay.di.IoDispatcher
 import com.appvalence.umay.diagnostics.CrashReports
 import com.appvalence.umay.fieldlog.FieldLogFiles
@@ -46,7 +47,11 @@ class FilesViewModel @Inject constructor(
     private val fieldLogs: FieldLogFiles,
     private val crashReports: CrashReports,
     @param:IoDispatcher private val io: CoroutineDispatcher,
+    distribution: Distribution,
 ) : ViewModel() {
+    /** False in the institution build, which has no internet to reach the pool with. */
+    val showsSharedMapPool: Boolean = distribution.sharedMapPool
+
     private val local = MutableStateFlow(FilesUiState(recordingEnabled = fieldLogs.isRecordingEnabled))
 
     val state: StateFlow<FilesUiState> = combine(buildings.buildings, local) { all, current -> current.copy(buildings = all.orEmpty()) }

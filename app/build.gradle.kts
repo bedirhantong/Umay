@@ -1,3 +1,4 @@
+import com.android.build.api.artifact.SingleArtifact
 import java.util.Properties
 
 plugins {
@@ -44,6 +45,23 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Two distributions of the same app. "standard" is the public one (Play Store) with
+    // the internet-based shared map pool. "institution" is for a building's own staff
+    // and visitors: nothing leaves the device — no Firebase in the APK, no internet
+    // permission, no backup (see src/institution and docs/GIZLILIK.md). It installs
+    // next to the public app.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("standard") {
+            dimension = "distribution"
+        }
+        create("institution") {
+            dimension = "distribution"
+            applicationIdSuffix = ".kurum"
+            versionNameSuffix = "-kurum"
+        }
     }
 
     signingConfigs {
@@ -93,6 +111,7 @@ dependencies {
     implementation(project(":orchestrator"))
     implementation(project(":feedback"))
     implementation(project(":cloud"))
+    "standardImplementation"(project(":cloud-firebase"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.camera.view)
     implementation(libs.google.ar.core)
@@ -118,4 +137,97 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+// google-services.json configures Firebase, which only the standard build has. The
+// institution build's application id isn't in that file, so its task would fail; and
+// there's nothing for it to generate anyway.
+tasks.configureEach {
+    if (name.startsWith("process") && name.endsWith("GoogleServices") && name.contains("Institution")) enabled = false
+}
+
+/**
+ * Fails the build if an institution APK could reach the network or leave a copy
+ * of its data anywhere: an internet permission or allowed backup in the merged
+ * manifest, or a Firebase service library on the runtime classpath. Runs with
+ * `check`, so CI enforces what docs/GIZLILIK.md promises.
+ */
+abstract class VerifyInstitutionPrivacy : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val mergedManifest: RegularFileProperty
+
+    @get:Input
+    abstract val runtimeComponents: SetProperty<String>
+
+    @TaskAction
+    fun verify() {
+        val manifest = mergedManifest.get().asFile.readText()
+        val problems = buildList {
+            FORBIDDEN_PERMISSIONS
+                .filter { manifest.contains("""android:name="$it"""") }
+                .forEach { add("the merged manifest asks for $it") }
+            if (!Regex("""android:allowBackup="false"""").containsMatchIn(manifest)) add("backup isn't switched off (android:allowBackup)")
+            runtimeComponents.get()
+                .filter { component -> FORBIDDEN_LIBRARIES.any { component.startsWith(it) } }
+                .forEach { add("$it is on the runtime classpath") }
+        }
+        if (problems.isNotEmpty()) {
+            throw GradleException("The institution build must keep everything on the device:\n" + problems.joinToString("\n") { "  - $it" })
+        }
+    }
+
+    private companion object {
+        // Services that talk to Google's servers. ML Kit's own helper libraries
+        // (firebase-components, firebase-encoders) don't, and stay.
+        val FORBIDDEN_PERMISSIONS = listOf(
+            "android.permission.INTERNET",
+            // Implied by an old library manifest, never used (see AndroidManifest.xml).
+            "android.permission.READ_PHONE_STATE",
+            "android.permission.READ_EXTERNAL_STORAGE",
+            "android.permission.WRITE_EXTERNAL_STORAGE",
+        )
+
+        val FORBIDDEN_LIBRARIES = listOf(
+            "com.google.firebase:firebase-firestore",
+            "com.google.firebase:firebase-auth",
+            "com.google.firebase:firebase-database",
+            "com.google.firebase:firebase-storage",
+            "com.google.firebase:firebase-analytics",
+            "com.google.firebase:firebase-crashlytics",
+            "com.google.firebase:firebase-messaging",
+            "com.google.firebase:firebase-installations",
+            "com.google.firebase:firebase-config",
+            "com.google.firebase:firebase-perf",
+            "com.google.android.gms:play-services-measurement",
+        )
+    }
+}
+
+androidComponents {
+    onVariants(selector().withFlavor("distribution" to "institution")) { variant ->
+        val runtime = variant.runtimeConfiguration
+        val verify = tasks.register<VerifyInstitutionPrivacy>("verify${variant.name.replaceFirstChar { it.uppercase() }}Privacy") {
+            group = "verification"
+            description = "Checks that the ${variant.name} build can't reach the network or back its data up."
+            mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
+            runtimeComponents.set(
+                runtime.incoming.resolutionResult.rootComponent.map { root ->
+                    val seen = mutableSetOf<org.gradle.api.artifacts.result.ResolvedComponentResult>()
+                    val pending = ArrayDeque(listOf(root))
+                    while (pending.isNotEmpty()) {
+                        val component = pending.removeFirst()
+                        if (!seen.add(component)) continue
+                        component.dependencies
+                            .filterIsInstance<org.gradle.api.artifacts.result.ResolvedDependencyResult>()
+                            .forEach { pending.add(it.selected) }
+                    }
+                    seen.map { it.id }
+                        .filterIsInstance<org.gradle.api.artifacts.component.ModuleComponentIdentifier>()
+                        .map { "${it.group}:${it.module}" }
+                        .toSet()
+                },
+            )
+        }
+        tasks.named("check") { dependsOn(verify) }
+    }
 }

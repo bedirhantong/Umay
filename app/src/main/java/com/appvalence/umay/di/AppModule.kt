@@ -1,10 +1,6 @@
 package com.appvalence.umay.di
 
 import android.content.Context
-import com.appvalence.umay.cloud.AndroidConnectivityMonitor
-import com.appvalence.umay.cloud.ConnectivityMonitor
-import com.appvalence.umay.cloud.FirestoreBuildingMapRepository
-import com.appvalence.umay.cloud.RemoteBuildingMapRepository
 import com.appvalence.umay.cloudmap.PublishedBuildings
 import com.appvalence.umay.cloudmap.PublishedBuildingsStore
 import com.appvalence.umay.common.AndroidDeviceCapabilities
@@ -89,15 +85,8 @@ object AppModule {
     @Provides
     fun beaconScanner(@ApplicationContext context: Context): BeaconScanner = BleBeaconScanner(context)
 
-    // Only ever injected as dagger.Lazy and first resolved on a background thread:
-    // creating the Firestore/Auth clients sets Firebase up, which isn't free.
-    @Provides
-    @Singleton
-    fun remoteBuildingMaps(): RemoteBuildingMapRepository = FirestoreBuildingMapRepository()
-
-    @Provides
-    @Singleton
-    fun connectivityMonitor(@ApplicationContext context: Context): ConnectivityMonitor = AndroidConnectivityMonitor(context)
+    // The remote map source and connectivity come from the distribution flavor's own
+    // DistributionModule (app/src/standard, app/src/institution).
 }
 
 @Module
