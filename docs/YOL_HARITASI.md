@@ -61,8 +61,9 @@ Kullanıcının gözünden akış:
 | Koridor grafiği üzerinde parçacık filtresi (konum) | Yazıldı, **sahada ölçülmedi** | `feat/graph-particle-filter` |
 | Saha kaydını eski ve yeni motorla yeniden oynatma | Yazıldı | `feat/graph-particle-filter` |
 | Kamerayla (ARCore) harita çıkarma, 2D duvar haritası, köşe noktaları | Yazıldı, **telefonda hiç çalışmadı** | `feat/ar-survey` |
-| Kamerayla konum bulma | Yok | |
-| Derinlikle engel uyarısı (sandalye, masa, duvar) | Yok | |
+| Yer işaretleriyle (QR) konum bulma, "Kamerayla bul" | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
+| Kamerayla engel uyarısı: insan ve eşyalar (sandalye, masa, bank…) | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
+| 16 KB sayfa boyutu uyumu (LiteRT) | Yapıldı | `feat/ar-survey` |
 | Duvar haritası üzerinde serbest rota (koltuktan başlamak) | Yok | |
 | Kapıların harita parçası olması | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | Harita düzenleme | Yazıldı, **TalkBack ile denenmedi** | `feat/ar-survey` |
@@ -204,12 +205,13 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   açılınca en olası yeri öneriyor: "Giriş holündesin gibi görünüyor, doğru
   mu?"
   *Bitti:* test binasında 10 denemenin en az 8'inde doğru yeri öneriyor.
-- [ ] **3.3 Kamerayla konum bulma** (B). Robot süpürge yöntemi: yönlendirme
-  sırasında ARCore çalışıyor. Derinlik ölçümleri kaydedilmiş duvar
-  haritasıyla karşılaştırılarak konum bulunuyor. Duvar haritası üzerinde,
-  koridor çizgilerine bağlı olmayan serbest alan parçacık filtresi
-  kullanılıyor. Beacon kaba başlangıcı veriyor, kamera ince ayarı yapıyor.
-  Hepsi cihazda, Kotlin ile, yeni native kütüphane olmadan.
+- [ ] **3.3 Kamerayla konum bulma** (B). Karar 1 gereği ARCore'suz: isimli
+  yerlere yapıştırılan basılı QR yer işaretleri (düzenleyiciden yazdırılır,
+  15 cm). Yönlendirmede kamera işareti görünce uzaklık ve yön parçacık
+  filtresine en güçlü kanıt olarak girer, kat ve yön de düzelir; yola
+  çıkmadan "Kamerayla bul" başlangıcı işaretten bulur. Hepsi cihazda, ZXing
+  (saf Java) ile. **Kod hazır:** basılı işaretlerle denenecek. Görsel yer
+  tanıma (işaretsiz) ileride, ihtiyaç saha testinde görülürse.
   *Bitti:* kullanıcı oturduğu yerde telefonu birkaç saniye çevirince konumu
   1 m içinde bulunuyor. Benzer iki koridor karıştığında beacon ayırıyor.
   Sahada ölçüldü.
@@ -221,9 +223,12 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
 
 ### Faz 4: Kamerayla ilerleme
 
-- [ ] **4.1 Derinlikle engel uyarısı** (O). Yönlendirmede önündeki
-  sandalye, masa, duvar ve kapalı kapı ölçülüyor, "Önünde 1 metrede engel"
-  deniyor. İnsan algılamayla birlikte çalışıyor, uyarılar üst üste binmiyor.
+- [ ] **4.1 Kamerayla engel uyarısı** (O). Karar 1 gereği derinlik
+  sensörsüz: aynı model artık insanla birlikte sandalye, kanepe, masa, bank,
+  yatak, saksı, bisiklet, valiz, köpek gibi eşyaları da tanıyor ve adıyla
+  söylüyor ("yaklaşık 2 metre önünde bir sandalye var"). Duvar ve kapalı
+  kapı haritadan bilinir; rota koridorda kalır. **Kod hazır:** test
+  parkurunda denenecek.
   *Bitti:* test parkurunda bütün engeller uyarıldı, yanlış uyarı az.
 - [ ] **4.2 Serbest alanda rota** (O). Duvar haritası üzerinde, duvardan
   güvenli mesafe bırakan yol bulma. Kullanıcı koridor çizgisinin dışından
@@ -259,7 +264,9 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   harita önizlemesi). TalkBack, büyük yazı ve yüksek kontrastla telefonda
   denetim bekliyor. Bütün ekranlar TalkBack,
   büyük yazı ve yüksek kontrastla denetlendi.
-- [ ] **5.5 Mağaza hazırlığı** (K). Veri güvenliği formu, ARCore açıklaması,
+- [ ] **5.5 Mağaza hazırlığı** (K). 16 KB sayfa boyutu çözüldü: insan
+  algılama LiteRT'ye taşındı, APK'daki bütün native kütüphaneler 16 KB
+  hizalı. Veri güvenliği özeti `docs/GIZLILIK.md`'de. Veri güvenliği formu, ARCore açıklaması,
   güvenlik uyarıları, 16 KB sayfa boyutu (`libtask_vision_jni.so`, Şubat
   2027 son tarih).
 
@@ -267,6 +274,13 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
 
 ## Kararlar
 
+- **10 Ekim 2026: Yönlendirmede ARCore yok.** ARCore yalnızca haritayı
+  çıkaran kişinin telefonunda (kamerayla haritalama). Kör kullanıcının konumu
+  beacon, adım, harita ve basılı QR yer işaretleriyle; engel uyarısı aynı
+  kameranın nesne algılamasıyla bulunur. Her telefonda çalışır, kullanıcının
+  telefonunda Google AR bileşeni olmaz.
+- **10 Ekim 2026: Kurum sunucusu yazılır.** Dosyayla aktarım da kalır; kurum
+  hangisini kullanacağını kurulumda seçer.
 - **10 Ekim 2026: Ev ikinci senaryo.** Faz 0–5 kurum binası (beacon'lı) içindir.
   Ev için gereken beacon'sız konum, kurum senaryosu bittikten sonra ayrıca
   planlanır.
@@ -276,38 +290,10 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
 Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 **Kararlar** bölümüne taşınır.
 
-1. **ARCore nerede kullanılacak?** ARCore, Google'ın kapalı kaynak "Google
-   Play Services for AR" uygulamasıyla çalışır ve yalnızca bir kısım telefonda
-   derinlik ölçer.
-
-   **Öneri (onay bekliyor):** ARCore yalnızca haritayı çıkaran kişinin
-   telefonunda kullanılsın. Kör kullanıcının yönlendirmesi ARCore'suz, açık
-   kaynak parçalarla kurulsun:
-   - beacon, adım ve parçacık filtresi (var);
-   - kritik noktalarda (kapılar, asansörler, kavşaklar) duvara yapıştırılan
-     görsel işaretler (AprilTag/ArUco, açık kaynak) — kamera görünce konumu
-     santimetre düzeyinde verir;
-   - cihazda çalışan bir modelle görsel yer tanıma, parçacık filtresine ek
-     kanıt olarak;
-   - engel uyarısı için cihazda çalışan tek kameralı derinlik tahmini.
-
-   Bu yol ARCore'un sürekli metrik takibini kaybeder; duvar haritasıyla
-   santimetre düzeyinde eşleme (3.3'ün ilk hâli) zorlaşır. Karşılığında daha
-   çok telefonda çalışır, pil daha az gider ve kör kullanıcının telefonunda
-   hiçbir Google AR bileşeni olmaz. Saha testi bu yolun yetmediğini gösterirse
-   yönlendirmede ARCore yeniden değerlendirilir. Onaylanırsa 3.3 ve 4.1 buna
-   göre yeniden yazılır.
-
-   Haritayı çıkarma tarafında ARCore'un açık kaynak karşılığı (ORB-SLAM3,
-   OpenVINS, Basalt gibi) Android'de araştırma düzeyindedir: her telefon için
-   kamera ve sensör kalibrasyonu ister. Kurum hiçbir Google bileşeni
-   istemezse bu yol aylar sürer; o durumda haritayı adım sayarak çıkarmak
-   geçici çözümdür.
-2. **Kurum sunucusu mu, dosya aktarımı mı?** Tek binalık bir kurum için
-   dosyayla aktarım yetebilir, 1.5 ertelenebilir.
-3. **Test binası ve kurum.** Faz 0.3 ve Faz 3 için hangi bina?
-4. **Hedef telefonlar.** Hangi telefonları destekleyeceğiz? 1. karara göre
-   derinlik desteği gerekip gerekmediği değişir.
+1. **Test binası ve kurum.** Faz 0.3 ve Faz 3 için hangi bina?
+2. **Hedef telefonlar.** Yönlendirme ARCore istemediği için Android 7+ her
+   telefon; kamerayla haritalama için ARCore destekli bir telefon gerekir.
+   Kurum hangi telefonlarla test edilecek?
 
 ---
 
@@ -330,6 +316,11 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **10 Ekim 2026:** Karar 1 (yönlendirmede ARCore yok) ve karar 2 (kurum
+  sunucusu) alındı. İnsan algılama LiteRT'ye taşındı ve 16 KB sorunu kapandı;
+  engel uyarısı eşyaları da kapsıyor (4.1); QR yer işaretleriyle konum bulma
+  ve "Kamerayla bul" yazıldı (3.3).
 
 - **10 Ekim 2026:** Beacon durumu ekranı (5.1) ve kurulum kılavuzu (5.2)
   yazıldı; web sitesindeki gizlilik politikası güncellendi (1.7). Kılavuz
