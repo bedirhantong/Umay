@@ -24,6 +24,7 @@ import com.appvalence.umay.coremodel.GuidanceEvent
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.MarkerSighting
 import com.appvalence.umay.coremodel.NavigationAlert
+import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionEvent
 import com.appvalence.umay.coremodel.PositionStream
 import com.appvalence.umay.coremodel.PressureEvent
@@ -464,6 +465,7 @@ class NavigationSession internal constructor(
                                 },
                             )
                         }
+                        is BuildingQueryResult.WhereAmI -> answerQuestion(whereAmIAnswer(result, position))
                         BuildingQueryResult.NotUnderstood -> answerQuestion(appContext.getString(R.string.voice_query_not_understood))
                     }
                 }
@@ -481,6 +483,19 @@ class NavigationSession internal constructor(
                 )
             }
         }
+    }
+
+    private fun whereAmIAnswer(result: BuildingQueryResult.WhereAmI, position: Position?): String {
+        val nearest = result.nearest ?: return appContext.getString(R.string.voice_query_where_unknown)
+        val second = result.second
+        val here = if (second == null) {
+            appContext.getString(R.string.voice_query_where_at, nearest.name)
+        } else {
+            appContext.getString(R.string.voice_query_where_between, nearest.name, second.name, formatMeters(result.nearestMeters), formatMeters(result.secondMeters))
+        }
+        // On a walk, where to go from here is the other half of the answer.
+        val next = position?.let(orchestrator::currentInstruction)
+        return listOfNotNull(here, next?.let { appContext.getString(R.string.voice_query_where_next, it) }).joinToString(" ")
     }
 
     private fun formatMeters(distanceMeters: Double): String {

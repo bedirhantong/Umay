@@ -159,6 +159,10 @@
     <string name="voice_query_listening">Dinliyorum.</string>
     <string name="voice_query_answer_with_distance">%1$s, yaklaşık %2$s uzakta.</string>
     <string name="voice_query_answer_no_distance">%1$s var, ama şu an ne kadar uzakta olduğunu söyleyemiyorum.</string>
+    <string name="voice_query_where_at">Şu an %1$s yanındasın.</string>
+    <string name="voice_query_where_between">%1$s ile %2$s arasındasın: %1$s yaklaşık %3$s, %2$s yaklaşık %4$s uzakta.</string>
+    <string name="voice_query_where_next">Sıradaki yönerge: %1$s</string>
+    <string name="voice_query_where_unknown">Henüz nerede olduğunu bilmiyorum. Birkaç adım yürüdükten sonra tekrar sor.</string>
     <string name="voice_query_not_understood">Anlayamadım, farklı bir şekilde sorabilir misin?</string>
     <string name="voice_query_no_speech">Bir şey duyamadım.</string>
     <string name="voice_query_not_available">Bu cihazda konuşarak soru sorma kullanılamıyor: telefonda Türkçe konuşmayı internetsiz tanıyan bir hizmet yok. Sesin cihazından çıkmaması için internet üzerinden tanıma kullanılmıyor.</string>
