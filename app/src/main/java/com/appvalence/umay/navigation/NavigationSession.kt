@@ -23,6 +23,7 @@ import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.coremodel.GuidanceEvent
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
+import com.appvalence.umay.coremodel.MarkerSighting
 import com.appvalence.umay.coremodel.PositionEvent
 import com.appvalence.umay.coremodel.PositionStream
 import com.appvalence.umay.coremodel.PressureEvent
@@ -199,7 +200,12 @@ class NavigationSession internal constructor(
         map = buildingMap,
         startNodeId = startNodeId,
         config = particleConfig,
+        // A printed place marker the camera sees settles where the walker is (see PlaceMarkers).
+        markerSightings = detector.markerSightings(),
     )
+
+    // Said once per marker per MARKER_ANNOUNCE_INTERVAL_MS: seeing it again a second later isn't news.
+    private val markersAnnouncedAtMs = HashMap<String, Long>()
 
     private val orchestrator: NavigationOrchestrator = run {
         val loggedPositioning = object : PositioningEngine {
@@ -210,6 +216,7 @@ class NavigationSession internal constructor(
                         _ui.update { ui -> ui.copy(fingerprintCorrections = ui.fingerprintCorrections + 1) }
                         recorder?.record(PositionEvent.of(PositionStream.FINGERPRINT, it))
                     }
+                    update.marker?.let(::onMarkerSeen)
                 }
                 .map { it.position }
         }
@@ -527,6 +534,16 @@ class NavigationSession internal constructor(
         }
     }
 
+    private fun onMarkerSeen(sighting: MarkerSighting) {
+        val place = allNodesById[sighting.nodeId] ?: return
+        val now = sighting.timestampMs
+        if (now - (markersAnnouncedAtMs[place.id] ?: Long.MIN_VALUE / 2) < MARKER_ANNOUNCE_INTERVAL_MS) return
+        markersAnnouncedAtMs[place.id] = now
+        val message = appContext.getString(R.string.nav_marker_seen, place.name)
+        speech.emit(NavigationAlert(id = "marker-${place.id}-$now", priority = AlertPriority.INFO, message = message, relatedObstacle = null, createdAtMs = now))
+        recorder?.record(GuidanceEvent(now, "marker-${place.id}", "INFO", message))
+    }
+
     private fun announce(messageRes: Int) {
         speech.emit(
             NavigationAlert(
@@ -619,6 +636,7 @@ class NavigationSession internal constructor(
     private companion object {
         const val TAG = "NavigationSession"
         const val PRESSURE_LOG_INTERVAL_MS = 1_000L
+        const val MARKER_ANNOUNCE_INTERVAL_MS = 30_000L
     }
 }
 

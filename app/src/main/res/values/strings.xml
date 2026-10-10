@@ -98,6 +98,12 @@
     <string name="nav_pick_route_subtitle">Bulunduğun noktayı ve gitmek istediğin yeri seç.</string>
     <string name="nav_start_label">Bulunduğum yer</string>
     <string name="nav_destination_label">Gitmek istediğim yer</string>
+    <string name="nav_find_start_camera">Kamerayla bul</string>
+    <string name="nav_find_start_scanning">Telefonu göğüs hizasında tut ve yavaşça kendi etrafında dön. Bir yer işareti görünce söyleyeceğim.</string>
+    <string name="nav_find_start_found">%1$s işaretini buldum, yola oradan başlıyorsun.</string>
+    <string name="nav_find_start_not_found">Yakında bir yer işareti bulamadım. Bulunduğun yeri listeden seç.</string>
+    <string name="nav_find_start_camera_failed">Kamera açılamadı. Bulunduğun yeri listeden seç.</string>
+    <string name="nav_marker_seen">%1$s işaretini gördüm, konumun güncellendi.</string>
     <string name="nav_start_suggestion">%1$s yakınında gibi görünüyorsun. Yola buradan mı başlıyorsun?</string>
     <string name="nav_start_suggestion_yes">Evet, buradan başla</string>
     <string name="nav_start_suggestion_no">Hayır</string>
@@ -399,6 +405,14 @@
     <string name="editor_save_failed">Harita kaydedilemedi.</string>
     <string name="editor_name_taken">Bu adda başka bir bina var. Başka bir ad seç.</string>
     <string name="editor_name_blank">Bina adı boş olamaz.</string>
+    <!-- Printed place markers (Dosyalar → Düzenle → Yer işaretlerini yazdır) -->
+    <string name="markers_print">Yer işaretlerini yazdır</string>
+    <string name="markers_print_body">Her isimli yer için bir QR işaret sayfası hazırlar. Her sayfayı o yerin duvarına, göz hizasında yapıştır: kamerası açık bir telefon işareti görünce nerede olduğunu kesin olarak bilir.</string>
+    <string name="markers_print_chooser">İşaret sayfalarını yazdır ya da paylaş</string>
+    <string name="markers_print_failed">İşaret sayfaları hazırlanamadı.</string>
+    <string name="markers_sheet_floor">%1$s, %2$s</string>
+    <string name="markers_sheet_print_note" formatted="false">Gerçek boyutta (%100, sayfaya sığdırmadan) yazdırın: karenin bir kenarı 15 cm olmalı.</string>
+    <string name="markers_sheet_place_note">Umay yer işareti. Bu sayfayı adı yazan yerin duvarına, göz hizasında yapıştırın.</string>
     <!-- Beacon check-up (Dosyalar → Düzenle → Beacon durumu) -->
     <string name="beacons_open">Beacon durumu</string>
     <string name="beacons_title">Beacon durumu</string>

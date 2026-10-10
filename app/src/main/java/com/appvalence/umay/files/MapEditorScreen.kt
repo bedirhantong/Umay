@@ -41,12 +41,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -66,6 +68,7 @@ import com.appvalence.umay.coremodel.MapEdits
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.isPlace
+import kotlinx.coroutines.launch
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -122,6 +125,24 @@ fun MapEditorScreen(
             OutlinedButton(onClick = onCheckBeacons, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Text(stringResource(R.string.beacons_open))
             }
+            // Printed from the saved map, so the codes always point to places that exist.
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            val chooser = stringResource(R.string.markers_print_chooser)
+            var printFailed by remember { mutableStateOf(false) }
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val file = state.original?.let { MarkerSheets.export(context, it) }
+                        printFailed = file == null || !shareFiles(context, listOf(file), "application/pdf", chooser)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            ) {
+                Text(stringResource(R.string.markers_print))
+            }
+            Text(text = stringResource(R.string.markers_print_body), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (printFailed) Text(text = stringResource(R.string.markers_print_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(modifier = Modifier.weight(1f), enabled = state.undoCount > 0, onClick = viewModel::undo) {
                     Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null)

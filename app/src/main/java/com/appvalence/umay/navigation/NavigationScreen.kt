@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -95,8 +96,11 @@ import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.isPlace
 import com.appvalence.umay.files.rememberMapFilePicker
+import com.appvalence.umay.perception.CameraMarkerScanner
 import com.appvalence.umay.survey.round1
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 private val NAVIGATION_PERMISSIONS = buildList {
     add(Manifest.permission.CAMERA)
@@ -371,6 +375,16 @@ private fun RoutePicker(
             onStartChange(it)
         },
         priorityIds = nearbyStartIds,
+    )
+    FindStartWithCamera(
+        nodes = nodes,
+        nodeFloor = nodeFloor,
+        showFloor = showFloor,
+        onFound = {
+            startChosenByHand = false // announced by the finder itself
+            onStartChange(it)
+        },
+        speak = speak,
     )
     if (nearbyStartIds.isNotEmpty()) {
         Text(
@@ -917,3 +931,68 @@ private fun StartSuggestion(text: String, speak: ((String) -> Unit)?, onAccept: 
         }
     }
 }
+
+/**
+ * "Kamerayla bul": the person turns slowly where they stand while the camera
+ * looks for a printed place marker (see CameraMarkerScanner); the first one of
+ * this building it sees becomes the start. Gives up after [FIND_START_TIMEOUT_MS].
+ */
+@Composable
+private fun FindStartWithCamera(
+    nodes: List<MapNode>,
+    nodeFloor: Map<String, Int>,
+    showFloor: Boolean,
+    onFound: (Int) -> Unit,
+    speak: ((String) -> Unit)?,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val resources = LocalResources.current
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    var result by rememberSaveable { mutableStateOf<String?>(null) }
+    val scanningText = stringResource(R.string.nav_find_start_scanning)
+
+    OutlinedButton(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        onClick = {
+            result = null
+            scanning = !scanning
+        },
+    ) {
+        Icon(Icons.Filled.CameraAlt, contentDescription = null)
+        Text(stringResource(if (scanning) R.string.common_cancel else R.string.nav_find_start_camera), modifier = Modifier.padding(start = 8.dp))
+    }
+    if (scanning) {
+        val scanner = remember { CameraMarkerScanner(context.applicationContext) }
+        DisposableEffect(lifecycleOwner) {
+            scanner.bind(lifecycleOwner) {
+                scanning = false
+                result = resources.getString(R.string.nav_find_start_camera_failed)
+            }
+            onDispose { scanner.unbind() }
+        }
+        LaunchedEffect(scanner) {
+            speak?.invoke(scanningText)
+            val found = withTimeoutOrNull(FIND_START_TIMEOUT_MS) {
+                scanner.sightings().first { sighting -> nodes.any { it.id == sighting.nodeId } }
+            }
+            scanning = false
+            result = if (found == null) {
+                resources.getString(R.string.nav_find_start_not_found)
+            } else {
+                val index = nodes.indexOfFirst { it.id == found.nodeId }
+                onFound(index)
+                val node = nodes[index]
+                val label = if (showFloor) resources.getString(R.string.common_node_with_floor, node.name, nodeFloor[node.id] ?: 0) else node.name
+                resources.getString(R.string.nav_find_start_found, label)
+            }
+            result?.let { speak?.invoke(it) }
+        }
+        Text(text = scanningText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
+    }
+    result?.let {
+        Text(text = it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
+    }
+}
+
+private const val FIND_START_TIMEOUT_MS = 30_000L

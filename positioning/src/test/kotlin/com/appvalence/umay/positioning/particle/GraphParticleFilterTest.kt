@@ -181,4 +181,37 @@ class GraphParticleFilterTest {
         assertTrue(withoutRadio > 2.5, "dead reckoning alone was expected to fall behind, was off by $withoutRadio")
         assertTrue(withRadio < 1.5, "the radio map should have kept it within 1.5 m, was off by $withRadio")
     }
+
+    @Test
+    fun `a marker seen far from where the cloud thinks it is brings it there`() {
+        val far = node("Z", 0.0, 40.0)
+        val filter = GraphParticleFilter(corridorMap(a, far), "A", random = Random(4))
+
+        val position = filter.onMarker("Z", distanceMeters = 1.0, bearingDeg = 0.0, timestampMs = 1_000)!!
+
+        assertTrue(hypot(position.x - far.x, position.y - far.y) < 1.5, "at $position")
+    }
+
+    @Test
+    fun `the direction a marker is seen in tells which way the walker faces, before any step`() {
+        // Standing at A; the marker is at B, 10 m north, seen straight ahead.
+        val filter = GraphParticleFilter(corridorMap(a, b, c), "A", random = Random(8))
+
+        val position = filter.onMarker("B", distanceMeters = 10.0, bearingDeg = 0.0, timestampMs = 1_000)!!
+
+        val error = ((position.headingDeg + 540.0) % 360.0) - 180.0
+        assertTrue(kotlin.math.abs(error) < 20.0, "heading ${position.headingDeg}")
+    }
+
+    @Test
+    fun `a marker on another floor moves the walk there`() {
+        val upstairs = node("U", 5.0, 5.0)
+        val map = BuildingMap(id = "test", floors = listOf(floor(0, a, b), floor(1, upstairs, node("U2", 5.0, 15.0))))
+        val filter = GraphParticleFilter(map, "A", random = Random(2))
+
+        val position = filter.onMarker("U", distanceMeters = 1.0, bearingDeg = 0.0, timestampMs = 1_000)!!
+
+        assertEquals(1, position.floor)
+        assertNull(filter.onMarker("U", 1.0, 0.0, timestampMs = 1_200), "a repeat within the interval counts once")
+    }
 }

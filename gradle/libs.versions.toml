@@ -13,6 +13,8 @@ cameraX = "1.5.1"
 # LiteRT (TensorFlow Lite's new name), classic Interpreter API; its native code is
 # 16 KB page aligned, unlike the TFLite task library it replaced.
 litert = "1.4.2"
+# QR place markers: pure Java, no native code, no Google component.
+zxing = "3.5.4"
 kotlinxSerialization = "1.8.1"
 mlkitTextRecognition = "16.0.1"
 googleServices = "4.5.0"
@@ -53,6 +55,7 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 # On-device only (downloads its small model once via Google Play Services, then never
 # calls out again) — free, no billing account, works with no connection at all.

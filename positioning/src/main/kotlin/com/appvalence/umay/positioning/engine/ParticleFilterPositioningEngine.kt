@@ -2,12 +2,14 @@ package com.appvalence.umay.positioning.engine
 
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.coremodel.MarkerSighting
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.StepEvent
 import com.appvalence.umay.positioning.particle.GraphParticleFilter
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.merge
@@ -29,6 +31,8 @@ class ParticleFilterPositioningEngine(
     map: BuildingMap,
     startNodeId: String,
     private val config: GraphParticleFilter.Config = GraphParticleFilter.Config(),
+    /** Place markers the camera sees (see GraphParticleFilter.onMarker); none without a camera. */
+    private val markerSightings: Flow<MarkerSighting> = emptyFlow(),
 ) : PositioningEngine {
 
     data class Update(
@@ -37,6 +41,8 @@ class ParticleFilterPositioningEngine(
         val rawPdr: Position? = null,
         /** Set when a fingerprint match was applied: the matched place, as a position. */
         val fingerprintFix: Position? = null,
+        /** Set when a place marker was seen and applied. */
+        val marker: MarkerSighting? = null,
     )
 
     private val filter = GraphParticleFilter(map, startNodeId, config)
@@ -54,10 +60,13 @@ class ParticleFilterPositioningEngine(
         merge(
             stepEvents.map { Input.Step(it) },
             beaconReadings.map { Input.Scan(it) },
+            markerSightings.map { Input.Marker(it) },
         ).mapNotNull { input ->
             synchronized(lock) {
                 when (input) {
                     is Input.Step -> Update(position = filter.onStep(input.step), rawPdr = rawPdr.integrate(input.step))
+                    is Input.Marker -> filter.onMarker(input.sighting.nodeId, input.sighting.distanceMeters, input.sighting.bearingDeg, input.sighting.timestampMs)
+                        ?.let { Update(position = it, marker = input.sighting) }
                     is Input.Scan -> {
                         val now = input.readings.maxOfOrNull { it.timestampMs } ?: return@mapNotNull null
                         filter.onBeaconReadings(input.readings, now)?.let { correction ->
@@ -84,5 +93,6 @@ class ParticleFilterPositioningEngine(
     private sealed interface Input {
         data class Step(val step: StepEvent) : Input
         data class Scan(val readings: List<BleBeaconReading>) : Input
+        data class Marker(val sighting: MarkerSighting) : Input
     }
 }

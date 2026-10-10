@@ -92,6 +92,13 @@ class GraphParticleFilter(
         val radioUnknownLogLikelihood: Double = -0.7,
         /** Scans repeat the same smoothed values many times a second; one counts per this. */
         val minRadioEvidenceIntervalMs: Long = 1_000L,
+        /** Spread of a marker's distance judged from its size: a fixed part plus a share of the distance. */
+        val markerDistanceSigmaMeters: Double = 0.4,
+        val markerDistanceSigmaFraction: Double = 0.2,
+        /** Spread of the direction a marker was seen in, against where it is: hand sway, lens guesses. */
+        val markerBearingSigmaDeg: Double = 20.0,
+        /** A marker is seen several times a second; one counts per this. */
+        val minMarkerIntervalMs: Long = 700L,
     )
 
     /** One fingerprint match that was applied, and where the cloud ended up because of it. */
@@ -143,6 +150,7 @@ class GraphParticleFilter(
         .filter { it.radioMap.isNotEmpty() }
         .associate { it.floorIndex to RadioMap(it.radioMap) }
     private var lastRadioEvidenceMs = Long.MIN_VALUE
+    private var lastMarkerMs = Long.MIN_VALUE
 
     var floor: Int = floorOfNode[startNodeId] ?: 0
         private set
@@ -195,6 +203,41 @@ class GraphParticleFilter(
     }
 
     /** A confirmed floor change: everyone restarts at the arrival node, keeping what they know about heading. */
+    /**
+     * A place marker seen [distanceMeters] away, [bearingDeg] right of where the camera
+     * points (taken as where the walker faces). The strongest evidence there is: it says
+     * which place, so it also settles the floor, and its direction settles the heading.
+     * Null when ignored (an unknown marker, or too soon after the last one).
+     */
+    fun onMarker(nodeId: String, distanceMeters: Double, bearingDeg: Double, timestampMs: Long): Position? {
+        val node = nodesById[nodeId] ?: return null
+        if (lastMarkerMs != Long.MIN_VALUE && timestampMs - lastMarkerMs < config.minMarkerIntervalMs) return null
+        lastMarkerMs = timestampMs
+        lastTimestampMs = timestampMs
+        val markerFloor = floorOfNode[nodeId] ?: floor
+        if (markerFloor != floor) changeFloor(nodeId, timestampMs)
+
+        val sigma = config.markerDistanceSigmaMeters + config.markerDistanceSigmaFraction * distanceMeters
+        if (particles.minOf { kotlin.math.abs(hypot(it.x - node.x, it.y - node.y) - distanceMeters) } > 3 * sigma + config.reseedDistanceMeters) {
+            // The cloud is nowhere near where the marker says: start over around it.
+            particles = resampled(particles.size).map { seedAt(node, it.headingOffsetDeg, it.stepScale) }
+        }
+        for (p in particles) {
+            val dx = node.x - p.x
+            val dy = node.y - p.y
+            val range = hypot(dx, dy)
+            var logLikelihood = -0.5 * square((range - distanceMeters) / sigma)
+            if (distanceMeters > MIN_BEARING_DISTANCE_METERS && range > MIN_BEARING_DISTANCE_METERS) {
+                val toMarker = Math.toDegrees(atan2(dx, dy))
+                val facing = gyroHeadingDeg + p.headingOffsetDeg
+                logLikelihood += -0.5 * square(angleBetween(toMarker - facing, bearingDeg) / config.markerBearingSigmaDeg)
+            }
+            p.logWeight += logLikelihood
+        }
+        normalizeAndMaybeResample()
+        return estimate(timestampMs)
+    }
+
     fun changeFloor(arrivalNodeId: String, timestampMs: Long): Position {
         val arrival = nodesById.getValue(arrivalNodeId)
         floor = floorOfNode[arrivalNodeId] ?: floor
@@ -387,6 +430,9 @@ class GraphParticleFilter(
         const val RESAMPLE_THRESHOLD = 0.5
         const val MAX_TURN_AT_NODE_DEG = 60.0
         const val MIN_ACCURACY_METERS = 0.3
+
+        // Right next to a marker its direction says little about heading.
+        private const val MIN_BEARING_DISTANCE_METERS = 0.8
         private const val MIN_EDGE_LENGTH_METERS = 0.05
         private const val NODE_EPSILON_METERS = 1e-6
 
