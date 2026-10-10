@@ -65,14 +65,17 @@ Kullanıcının gözünden akış:
 | Derinlikle engel uyarısı (sandalye, masa, duvar) | Yok | |
 | Duvar haritası üzerinde serbest rota (koltuktan başlamak) | Yok | |
 | Kapıların harita parçası olması | Yok (yalnızca nokta) | |
-| Kurum sürümü (Firebase'siz, ağ kısıtlı) | Yok | |
+| Kurum sürümü (Firebase'siz, internet izinsiz, yedeklemesiz) | Yazıldı, derlemede denetleniyor | `feat/ar-survey` |
+| Konuşma tanıma yalnızca cihazda, internetsiz ses | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 
 ---
 
 ## Fazlar
 
 Büyüklükler kabadır: **K** birkaç gün, **O** bir iki hafta, **B** birkaç
-hafta ve üstü. "Bitti" ölçütü karşılanmadan kutu işaretlenmez.
+hafta ve üstü. "Bitti" ölçütü karşılanmadan kutu işaretlenmez. Kodu yazılmış
+ama bitti ölçütü telefonda ya da sahada doğrulanmayı bekleyen işlerde kutu
+boş kalır ve **Kod hazır** yazar; ne doğrulanacağı yanında belirtilir.
 
 ### Faz 0: Eldekini sağlamlaştır
 
@@ -95,33 +98,45 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   toleransı, parmak izi yayılımı ve adım ölçeği ayarlandı.
   *Bitti:* yeni motorun ortalama hatası eskisinden düşük. Değilse neden
   olduğu yazıldı ve plan buna göre değişti.
-- [ ] **0.5 Bilinen hata: adım modunda kayda devam edince yol baştan
+- [x] **0.5 Bilinen hata: adım modunda kayda devam edince yol baştan
   başlıyor** (K). Durdurup "Kayda devam et" denince adım sayımı (0, 0)'dan
   yeniden başlıyor.
   *Bitti:* devam eden yürüyüş kaldığı noktadan sürüyor, testle korunuyor.
 - [ ] **0.6 Branch'leri birleştir** (K). `feat/graph-particle-filter` ve
   `feat/ar-survey` için `development`'a PR açıldı ve birleştirildi.
+- [ ] **0.7 Harita kaydı uygulamadan çıkınca kaybolmasın** (O). Kayıt bugün
+  yalnızca bellekte; kullanıcı başka uygulamaya geçince Android uygulamayı
+  kapatırsa saatlerce süren yürüyüş kaybolur. Kayıt sürerken ön plan hizmeti
+  ve bildirim; kayıt diske taslak olarak yazılır, açılışta "bitmemiş kayıt"
+  olarak geri gelir.
+  *Bitti:* kayıt sırasında uygulama zorla kapatılıp açılınca yürüyüş, isimli
+  yerler ve okunan sinyaller yerinde; testle korunuyor.
 
 ### Faz 1: Gizlilik ve kurum içi çalışma
 
 Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
 
-- [ ] **1.1 Konuşma tanıma yalnızca cihazda** (K). `SpeechToText` bugün
+- [ ] **1.1 Konuşma tanıma yalnızca cihazda** (K). **Kod hazır:** uçak
+  modunda ve Android 12 altı bir telefonda denenecek. `SpeechToText` bugün
   çevrimdışı tanımayı zorlamıyor, ses Google'a gidebilir. Android 12+ için
   cihaz içi tanıyıcı, eski sürümler için `EXTRA_PREFER_OFFLINE` kullanılacak.
   Cihaz içi tanıma yoksa özellik kapalı olacak ve nedeni söylenecek.
   *Bitti:* uçak modunda "Bir şey sor" çalışıyor ya da çalışamayacağını
   söylüyor; ağ açıkken de ses cihazdan çıkmıyor.
-- [ ] **1.2 ARCore açıklaması** (K). Google'ın kuralı gereği, ARCore'un
+- [ ] **1.2 ARCore açıklaması** (K). **Kod hazır:** bağlantıların TalkBack
+  ile okunup açıldığı denenecek. Google'ın kuralı gereği, ARCore'un
   Google tarafından sağlandığı ve Google Gizlilik Politikası'na tabi olduğu
   uygulama içinde görünür şekilde söyleniyor (Ayarlar → Hakkında ve
   kamerayla haritalama ekranı).
   *Bitti:* metin iki yerde de var ve TalkBack ile okunuyor.
-- [ ] **1.3 Kurum sürümü** (O). Firebase'siz ayrı bir derleme türü
-  (`kurum`): paylaşımlı havuz yok, Firebase kütüphaneleri pakette yok.
+- [x] **1.3 Kurum sürümü** (O). Firebase'siz ayrı bir derleme türü
+  (`institution`, "Umay Kurum"): paylaşımlı havuz yok, Firebase kütüphaneleri
+  pakette yok, yedekleme kapalı.
   *Bitti:* APK'da Firebase sınıfı yok. Harita aktarımı dosyayla ya da 1.5
   ile yapılıyor.
-- [ ] **1.4 Ağ kısıtı** (K). Kurum sürümünde ağ güvenlik yapılandırması
+- [x] **1.4 Ağ kısıtı** (K). Sunucusuz hâli yapıldı: internet izni yok,
+  hiçbir sertifikaya güvenilmiyor, `verifyInstitution*Privacy` derlemede
+  denetliyor. Sunucu adresine izin veren hâli 1.5 ile gelir. Kurum sürümünde ağ güvenlik yapılandırması
   yalnızca derleme sırasında verilen kurum sunucu adresine izin veriyor.
   Sunucu yoksa uygulamanın internet izni de yok.
   *Bitti:* başka bir adrese istek atılamadığı testle gösterildi.
@@ -131,10 +146,15 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   gerçeklemesi. Protokol bu klasörde belgelenir.
   *Bitti:* iki telefon aynı kurum ağında birinin çıkardığı haritayı
   diğerine aktarıyor. İnternet kapalıyken de çalışıyor.
-- [ ] **1.6 Gizlilik belgesi** (K). Hangi veri nerede durur, ne zaman silinir,
+- [x] **1.6 Gizlilik belgesi** (K). `docs/GIZLILIK.md` yazıldı. Hangi veri nerede durur, ne zaman silinir,
   hangi Google bileşeni ne yapar. Kurumlar için `docs/GIZLILIK.md`, ayrıca
   Play Store veri güvenliği formu için özet.
   *Bitti:* belge yazıldı, uygulamadaki davranışla birebir.
+- [ ] **1.7 Web sitesindeki gizlilik politikası** (K). `feat/website`
+  dalındaki `gizlilik.html` ve `en/privacy.html`, `docs/GIZLILIK.md` ile
+  uyumlu hâle getirilir: cihaz içi konuşma tanıma, ARCore, ML Kit ölçümleri,
+  kurum sürümü.
+  *Bitti:* iki sayfa da belgeyle çelişmiyor.
 
 ### Faz 2: Harita, kapılar ve düzenleme
 
@@ -144,7 +164,8 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   haritasında kapı olarak çiziliyor.
   *Bitti:* kapalı bir kapı duvar haritasında duvar gibi görünse bile
   haritada kapı olarak duruyor, rota ondan geçebiliyor.
-- [ ] **2.2 Harita format sürümü** (K). `.umay.json`'a bir sürüm numarası
+- [x] **2.2 Harita format sürümü** (K). Sürüm 2; daha yeni sürümlü
+  dosyalar "uygulamayı güncelle" denerek reddediliyor. `.umay.json`'a bir sürüm numarası
   ekleniyor, eski sürümler okunurken yükseltiliyor.
   *Bitti:* eski haritalar açılıyor, yeni alanlar testle korunuyor.
 - [ ] **2.3 Harita düzenleme** (O). Kaydedildikten sonra yer adı ve türü
@@ -278,13 +299,29 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
   askı şart. Önlem: cepteki mod (adım ve beacon) her zaman çalışır kalır.
 - **Pil.** Kamera ve derinlik sürekli açıkken pil hızlı biter. Önlem: 4.4.
 - **Sahada doğrulama eksikliği.** Bugüne kadar yazılan konum kodunun hiçbiri
-  gerçek binada ölçülmedi. Önlem: Faz 0 bitmeden Faz 3'e geçilmez.
+  gerçek binada ölçülmedi. Önlem: kamerayla konum bulma (3.3, 3.4) ve
+  kamerayla ilerleme (Faz 4) 0.2 ve 0.3 bitmeden başlamaz. 3.1 ve 3.2
+  mevcut parmak izi eşleştirmesini kullanan arayüz işleridir; yazılabilir,
+  bitti ölçütleri sahada doğrulanır.
 
 ---
 
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **10 Ekim 2026:** Telefon gerektirmeyen gizlilik işleri yapıldı. "Bir şey
+  sor" artık yalnızca cihaz içi tanıma kullanıyor (1.1). ARCore bildirimi
+  eklendi (1.2). Kurum sürümü eklendi: Firebase'siz, internet izinsiz,
+  yedeklemesiz; derlemede denetleniyor (1.3, 1.4). `docs/GIZLILIK.md`
+  yazıldı (1.6). Harita dosyasına format sürümü eklendi (2.2). Adım modunda
+  kayda devam etme hatası düzeltildi (0.5).
+
+  Yolda bulunup düzeltilenler: metin okuma internet üzerinden okuyan bir
+  sese düşebiliyordu, artık yalnızca cihazdaki sesler seçiliyor. Bir
+  kütüphanenin eski manifesti uygulamaya telefon durumu ve harici depolama
+  izinlerini ekliyordu, kaldırıldı (Play Store sürümünü de etkiliyordu).
+  Yeni iş eklendi: kayıt kaybına karşı 0.7, web sitesi için 1.7.
 
 - **10 Ekim 2026:** Ev ikinci senaryoya bırakıldı. ARCore'un yönlendirmede
   kullanılmaması önerildi (açık karar 1, onay bekliyor).
