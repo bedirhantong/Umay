@@ -41,6 +41,9 @@ Bir binanın haritası bir kez, **Beacon Tarayıcı** ekranıyla binada yürüye
 çıkarılır: kayıt başlatılır, geçilen yerlere isim verilir, kapılar,
 merdivenler, asansörler ve rampalar işaretlenir. Haritalar `.umay.json`
 dosyası olarak cihazlar arasında dışa ve içe aktarılabilir.
+Kaydedilmiş bir haritadaki hatalar (yanlış yazılmış bir ad, yanlış tür,
+fazladan bir yer, duvardan geçen bir bağlantı, duvar haritasındaki bir leke)
+binayı yeniden yürümeden **Dosyalar → Düzenle** ile düzeltilir.
 
 Haritayı çıkaran kişinin telefonu ARCore'u destekliyorsa harita **kamerayla**
 çıkarılabilir; robot süpürgelerin evi haritalamasına benzer. Telefon göğüs

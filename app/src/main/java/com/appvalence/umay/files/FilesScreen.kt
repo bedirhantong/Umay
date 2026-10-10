@@ -15,6 +15,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -31,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +89,19 @@ fun FilesScreen(
 
     LaunchedEffect(Unit) { viewModel.refreshFiles() }
 
+    // The editor takes this tab's place while a building is being edited.
+    var editingBuildingId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editing = editingBuildingId?.let { id -> state.buildings.firstOrNull { it.id == id } }
+    if (editing != null) {
+        MapEditorScreen(
+            building = editing,
+            onClose = { editingBuildingId = null },
+            onRenamed = { editingBuildingId = it },
+            modifier = modifier,
+        )
+        return
+    }
+
     val exportChooserTitle = stringResource(R.string.files_export_chooser)
     LaunchedEffect(state.pendingExport) {
         val file = state.pendingExport ?: return@LaunchedEffect
@@ -124,6 +139,8 @@ fun FilesScreen(
                 deleteDescription = stringResource(R.string.common_delete_building_description, building.id),
                 onShare = { viewModel.export(building) },
                 onDelete = { pendingBuildingDelete = building },
+                editDescription = stringResource(R.string.files_edit_building_description, building.id),
+                onEdit = { editingBuildingId = building.id },
             )
         }
 
@@ -303,6 +320,8 @@ private fun FileRow(
     deleteDescription: String,
     onShare: () -> Unit,
     onDelete: () -> Unit,
+    editDescription: String? = null,
+    onEdit: (() -> Unit)? = null,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Row(
@@ -313,6 +332,7 @@ private fun FileRow(
                 Text(text = title, style = MaterialTheme.typography.titleSmall)
                 Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            if (onEdit != null) IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = editDescription) }
             IconButton(onClick = onShare) { Icon(Icons.Filled.Share, contentDescription = shareDescription) }
             IconButton(onClick = onDelete) { Icon(Icons.Filled.DeleteOutline, contentDescription = deleteDescription) }
         }
@@ -320,7 +340,7 @@ private fun FileRow(
 }
 
 @Composable
-private fun ConfirmDeleteDialog(title: String, body: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun ConfirmDeleteDialog(title: String, body: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
