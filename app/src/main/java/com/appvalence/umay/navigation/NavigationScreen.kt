@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -291,7 +292,8 @@ private fun BuildingPicker(buildings: List<BuildingMap>, onSelect: (BuildingMap)
         buildings.forEach { building ->
             Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp).clickable { onSelect(building) },
+                    // The whole card is the target (not just its padded content), announced as a button.
+                    modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onSelect(building) }.padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -845,7 +847,7 @@ private fun GroundTruthControls(session: NavigationSession, currentFloorIndex: I
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .clickable(role = Role.Button) {
                                     val event = session.markGroundTruth(node)
                                     lastMark = event?.errorMeters
                                         ?.let { resources.getString(R.string.nav_ground_truth_marked_error, node.name, it.round1().toString()) }

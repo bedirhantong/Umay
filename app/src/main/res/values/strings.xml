@@ -332,6 +332,11 @@
     <string name="survey_unknown_device">Bilinmeyen cihaz</string>
     <string name="survey_distance_uncalibrated">%1$s m (kalibre edilmemiş)</string>
     <string name="survey_rssi_line">RSSI: %1$d dBm, tahmini mesafe: %2$s</string>
+    <plurals name="survey_preview_description">
+        <item quantity="one">Bu katın harita önizlemesi: yürünen yol ve %1$d isimli yer%2$s.</item>
+        <item quantity="other">Bu katın harita önizlemesi: yürünen yol ve %1$d isimli yer%2$s.</item>
+    </plurals>
+    <string name="survey_preview_with_walls">, ölçülen duvarlarla</string>
     <string name="survey_preview_title">Harita önizleme (bu kat)</string>
     <string name="survey_preview_empty">Henüz veri yok. Kaydı başlatıp yürümeye başla.</string>
     <string name="survey_preview_legend">🔵 yürüdüğün yol   🔴 konumlanan beacon   🟠 isimlendirilen yer   🟢 son konum</string>

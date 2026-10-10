@@ -17,7 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
@@ -79,11 +82,14 @@ fun SurveyMapCanvas(
             }
         }
 
+        // A picture for the eye; for TalkBack, what it shows in words.
+        val description = pluralStringResource(R.plurals.survey_preview_description, waypoints.size, waypoints.size, if (wallMap != null) stringResource(R.string.survey_preview_with_walls) else "")
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(height)
-                .padding(top = 4.dp),
+                .padding(top = 4.dp)
+                .semantics { contentDescription = description },
         ) {
             val walls = wallImage
             val wallXs = walls?.let { listOf(it.originX, it.originX + it.widthMeters) }.orEmpty()
