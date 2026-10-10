@@ -11,9 +11,12 @@ Son güncelleme: 10 Ekim 2026
 
 ## Hedef
 
-Görme engelli bir kişi, bir kurumun binasında (beacon'lı) ya da kendi evinde,
+Görme engelli bir kişi, bir kurumun binasında (beacon'lı),
 **hiçbir veriyi cihazdan veya kurumun kendi sisteminden dışarı çıkarmadan**
 bir yerden başka bir yere kendi başına gidebilsin.
+
+Ev (beacon'sız) ikinci senaryodur: Faz 0–5 kurum içindir, ev bunlar bittikten
+sonra ele alınır.
 
 Kullanıcının gözünden akış:
 
@@ -186,9 +189,11 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   deniyor. İnsan algılamayla birlikte çalışıyor, uyarılar üst üste binmiyor.
   *Bitti:* test parkurunda bütün engeller uyarıldı, yanlış uyarı az.
 - [ ] **4.2 Serbest alanda rota** (O). Duvar haritası üzerinde, duvardan
-  güvenli mesafe bırakan yol bulma. Kullanıcı koltuktan, odanın ortasından
-  başlayabiliyor. Graf rotasıyla birleşiyor.
-  *Bitti:* evde koltuktan mutfağa rota çıkıyor, duvarlara sürtmüyor.
+  güvenli mesafe bırakan yol bulma. Kullanıcı koridor çizgisinin dışından
+  (bekleme salonundaki bir koltuk, açık bir lobi) başlayabiliyor. Graf
+  rotasıyla birleşiyor.
+  *Bitti:* test binasının açık bir alanında, koridor dışındaki bir noktadan
+  rota çıkıyor, duvarlara sürtmüyor.
 - [ ] **4.3 Yapıya göre yönerge** (O). "Kapıdan geç, sağa dön", "duvar
   solunda kalsın" gibi kapıya ve duvara dayalı cümleler.
   *Bitti:* yönergeler kör test kullanıcılarıyla denendi, anlaşılırlıkları
@@ -218,22 +223,49 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
 
 ---
 
+## Kararlar
+
+- **10 Ekim 2026: Ev ikinci senaryo.** Faz 0–5 kurum binası (beacon'lı) içindir.
+  Ev için gereken beacon'sız konum, kurum senaryosu bittikten sonra ayrıca
+  planlanır.
+
 ## Açık kararlar
 
-Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe buraya yazılır.
+Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
+**Kararlar** bölümüne taşınır.
 
-1. **ARCore kabul edilebilir mi?** ARCore, Google'ın kapalı kaynak "Google
-   Play Services for AR" uygulamasıyla çalışır. Kurum hiçbir Google bileşeni
-   istemezse kamerayla harita çıkarma ve konum bulma için açık kaynak bir
-   görsel takip çözümü gerekir (ORB-SLAM3 veya RTAB-Map). Bu büyük bir iştir
-   ve 16 KB sorununu yeniden açar.
+1. **ARCore nerede kullanılacak?** ARCore, Google'ın kapalı kaynak "Google
+   Play Services for AR" uygulamasıyla çalışır ve yalnızca bir kısım telefonda
+   derinlik ölçer.
+
+   **Öneri (onay bekliyor):** ARCore yalnızca haritayı çıkaran kişinin
+   telefonunda kullanılsın. Kör kullanıcının yönlendirmesi ARCore'suz, açık
+   kaynak parçalarla kurulsun:
+   - beacon, adım ve parçacık filtresi (var);
+   - kritik noktalarda (kapılar, asansörler, kavşaklar) duvara yapıştırılan
+     görsel işaretler (AprilTag/ArUco, açık kaynak) — kamera görünce konumu
+     santimetre düzeyinde verir;
+   - cihazda çalışan bir modelle görsel yer tanıma, parçacık filtresine ek
+     kanıt olarak;
+   - engel uyarısı için cihazda çalışan tek kameralı derinlik tahmini.
+
+   Bu yol ARCore'un sürekli metrik takibini kaybeder; duvar haritasıyla
+   santimetre düzeyinde eşleme (3.3'ün ilk hâli) zorlaşır. Karşılığında daha
+   çok telefonda çalışır, pil daha az gider ve kör kullanıcının telefonunda
+   hiçbir Google AR bileşeni olmaz. Saha testi bu yolun yetmediğini gösterirse
+   yönlendirmede ARCore yeniden değerlendirilir. Onaylanırsa 3.3 ve 4.1 buna
+   göre yeniden yazılır.
+
+   Haritayı çıkarma tarafında ARCore'un açık kaynak karşılığı (ORB-SLAM3,
+   OpenVINS, Basalt gibi) Android'de araştırma düzeyindedir: her telefon için
+   kamera ve sensör kalibrasyonu ister. Kurum hiçbir Google bileşeni
+   istemezse bu yol aylar sürer; o durumda haritayı adım sayarak çıkarmak
+   geçici çözümdür.
 2. **Kurum sunucusu mu, dosya aktarımı mı?** Tek binalık bir kurum için
    dosyayla aktarım yetebilir, 1.5 ertelenebilir.
 3. **Test binası ve kurum.** Faz 0.3 ve Faz 3 için hangi bina?
-4. **Hedef telefonlar.** Kamerayla konum bulma için kullanıcının telefonunda
-   ARCore Depth desteği gerekir. Hangi telefonları destekleyeceğiz?
-5. **Ev senaryosu.** Evde beacon olmayacak. Ev için yalnızca kamera ve adım
-   yeterli mi, yoksa ev ikinci aşamaya mı kalıyor?
+4. **Hedef telefonlar.** Hangi telefonları destekleyeceğiz? 1. karara göre
+   derinlik desteği gerekip gerekmediği değişir.
 
 ---
 
@@ -253,6 +285,9 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe buraya yazılır
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **10 Ekim 2026:** Ev ikinci senaryoya bırakıldı. ARCore'un yönlendirmede
+  kullanılmaması önerildi (açık karar 1, onay bekliyor).
 
 - **10 Ekim 2026:** Yol haritası yazıldı. Parçacık filtresi
   (`feat/graph-particle-filter`) ve kamerayla harita çıkarma
