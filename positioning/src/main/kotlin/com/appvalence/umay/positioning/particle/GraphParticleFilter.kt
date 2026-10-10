@@ -8,6 +8,7 @@ import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.StepEvent
 import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
 import com.appvalence.umay.positioning.fingerprint.RadioMap
+import com.appvalence.umay.positioning.fingerprint.RadioSampler
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -92,6 +93,19 @@ class GraphParticleFilter(
         val radioUnknownLogLikelihood: Double = -0.7,
         /** Scans repeat the same smoothed values many times a second; one counts per this. */
         val minRadioEvidenceIntervalMs: Long = 1_000L,
+        /**
+         * How much better (per-beacon mean log-likelihood) the radio map must find a
+         * place match than the cloud before the match is acted on. 0 = any better.
+         */
+        val fingerprintConsistencyMargin: Double = 0.5,
+        /**
+         * A beacon's reading older than this says where the walker *was*: the scanner
+         * keeps a beacon's last value for a while after it stops being heard (see
+         * BleBeaconScanner.STALE_THRESHOLD_MS), which while walking is metres behind.
+         * The same age the survey keeps for its radio samples, so both sides compare
+         * like with like.
+         */
+        val maxReadingAgeMs: Long = RadioSampler.DEFAULT_MAX_AGE_MS,
         /** Spread of a marker's distance judged from its size: a fixed part plus a share of the distance. */
         val markerDistanceSigmaMeters: Double = 0.4,
         val markerDistanceSigmaFraction: Double = 0.2,
@@ -99,6 +113,8 @@ class GraphParticleFilter(
         val markerBearingSigmaDeg: Double = 20.0,
         /** A marker is seen several times a second; one counts per this. */
         val minMarkerIntervalMs: Long = 700L,
+        /** How far past (or short of) a junction a particle may still take the turn there. */
+        val cornerSnapMeters: Double = 1.0,
     )
 
     /** One fingerprint match that was applied, and where the cloud ended up because of it. */
@@ -184,18 +200,21 @@ class GraphParticleFilter(
     }
 
     /**
-     * Matches [readings] against this floor's fingerprinted places and, when the match
-     * is confident (the same rules as the old pipeline, see [FingerprintMatcher]),
-     * pulls the cloud toward it. Null when nothing was applied.
+     * Matches [readings] (those heard in the last [Config.maxReadingAgeMs]) against this
+     * floor's fingerprinted places and, when the match is confident (the same rules as
+     * the old pipeline, see [FingerprintMatcher]) and the radio map agrees, pulls the
+     * cloud toward it. Null when nothing was applied.
      */
     fun onBeaconReadings(readings: List<BleBeaconReading>, timestampMs: Long): Correction? {
-        applyRadioEvidence(readings, timestampMs)
+        val fresh = readings.filter { timestampMs - it.timestampMs <= config.maxReadingAgeMs }
+        applyRadioEvidence(fresh, timestampMs)
         if (lastFingerprintAppliedMs != Long.MIN_VALUE &&
             timestampMs - lastFingerprintAppliedMs < config.minFingerprintIntervalMs
         ) {
             return null
         }
-        val match = FingerprintMatcher.bestMatch(readings, fingerprintedByFloor[floor].orEmpty()) ?: return null
+        val match = FingerprintMatcher.bestMatch(fresh, fingerprintedByFloor[floor].orEmpty()) ?: return null
+        if (radioMapPrefersCloud(fresh, match.node)) return null
         lastFingerprintAppliedMs = timestampMs
         lastTimestampMs = timestampMs
         observeNear(match.node)
@@ -219,8 +238,9 @@ class GraphParticleFilter(
 
         val sigma = config.markerDistanceSigmaMeters + config.markerDistanceSigmaFraction * distanceMeters
         if (particles.minOf { kotlin.math.abs(hypot(it.x - node.x, it.y - node.y) - distanceMeters) } > 3 * sigma + config.reseedDistanceMeters) {
-            // The cloud is nowhere near where the marker says: start over around it.
-            particles = resampled(particles.size).map { seedAt(node, it.headingOffsetDeg, it.stepScale) }
+            // The cloud is nowhere near where the marker says: start over around it. Its
+            // heading is no better than its position, so that comes from the marker too.
+            particles = resampled(particles.size).map { seedFacingMarker(node, distanceMeters, bearingDeg, it.stepScale) }
         }
         for (p in particles) {
             val dx = node.x - p.x
@@ -293,7 +313,7 @@ class GraphParticleFilter(
         val atNode = when {
             particle.along <= NODE_EPSILON_METERS -> edge.from
             particle.along >= edge.length - NODE_EPSILON_METERS -> edge.to
-            else -> null
+            else -> nodeTurnedAt(edge, particle.along, headingDeg)
         }
         if (atNode != null) {
             val best = bestEdgeFrom(atNode, headingDeg)
@@ -337,8 +357,45 @@ class GraphParticleFilter(
         return logLikelihood
     }
 
+    /**
+     * Mid-edge but within [Config.cornerSnapMeters] of either end, heading nowhere along
+     * this edge but along one leaving that end: the walker turned there, and the
+     * particle is a step off — a stride a little long, or a place surveyed a little
+     * early. Without this, a tight cloud that all overshot a junction together (as
+     * one does right after a marker) is wiped out by the turn, leaving only
+     * whichever hypothesis happened to stop at the node.
+     */
+    private fun nodeTurnedAt(edge: Edge, along: Double, headingDeg: Double): MapNode? {
+        if (angleBetween(headingDeg, edge.bearingDeg) <= MAX_TURN_AT_NODE_DEG) return null
+        if (angleBetween(headingDeg, edge.bearingDeg + 180.0) <= MAX_TURN_AT_NODE_DEG) return null // turning back: handled below
+        val end = when {
+            along <= config.cornerSnapMeters -> edge.from
+            edge.length - along <= config.cornerSnapMeters -> edge.to
+            else -> return null
+        }
+        val best = bestEdgeFrom(end, headingDeg) ?: return null
+        return end.takeIf { angleBetween(headingDeg, best.bearingDeg) <= MAX_TURN_AT_NODE_DEG }
+    }
+
     private fun bestEdgeFrom(node: MapNode, headingDeg: Double): Edge? =
         edgesFrom[node.id]?.minByOrNull { angleBetween(headingDeg, it.bearingDeg) }
+
+    /**
+     * A place match judged on a few beacons at one spot is easily wrong — two beacons
+     * heard out of five can look like almost anywhere — and acting on a wrong one
+     * drags the walker metres away. Where the floor has a radio map, the match must
+     * also explain the scan better than where the cloud already is; otherwise the
+     * radio map's own evidence has it covered and the match is ignored.
+     */
+    private fun radioMapPrefersCloud(readings: List<BleBeaconReading>, matched: MapNode): Boolean {
+        val radioMap = radioMaps[floor] ?: return false
+        val live = readings.filter { it.beaconId in radioMap.beaconIds }.associate { it.beaconId to it.rssi.toDouble() }
+        if (live.size < FingerprintMatcher.MIN_SHARED_BEACONS) return false
+        val here = estimate()
+        val atCloud = radioMap.logLikelihood(live, here.x, here.y, config.radioSigmaDb) ?: return false
+        val atMatch = radioMap.logLikelihood(live, matched.x, matched.y, config.radioSigmaDb) ?: return false
+        return atCloud >= atMatch - config.fingerprintConsistencyMargin
+    }
 
     /**
      * Every scan, not just a confident match, says something: weight each particle by
@@ -381,6 +438,23 @@ class GraphParticleFilter(
         val edges = edgesFrom[node.id]
         val edge = edges?.get(random.nextInt(edges.size))
         return Particle(edge = edge, along = 0.0, node = node, headingOffsetDeg = headingOffsetDeg, stepScale = stepScale)
+    }
+
+    /**
+     * A particle [distanceMeters] from the marker at [node] along one of the corridors
+     * leaving it, facing so the marker is [bearingDeg] to its right — where and which
+     * way the walker could be to see the marker as they did. Too close to tell a
+     * direction: at the marker, heading unknown, as at the start of a walk.
+     */
+    private fun seedFacingMarker(node: MapNode, distanceMeters: Double, bearingDeg: Double, stepScale: Double): Particle {
+        val edges = edgesFrom[node.id]
+        if (edges == null || distanceMeters <= MIN_BEARING_DISTANCE_METERS) {
+            return seedAt(node, headingOffsetDeg = random.nextDouble(0.0, 360.0), stepScale = stepScale)
+        }
+        val edge = edges[random.nextInt(edges.size)]
+        val along = (distanceMeters * (1.0 + gaussian() * config.markerDistanceSigmaFraction)).coerceIn(0.0, edge.length)
+        val facingDeg = edge.bearingDeg + 180.0 - bearingDeg + gaussian() * config.markerBearingSigmaDeg / 2
+        return Particle(edge = edge, along = along, node = node, headingOffsetDeg = normalizeDegrees(facingDeg - gyroHeadingDeg), stepScale = stepScale)
     }
 
     private fun normalizedWeights(): DoubleArray {

@@ -88,7 +88,7 @@ class GraphParticleFilterTest {
         val tagged = node("T", 0.0, 20.0, fingerprint)
         val filter = GraphParticleFilter(corridorMap(a, tagged), "A", random = Random(5))
 
-        val correction = filter.onBeaconReadings(listOf(reading("b1", -60), reading("b2", -70)), timestampMs = 5_000L)
+        val correction = filter.onBeaconReadings(listOf(reading("b1", -60, t = 5_000L), reading("b2", -70, t = 5_000L)), timestampMs = 5_000L)
 
         assertNotNull(correction)
         assertEquals("T", correction.node.id)
@@ -100,7 +100,8 @@ class GraphParticleFilterTest {
         val fingerprint = listOf(RadioFingerprint("b1", -60.0), RadioFingerprint("b2", -70.0))
         val tagged = node("T", 0.0, 5.0, fingerprint)
         val filter = GraphParticleFilter(corridorMap(a, tagged), "A", random = Random(5))
-        val readings = listOf(reading("b1", -60), reading("b2", -70))
+        // Heard at 5 s and still listed (as the scanner keeps them) a second later.
+        val readings = listOf(reading("b1", -60, t = 5_000L), reading("b2", -70, t = 5_000L))
 
         assertNotNull(filter.onBeaconReadings(readings, timestampMs = 5_000L))
         assertNull(filter.onBeaconReadings(readings, timestampMs = 5_400L))
@@ -169,7 +170,8 @@ class GraphParticleFilterTest {
             var estimate = 0.0
             trueSteps.forEachIndexed { i, step ->
                 estimate = filter.onStep(step.copy(stepLengthMeters = 0.6)).y
-                filter.onBeaconReadings(scans[i].map { it.copy(timestampMs = step.timestampMs) }, step.timestampMs + 1_100L * i)
+                val heardAt = step.timestampMs + 1_100L * i
+                filter.onBeaconReadings(scans[i].map { it.copy(timestampMs = heardAt) }, heardAt)
                 estimate = filter.estimate().y
             }
             return kotlin.math.abs(estimate - trueY.last())
