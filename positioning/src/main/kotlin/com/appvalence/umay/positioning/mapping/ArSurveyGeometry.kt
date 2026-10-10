@@ -51,6 +51,12 @@ data class ArToSurvey(val rotationDeg: Double, val tx: Double, val ty: Double) {
 class ArPoseAligner(
     private val startX: Double = 0.0,
     private val startY: Double = 0.0,
+    /**
+     * Null: the plan takes the AR session's own orientation (a new walk). Set when a
+     * walk continues in a new AR session (the app was ended mid-survey): the first
+     * pose is taken to face this way, as the resume prompt asks the surveyor to.
+     */
+    private val startHeadingDeg: Double? = null,
     private val jumpMarginMeters: Double = DEFAULT_JUMP_MARGIN_METERS,
 ) {
     var transform: ArToSurvey? = null
@@ -66,7 +72,8 @@ class ArPoseAligner(
         val previous = last
         var current = transform
         if (current == null) {
-            current = ArToSurvey(0.0, 0.0, 0.0).anchoredAt(pose.x, pose.z, startX, startY)
+            val rotation = startHeadingDeg?.let { normalizeDegrees(it - pose.headingDeg) } ?: 0.0
+            current = ArToSurvey(rotation, 0.0, 0.0).anchoredAt(pose.x, pose.z, startX, startY)
         } else if (previous != null) {
             val candidateX = current.x(pose.x, pose.z)
             val candidateY = current.y(pose.x, pose.z)

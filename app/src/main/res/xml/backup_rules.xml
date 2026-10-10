@@ -3,4 +3,5 @@
 <full-backup-content>
     <exclude domain="file" path="field-logs/" />
     <exclude domain="file" path="crash-logs/" />
+    <exclude domain="file" path="survey-draft/" />
 </full-backup-content>

@@ -28,7 +28,11 @@ import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.storage.BuildingMapStorage
 import com.appvalence.umay.storage.BuildingMapStore
 import com.appvalence.umay.survey.ResourceSurveyAnnouncer
+import com.appvalence.umay.survey.AndroidSurveyForeground
+import com.appvalence.umay.survey.FileSurveyDrafts
 import com.appvalence.umay.survey.SurveyAnnouncer
+import com.appvalence.umay.survey.SurveyDrafts
+import com.appvalence.umay.survey.SurveyForeground
 import com.appvalence.umay.survey.ar.ArCoreSurveyCamera
 import com.appvalence.umay.survey.ar.ArSurveyCamera
 import dagger.Binds
@@ -124,4 +128,10 @@ abstract class BindingsModule {
 
     @Binds
     abstract fun arSurveyCamera(impl: ArCoreSurveyCamera): ArSurveyCamera
+
+    @Binds
+    abstract fun surveyDrafts(impl: FileSurveyDrafts): SurveyDrafts
+
+    @Binds
+    abstract fun surveyForeground(impl: AndroidSurveyForeground): SurveyForeground
 }

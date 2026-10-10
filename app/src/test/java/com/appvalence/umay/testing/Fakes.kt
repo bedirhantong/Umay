@@ -30,7 +30,11 @@ import com.appvalence.umay.positioning.ble.BleScanState
 import com.appvalence.umay.positioning.ble.ScanTarget
 import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.storage.BuildingMapStore
+import com.appvalence.umay.survey.RestoredSurvey
 import com.appvalence.umay.survey.SurveyAnnouncer
+import com.appvalence.umay.survey.SurveyDrafts
+import com.appvalence.umay.survey.SurveyForeground
+import com.appvalence.umay.coremodel.SurveyDraft
 import com.appvalence.umay.survey.ar.ArAvailability
 import com.appvalence.umay.survey.ar.ArCameraStatus
 import com.appvalence.umay.survey.ar.ArFrameSample
@@ -184,6 +188,36 @@ class FakeSurveyAnnouncer : SurveyAnnouncer {
     }
     override fun cameraBack() {
         cameraBacks++
+    }
+}
+
+/** Like the real store: the draft and its sightings kept apart, loaded together. */
+class FakeSurveyDrafts(var draft: SurveyDraft? = null, val readings: MutableList<BleBeaconReading> = mutableListOf()) : SurveyDrafts {
+    var deleted = 0
+    override suspend fun load(): RestoredSurvey? = draft?.let { RestoredSurvey(it, readings.toList()) }
+
+    override suspend fun save(draft: SurveyDraft) {
+        this.draft = draft
+    }
+
+    override suspend fun appendReadings(readings: List<BleBeaconReading>) {
+        this.readings += readings
+    }
+
+    override suspend fun delete() {
+        draft = null
+        readings.clear()
+        deleted++
+    }
+}
+
+class FakeSurveyForeground : SurveyForeground {
+    var running = false
+    override fun recordingStarted() {
+        running = true
+    }
+    override fun recordingStopped() {
+        running = false
     }
 }
 

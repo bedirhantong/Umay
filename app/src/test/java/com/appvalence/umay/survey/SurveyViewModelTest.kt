@@ -13,6 +13,8 @@ import com.appvalence.umay.coremodel.StepEvent
 import com.appvalence.umay.storage.BuildingRepository
 import com.appvalence.umay.testing.FakeArSurveyCamera
 import com.appvalence.umay.testing.FakeBeaconScanner
+import com.appvalence.umay.testing.FakeSurveyDrafts
+import com.appvalence.umay.testing.FakeSurveyForeground
 import com.appvalence.umay.testing.FakeBuildingMapStore
 import com.appvalence.umay.testing.FakeCapabilities
 import com.appvalence.umay.testing.FakeMotionSensors
@@ -47,7 +49,7 @@ class SurveyViewModelTest {
     private lateinit var recorder: SurveyRecorder
 
     private fun TestScope.viewModel(): SurveyViewModel {
-        recorder = SurveyRecorder(FakeBeaconScanner(), motion, FakeCapabilities(), settings, FakeSurveyAnnouncer(), camera, backgroundScope, main.dispatcher, main.dispatcher)
+        recorder = SurveyRecorder(FakeBeaconScanner(), motion, FakeCapabilities(), settings, FakeSurveyAnnouncer(), camera, FakeSurveyDrafts(), FakeSurveyForeground(), backgroundScope, main.dispatcher, main.dispatcher)
         return SurveyViewModel(
             recorder = recorder,
             buildings = BuildingRepository({ store }, backgroundScope, main.dispatcher),

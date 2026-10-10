@@ -283,6 +283,11 @@
     <string name="survey_floor_hint_auto">Kat değişimi basınçtan algılanıyor, gerekirse düzelt</string>
     <string name="survey_floor_auto">Kat değişimi algılandı, şimdi %1$s.</string>
     <string name="survey_stop">Kaydı durdur</string>
+    <string name="survey_notification_channel_name">Harita kaydı</string>
+    <string name="survey_notification_channel_description">Harita çıkarılırken gösterilir; başka bir uygulamaya geçince kaydın kaybolmamasını sağlar.</string>
+    <string name="survey_notification_title">Umay harita kaydediyor</string>
+    <string name="survey_notification_text">%1$s · %2$s</string>
+    <string name="survey_restored">Uygulama kapanmadan önceki kayıt geri yüklendi.</string>
     <string name="survey_type_door">Kapı</string>
     <string name="survey_type_stairs">Merdiven</string>
     <string name="survey_type_elevator">Asansör</string>

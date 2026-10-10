@@ -2,6 +2,10 @@ package com.appvalence.umay.survey
 
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.TaggedWaypoint
+import com.appvalence.umay.coremodel.SurveyDraft
+import com.appvalence.umay.coremodel.PositionSource
+import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.coremodel.StepEvent
@@ -13,6 +17,8 @@ import com.appvalence.umay.survey.ar.ArFrameSample
 import com.appvalence.umay.survey.ar.ArTrackingProblem
 import com.appvalence.umay.testing.FakeArSurveyCamera
 import com.appvalence.umay.testing.FakeBeaconScanner
+import com.appvalence.umay.testing.FakeSurveyDrafts
+import com.appvalence.umay.testing.FakeSurveyForeground
 import com.appvalence.umay.testing.FakeCapabilities
 import com.appvalence.umay.testing.FakeMotionSensors
 import com.appvalence.umay.testing.FakeSurveyAnnouncer
@@ -39,6 +45,8 @@ class SurveyRecorderTest {
     private val motion = FakeMotionSensors()
     private val settings = FakeUserSettings(calibratedStepLengthMeters = 0.7)
     private val camera = FakeArSurveyCamera()
+    private val drafts = FakeSurveyDrafts()
+    private val foreground = FakeSurveyForeground()
     private val announcer = FakeSurveyAnnouncer()
 
     private fun TestScope.recorder() = SurveyRecorder(
@@ -48,6 +56,8 @@ class SurveyRecorderTest {
         settings = settings,
         announcer = announcer,
         camera = camera,
+        drafts = drafts,
+        foreground = foreground,
         scope = backgroundScope,
         default = main.dispatcher,
         mapping = main.dispatcher,
@@ -354,5 +364,75 @@ class SurveyRecorderTest {
         assertEquals(1, camera.closed)
         assertEquals(SurveyMode.FOOTSTEPS, recorder.state.value.mode)
         assertTrue(recorder.state.value.wallMaps.isEmpty())
+    }
+
+    // --- Surviving the app being ended ---
+
+    @Test
+    fun `a recording keeps the app in the foreground and its walk on disk`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start()
+        assertTrue(foreground.running)
+        repeat(3) { step() }
+        recorder.tag("Giriş", NodeType.WAYPOINT)
+        scanner.raw.emit(iBeacon("b1", -60))
+        advanceTimeBy(SurveyRecorder.DRAFT_INTERVAL_MS + 1)
+
+        val saved = drafts.draft!!
+        assertEquals(3, saved.trajectory.size)
+        assertEquals("Giriş", saved.taggedWaypoints.single().name)
+        assertEquals(listOf("b1"), drafts.readings.map { it.beaconId })
+
+        recorder.stop()
+        advanceUntilIdle()
+        assertFalse(foreground.running)
+        assertEquals(1, drafts.readings.size) // flushed once, never twice
+    }
+
+    @Test
+    fun `a walk the app was ended in comes back, solved and ready to save or resume`() = runTest(main.dispatcher) {
+        drafts.draft = SurveyDraft(
+            mode = SurveyMode.FOOTSTEPS.name,
+            currentFloor = 1,
+            stepLengthMeters = 0.7,
+            trajectory = (1..4).map { Position(0.0, it * 0.7, 1, 0.0, 0.5, PositionSource.PEDESTRIAN_DEAD_RECKONING, it.toLong()) },
+            taggedWaypoints = listOf(TaggedWaypoint("Giriş", 0.0, 0.7, 1, emptyList())),
+            savedAtMs = 1L,
+        )
+        drafts.readings += iBeacon("b1", -60)
+
+        val recorder = recorder()
+        advanceUntilIdle()
+
+        val state = recorder.state.value
+        assertTrue(state.restoredFromDraft)
+        assertEquals(1, state.currentFloor)
+        assertEquals(4, state.trajectory.size)
+        assertEquals(1, state.rawReadingCount)
+        assertTrue(state.hasSolved)
+
+        // Resuming carries on from the restored walk's last point.
+        recorder.start()
+        step()
+        advanceUntilIdle()
+        assertEquals(5 * 0.7, recorder.state.value.trajectory.last().y, 1e-9)
+        assertFalse(recorder.state.value.restoredFromDraft)
+        recorder.stop()
+    }
+
+    @Test
+    fun `clearing a walk deletes its draft`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start()
+        step()
+        advanceTimeBy(SurveyRecorder.DRAFT_INTERVAL_MS + 1)
+        recorder.stop()
+        advanceUntilIdle()
+
+        recorder.clear()
+        advanceUntilIdle()
+
+        assertEquals(null, drafts.draft)
+        assertEquals(1, drafts.deleted)
     }
 }

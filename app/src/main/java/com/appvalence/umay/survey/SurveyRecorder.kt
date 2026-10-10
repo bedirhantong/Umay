@@ -12,6 +12,7 @@ import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.RadioFingerprint
+import com.appvalence.umay.coremodel.SurveyDraft
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.di.ApplicationScope
 import com.appvalence.umay.di.DefaultDispatcher
@@ -74,6 +75,8 @@ data class SurveyState(
     val livePosition: Position? = null,
     /** The wall map measured so far, per floor (camera mode, on phones that measure depth). */
     val wallMaps: Map<Int, OccupancyRaster> = emptyMap(),
+    /** This walk was brought back from disk after the app was ended mid-survey. */
+    val restoredFromDraft: Boolean = false,
 )
 
 /** Says out loud what the surveyor should know without looking at the screen. */
@@ -122,6 +125,9 @@ fun trackingProblemText(problem: ArTrackingProblem): Int = when (problem) {
  * long, unrepeatable data collection that must not stop — or silently restart
  * dead reckoning from the origin — because someone switched tabs mid-walk.
  * BLE scanning and the motion sensors only run while a recording is active.
+ * While it is, a foreground service ([SurveyForeground]) keeps the process
+ * alive behind other apps, and the walk is written to disk every
+ * [DRAFT_INTERVAL_MS] ([SurveyDrafts]) to come back if the app is ended anyway.
  *
  * In [SurveyMode.CAMERA] the path comes from [ArSurveyCamera] instead of
  * footsteps — centimetre-accurate, and with depth, a wall map is drawn as the
@@ -139,6 +145,8 @@ class SurveyRecorder @Inject constructor(
     private val settings: UserSettings,
     private val announcer: SurveyAnnouncer,
     private val camera: ArSurveyCamera,
+    private val drafts: SurveyDrafts,
+    private val foreground: SurveyForeground,
     @param:ApplicationScope private val scope: CoroutineScope,
     @param:DefaultDispatcher private val default: CoroutineDispatcher,
     // Camera mapping state below is touched only here, one frame at a time.
@@ -153,6 +161,9 @@ class SurveyRecorder @Inject constructor(
     private var recordingJob: Job? = null
     private val floorTracker = BarometricFloorTracker()
     private var screenVisible = false
+
+    // How many of [rawReadings] are already in the draft on disk.
+    private var flushedReadings = 0
 
     // Camera mapping state: touched only on [mapping].
     private var aligner = ArPoseAligner()
@@ -173,6 +184,7 @@ class SurveyRecorder @Inject constructor(
                 }
             }
         }
+        scope.launch { restoreDraft() }
     }
 
     /**
@@ -184,9 +196,16 @@ class SurveyRecorder @Inject constructor(
         val current = _state.value
         val walkMode = if (current.trajectory.isEmpty() && current.taggedWaypoints.isEmpty()) mode else current.mode
         val stepLength = settings.stepLengthMeters
-        _state.update { it.copy(isRecording = true, stepLengthMeters = stepLength, mode = walkMode) }
+        _state.update { it.copy(isRecording = true, stepLengthMeters = stepLength, mode = walkMode, restoredFromDraft = false) }
         scanner.start(null)
+        foreground.recordingStarted()
         recordingJob = scope.launch {
+            launch {
+                while (true) {
+                    delay(DRAFT_INTERVAL_MS)
+                    saveDraft()
+                }
+            }
             when (walkMode) {
                 SurveyMode.FOOTSTEPS -> launch { recordFootsteps(stepLength) }
                 SurveyMode.CAMERA -> {
@@ -325,16 +344,78 @@ class SurveyRecorder @Inject constructor(
         job.cancel()
         recordingJob = null
         scanner.stop()
+        foreground.recordingStopped()
         // Paused, not closed: resuming the walk continues in the same camera frame.
         if (_state.value.mode == SurveyMode.CAMERA) camera.pause()
+        _state.update { it.copy(isRecording = false, rawReadingCount = rawReadings.size, livePosition = null) }
+        solve()
+    }
+
+    private fun solve() {
         val trajectory = _state.value.trajectory
         val readings = rawReadings.toList()
-        _state.update { it.copy(isRecording = false, rawReadingCount = readings.size, solving = true, livePosition = null) }
+        _state.update { it.copy(solving = true) }
         scope.launch {
             withContext(mapping) { publishWallMaps() }
             val results = withContext(default) { BeaconSurveySolver.solve(trajectory, readings) }
             _state.update { it.copy(results = results, hasSolved = true, solving = false) }
+            saveDraft()
         }
+    }
+
+    /** Writes what's new since the last call; main thread, like everything that touches [rawReadings]. */
+    private suspend fun saveDraft() {
+        val current = _state.value
+        if (current.trajectory.isEmpty() && current.taggedWaypoints.isEmpty()) return
+        val newReadings = if (flushedReadings < rawReadings.size) ArrayList(rawReadings.subList(flushedReadings, rawReadings.size)) else emptyList()
+        flushedReadings = rawReadings.size
+        drafts.appendReadings(newReadings)
+        drafts.save(
+            SurveyDraft(
+                mode = current.mode.name,
+                currentFloor = current.currentFloor,
+                stepLengthMeters = current.stepLengthMeters,
+                trajectory = current.trajectory,
+                taggedWaypoints = current.taggedWaypoints,
+                wallMaps = current.wallMaps,
+                savedAtMs = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    /**
+     * Brings back a walk the app was ended in the middle of. Its beacons are solved
+     * straight away, so it can be saved as it is or recording resumed. A camera walk
+     * continues in a new AR session, from its last point and heading (see
+     * [ArPoseAligner]), with its wall maps as they were.
+     */
+    private suspend fun restoreDraft() {
+        val restored = drafts.load() ?: return
+        val current = _state.value
+        if (recordingJob != null || current.trajectory.isNotEmpty() || current.taggedWaypoints.isNotEmpty()) return
+        val draft = restored.draft
+        val mode = SurveyMode.entries.firstOrNull { it.name == draft.mode } ?: SurveyMode.FOOTSTEPS
+        rawReadings.addAll(restored.readings)
+        flushedReadings = rawReadings.size
+        withContext(mapping) {
+            grids.clear()
+            draft.wallMaps.forEach { (floor, raster) -> grids[floor] = OccupancyGrid().apply { seed(raster) } }
+            val last = draft.trajectory.lastOrNull()
+            aligner = if (mode == SurveyMode.CAMERA && last != null) ArPoseAligner(last.x, last.y, startHeadingDeg = last.headingDeg) else ArPoseAligner()
+        }
+        _state.update {
+            it.copy(
+                mode = mode,
+                currentFloor = draft.currentFloor,
+                stepLengthMeters = draft.stepLengthMeters,
+                trajectory = draft.trajectory,
+                taggedWaypoints = draft.taggedWaypoints,
+                wallMaps = draft.wallMaps,
+                rawReadingCount = rawReadings.size,
+                restoredFromDraft = true,
+            )
+        }
+        solve()
     }
 
     /** A manual floor correction is the truth: further automatic changes are measured from here. */
@@ -368,12 +449,15 @@ class SurveyRecorder @Inject constructor(
         _state.update { current ->
             if (index !in current.taggedWaypoints.indices) current else current.copy(taggedWaypoints = current.taggedWaypoints.filterIndexed { i, _ -> i != index })
         }
+        if (recordingJob == null) scope.launch { saveDraft() }
     }
 
     /** Throws the whole walk away (the list of discovered beacons stays). */
     fun clear() {
         if (recordingJob != null) return
         rawReadings.clear()
+        flushedReadings = 0
+        scope.launch { drafts.delete() }
         // A new walk gets a new camera frame and empty wall maps.
         if (_state.value.mode == SurveyMode.CAMERA) camera.close()
         scope.launch(mapping) {
@@ -397,5 +481,8 @@ class SurveyRecorder @Inject constructor(
         const val CAMERA_ACCURACY_METERS = 0.1
         const val WALL_MAP_REFRESH_MS = 1_000L
         const val LOSS_ANNOUNCE_DELAY_MS = 2_000L
+
+        // At most this much of a walk is lost if the app is ended mid-survey.
+        const val DRAFT_INTERVAL_MS = 10_000L
     }
 }

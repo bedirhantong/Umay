@@ -310,3 +310,37 @@ class WallMapBudgetTest {
         assertTrue(fitted.isEmpty())
     }
 }
+
+class ResumeAcrossSessionsTest {
+
+    @Test
+    fun `a walk continued in a new AR session starts at its last point, facing its last way`() {
+        val aligner = ArPoseAligner(startX = 5.0, startY = 7.0, startHeadingDeg = 90.0)
+
+        // The new session's frame is arbitrary: here the camera faces its −Z (heading 0).
+        val first = aligner.onTracked(ArPose(3.0, 1.4, -2.0, 0.0, 1_000))
+        // One metre "forward" in the new frame…
+        val next = aligner.onTracked(ArPose(3.0, 1.4, -3.0, 0.0, 1_500))
+
+        assertEquals(5.0, first.x, 1e-9)
+        assertEquals(7.0, first.y, 1e-9)
+        assertEquals(90.0, first.headingDeg, 1e-9)
+        // …is one metre east on the plan, the way the walk was heading.
+        assertEquals(6.0, next.x, 1e-9)
+        assertEquals(7.0, next.y, 1e-9)
+    }
+
+    @Test
+    fun `a seeded grid shows the saved map and still yields to new measurements`() {
+        val saved = OccupancyRaster.of(0.1, 1.0, 2.0, 2, 1, byteArrayOf(OccupancyRaster.FREE, OccupancyRaster.OCCUPIED))
+        val grid = OccupancyGrid(0.1)
+
+        grid.seed(saved)
+
+        assertEquals(saved.decodeCells()!!.toList(), grid.snapshot()!!.decodeCells()!!.toList())
+        assertEquals(1.0, grid.snapshot()!!.originX, 1e-9)
+        // Rays that keep seeing through the "wall" clear it.
+        repeat(7) { grid.addRay(1.15, 1.5, 1.15, 2.95, hit = false) }
+        assertEquals(OccupancyRaster.FREE, OccupancyGrid.classify(grid.logOdds(1.15, 2.05)))
+    }
+}

@@ -65,6 +65,7 @@ Uygulama kaldırılınca hepsi silinir.
 | Bina haritaları | Yer adları, bina içi koordinatlar, kat bilgisi, beacon sinyal parmak izleri, kamerayla çıkarıldıysa duvar haritası | `files/buildings/` | Dosyalar ekranı |
 | Ayarlar | Konuşma hızı, adım uzunluğu, ekranın açık kalması gibi tercihler | Paylaşılan tercihler | Uygulamayı kaldırmak |
 | Saha kaydı (varsayılan kapalı) | Yönlendirme sırasında bina içi konum, adımlar, sinyal gücü, hava basıncı, verilen yönergeler, işaretlenen gerçek konumlar. Görüntü ve ses yoktur. | `files/field-logs/`, en fazla 50 dosya, en eskisi kendiliğinden silinir | Dosyalar ekranı |
+| Bitmemiş harita kaydı | Harita çıkarılırken yürünen yol, isimli yerler, okunan beacon sinyalleri, duvar haritası; uygulama kayıt sırasında kapanırsa geri gelsin diye | `files/survey-draft/`, yedeğe girmez | Haritalama ekranında kaydı temizlemek |
 | Çökme kayıtları | Uygulama çökerse hata izi ve o anki yönlendirmenin başlangıç ve hedef noktası | `files/crash-logs/` | Dosyalar ekranı |
 | Dışa aktarılan harita kopyası | Paylaşılmak üzere hazırlanan `.umay.json` | Önbellek klasörü | Android önbelleği temizledikçe |
 

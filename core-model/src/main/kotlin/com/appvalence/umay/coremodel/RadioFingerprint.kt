@@ -26,6 +26,7 @@ data class RadioFingerprint(
  * information in the whole app, since the camera model only ever detects
  * people, never static structure like stairs or doors.
  */
+@Serializable
 data class TaggedWaypoint(
     val name: String,
     val x: Double,

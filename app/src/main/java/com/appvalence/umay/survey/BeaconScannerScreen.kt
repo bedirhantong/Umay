@@ -233,6 +233,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
                 isRecording = survey.isRecording,
                 trajectoryPointCount = survey.trajectory.size,
                 progressText = progressText,
+                restoredFromDraft = survey.restoredFromDraft,
                 rawReadingCount = survey.rawReadingCount,
                 taggedWaypointCount = survey.taggedWaypoints.size,
                 currentFloor = survey.currentFloor,
@@ -378,6 +379,7 @@ private fun RecordingCard(
     isRecording: Boolean,
     trajectoryPointCount: Int,
     progressText: String,
+    restoredFromDraft: Boolean,
     rawReadingCount: Int,
     taggedWaypointCount: Int,
     currentFloor: Int,
@@ -413,6 +415,13 @@ private fun RecordingCard(
                         text = stringResource(R.string.survey_calibrate_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+                if (restoredFromDraft) {
+                    Text(
+                        text = stringResource(R.string.survey_restored),
+                        style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }

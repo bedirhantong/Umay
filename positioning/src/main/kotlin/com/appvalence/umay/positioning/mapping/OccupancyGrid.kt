@@ -59,6 +59,28 @@ class OccupancyGrid(val cellSizeMeters: Double = DEFAULT_CELL_SIZE_METERS) {
         vote(endColumn, endRow, if (hit) OCCUPIED_VOTE else FREE_VOTE)
     }
 
+    /**
+     * Starts from a saved [raster] (a walk continued after the app was ended): its walls
+     * and floor come back just past the classification threshold, so they show as before
+     * but new measurements can still overturn them. Ignored if the cell sizes differ.
+     */
+    fun seed(raster: OccupancyRaster) {
+        if (kotlin.math.abs(raster.cellSizeMeters - cellSizeMeters) > 1e-9) return
+        val cells = raster.decodeCells() ?: return
+        val firstColumn = cellOf(raster.originX + cellSizeMeters / 2)
+        val firstRow = cellOf(raster.originY + cellSizeMeters / 2)
+        for (row in 0 until raster.height) {
+            for (column in 0 until raster.width) {
+                val seeded = when (cells[row * raster.width + column]) {
+                    OccupancyRaster.OCCUPIED -> CLASSIFY_THRESHOLD + SEED_MARGIN
+                    OccupancyRaster.FREE -> -(CLASSIFY_THRESHOLD + SEED_MARGIN)
+                    else -> continue
+                }
+                vote(firstColumn + column, firstRow + row, seeded)
+            }
+        }
+    }
+
     fun logOdds(x: Double, y: Double): Float {
         val column = cellOf(x)
         val row = cellOf(y)
@@ -129,6 +151,7 @@ class OccupancyGrid(val cellSizeMeters: Double = DEFAULT_CELL_SIZE_METERS) {
 
         /** Needs about two hits more than misses to call a cell a wall (and the converse). */
         const val CLASSIFY_THRESHOLD = 1.2f
+        private const val SEED_MARGIN = 0.1f
 
         private const val CHUNK_SHIFT = 6
         private const val CHUNK_SIZE = 1 shl CHUNK_SHIFT
