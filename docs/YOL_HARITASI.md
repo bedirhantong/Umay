@@ -64,7 +64,11 @@ Kullanıcının gözünden akış:
 | Kamerayla konum bulma | Yok | |
 | Derinlikle engel uyarısı (sandalye, masa, duvar) | Yok | |
 | Duvar haritası üzerinde serbest rota (koltuktan başlamak) | Yok | |
-| Kapıların harita parçası olması | Yok (yalnızca nokta) | |
+| Kapıların harita parçası olması | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
+| Harita düzenleme | Yazıldı, **TalkBack ile denenmedi** | `feat/ar-survey` |
+| Yol boyunca sık parmak izi, her taramanın filtreye kanıt olması | Yazıldı, **sahada ölçülmedi** | `feat/ar-survey` |
+| Başlangıç noktasını beacon'larla önerme | Yazıldı, **sahada ölçülmedi** | `feat/ar-survey` |
+| Harita kaydının uygulama kapanınca kaybolmaması | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | Kurum sürümü (Firebase'siz, internet izinsiz, yedeklemesiz) | Yazıldı, derlemede denetleniyor | `feat/ar-survey` |
 | Konuşma tanıma yalnızca cihazda, internetsiz ses | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 
@@ -104,7 +108,8 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   *Bitti:* devam eden yürüyüş kaldığı noktadan sürüyor, testle korunuyor.
 - [ ] **0.6 Branch'leri birleştir** (K). `feat/graph-particle-filter` ve
   `feat/ar-survey` için `development`'a PR açıldı ve birleştirildi.
-- [ ] **0.7 Harita kaydı uygulamadan çıkınca kaybolmasın** (O). Kayıt bugün
+- [ ] **0.7 Harita kaydı uygulamadan çıkınca kaybolmasın** (O). **Kod hazır:**
+  kayıt sırasında uygulama zorla kapatılıp yeniden açılarak denenecek. Kayıt bugün
   yalnızca bellekte; kullanıcı başka uygulamaya geçince Android uygulamayı
   kapatırsa saatlerce süren yürüyüş kaybolur. Kayıt sürerken ön plan hizmeti
   ve bildirim; kayıt diske taslak olarak yazılır, açılışta "bitmemiş kayıt"
@@ -158,7 +163,10 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
 
 ### Faz 2: Harita, kapılar ve düzenleme
 
-- [ ] **2.1 Kapılar haritanın parçası** (O). Haritayı çıkaran kişi bir
+- [ ] **2.1 Kapılar haritanın parçası** (O). **Kod hazır:** kapısı kapalıyken
+  kamerayla haritalanan bir katta açıklığın göründüğü denenecek. Kapının hangi
+  iki alanı bağladığı, alanlar modellenmediği için kapının iki yanındaki
+  bağlantılardan anlaşılıyor. Haritayı çıkaran kişi bir
   kapıyı işaretlediğinde, kapı duvar haritasında bir açıklık olarak
   kaydediliyor (konum, genişlik, hangi iki alanı bağladığı). Navigasyon
   haritasında kapı olarak çiziliyor.
@@ -168,11 +176,15 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   dosyalar "uygulamayı güncelle" denerek reddediliyor. `.umay.json`'a bir sürüm numarası
   ekleniyor, eski sürümler okunurken yükseltiliyor.
   *Bitti:* eski haritalar açılıyor, yeni alanlar testle korunuyor.
-- [ ] **2.3 Harita düzenleme** (O). Kaydedildikten sonra yer adı ve türü
+- [ ] **2.3 Harita düzenleme** (O). **Kod hazır:** Dosyalar → Düzenle;
+  TalkBack ile baştan sona denenecek. Kaydedildikten sonra yer adı ve türü
   değiştirme, yer silme, yanlış bağlantıyı kaldırma, duvar haritasında
   hatalı lekeyi silme. Erişilebilir olmalı (liste tabanlı düzenleme).
   *Bitti:* bir haritadaki hatalar yeniden haritalamadan düzeltiliyor.
-- [ ] **2.4 Sık beacon parmak izi** (O). Parmak izi yalnızca isim verilen
+- [ ] **2.4 Sık beacon parmak izi** (O). **Kod hazır:** her iki haritalama
+  modunda 3 metrede bir örnek; filtre her taramayı kullanıyor (simülasyonda
+  %14 kısa adımla 25 m sonunda hata 3,7 m'den 1,4 m'ye indi). Saha kaydında
+  ölçülecek. Parmak izi yalnızca isim verilen
   noktalarda değil, kamerayla çıkarılan yol boyunca birkaç metrede bir
   kaydediliyor.
   *Bitti:* parçacık filtresi beacon'ı yalnızca güvenilir eşleşmede değil,
@@ -181,10 +193,13 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
 
 ### Faz 3: Konum, "neredeyim"
 
-- [ ] **3.1 TalkBack ile başlangıç** (K). "Bulunduğum yer" seçicisi en yakın
+- [ ] **3.1 TalkBack ile başlangıç** (K). **Kod hazır:** kör bir test
+  kullanıcısıyla denenecek. "Bulunduğum yer" seçicisi en yakın
   yerleri öne alıyor (beacon varsa). Seçim sesli onaylanıyor.
   *Bitti:* kör bir test kullanıcısı başlangıcı yardımsız seçiyor.
-- [ ] **3.2 Beacon ile kendiliğinden başlangıç** (K). Kurumda uygulama
+- [ ] **3.2 Beacon ile kendiliğinden başlangıç** (K). **Kod hazır:** öneri,
+  aynı yer üç taramada üst üste güvenilir eşleşme olunca soruluyor; test
+  binasında 10 denemeyle ölçülecek. Kurumda uygulama
   açılınca en olası yeri öneriyor: "Giriş holündesin gibi görünüyor, doğru
   mu?"
   *Bitti:* test binasında 10 denemenin en az 8'inde doğru yeri öneriyor.
@@ -309,6 +324,15 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **10 Ekim 2026:** Harita ve konum işleri yazıldı: harita kaydı ön plan
+  hizmeti ve diskteki taslakla korunuyor (0.7); harita Dosyalar → Düzenle ile
+  düzeltilebiliyor (2.3); yol boyunca 3 metrede bir sinyal örneği alınıyor ve
+  parçacık filtresi her taramayı kanıt olarak kullanıyor (2.4); başlangıç
+  noktası beacon'larla öneriliyor ve yakın yerler listenin başına geliyor
+  (3.1, 3.2); kapılar duvar haritasında açıklık olarak kaydediliyor (2.1).
+  Hepsinin birim testleri geçiyor; telefonda ve sahada doğrulanmaları
+  bekleniyor.
 
 - **10 Ekim 2026:** Telefon gerektirmeyen gizlilik işleri yapıldı. "Bir şey
   sor" artık yalnızca cihaz içi tanıma kullanıyor (1.1). ARCore bildirimi
