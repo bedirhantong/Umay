@@ -64,7 +64,9 @@ Kullanıcının gözünden akış:
 | Yer işaretleriyle (QR) konum bulma, "Kamerayla bul" | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | Kamerayla engel uyarısı: insan ve eşyalar (sandalye, masa, bank…) | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | 16 KB sayfa boyutu uyumu (LiteRT) | Yapıldı | `feat/ar-survey` |
-| Duvar haritası üzerinde serbest rota (koltuktan başlamak) | Yok | |
+| Açık alanda kestirme bağlantılar, duvara dayalı yönerge | Yazıldı, **sahada doğrulanmadı** | `feat/ar-survey` |
+| Isı, pil ve telefonun tutuşuna göre kamera | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
+| Kurum harita sunucusu | Yazıldı, HTTP testleri geçiyor | `feat/ar-survey` |
 | Kapıların harita parçası olması | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | Harita düzenleme | Yazıldı, **TalkBack ile denenmedi** | `feat/ar-survey` |
 | Yol boyunca sık parmak izi, her taramanın filtreye kanıt olması | Yazıldı, **sahada ölçülmedi** | `feat/ar-survey` |
@@ -146,7 +148,11 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   yalnızca derleme sırasında verilen kurum sunucu adresine izin veriyor.
   Sunucu yoksa uygulamanın internet izni de yok.
   *Bitti:* başka bir adrese istek atılamadığı testle gösterildi.
-- [ ] **1.5 Kurum içi harita sunucusu** (O). Kurumun ağında çalışan basit
+- [ ] **1.5 Kurum içi harita sunucusu** (O). **Kod hazır:** `server`
+  modülü, `HttpBuildingMapRepository`, sunucu adresiyle derlenen kurum
+  sürümü yalnızca o adrese bağlanır ([SUNUCU.md](SUNUCU.md)). Sunucu ve
+  istemci gerçek HTTP üzerinden test edildi; iki telefonla kurum ağında
+  denenecek. Kurumun ağında çalışan basit
   bir sunucu: haritaları listeler, indirir, yetkili cihazdan yükleme kabul
   eder. Uygulama tarafında `RemoteBuildingMapRepository`'nin ikinci bir
   gerçeklemesi. Protokol bu klasörde belgelenir.
@@ -215,7 +221,10 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   *Bitti:* kullanıcı oturduğu yerde telefonu birkaç saniye çevirince konumu
   1 m içinde bulunuyor. Benzer iki koridor karıştığında beacon ayırıyor.
   Sahada ölçüldü.
-- [ ] **3.4 Konum kaynaklarının birleşmesi** (O). Kamera varken kamera,
+- [ ] **3.4 Konum kaynaklarının birleşmesi** (O). **Kod hazır:** adım,
+  beacon (tarama ve parmak izi), harita ve yer işaretleri tek parçacık
+  filtresinde birleşiyor; kamera kapanınca (cep, ekran, ısı) konum
+  zıplamadan adım ve beacon'la sürüyor. Sahada ölçülecek. Kamera varken kamera,
   telefon cebe girince adım ve beacon, kamera geri gelince yeniden kamera.
   Geçişlerde konum zıplamıyor.
   *Bitti:* bir yürüyüş boyunca telefon iki kez cebe girip çıkıyor, saha
@@ -230,21 +239,30 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   kapı haritadan bilinir; rota koridorda kalır. **Kod hazır:** test
   parkurunda denenecek.
   *Bitti:* test parkurunda bütün engeller uyarıldı, yanlış uyarı az.
-- [ ] **4.2 Serbest alanda rota** (O). Duvar haritası üzerinde, duvardan
+- [ ] **4.2 Serbest alanda rota** (O). Karar 1 gereği konum koridor ağında
+  tutulduğu için şöyle yapıldı: kamerayla çıkarılan katta, aralarındaki düz
+  yol ve iki yanındaki 40 cm görülmüş boş zemin olan yerler, yürünen yol çok
+  daha uzunsa doğrudan bağlanıyor; açık lobide dolanmadan geçiliyor.
+  **Kod hazır:** test binasının açık alanında denenecek. Duvar haritası üzerinde, duvardan
   güvenli mesafe bırakan yol bulma. Kullanıcı koridor çizgisinin dışından
   (bekleme salonundaki bir koltuk, açık bir lobi) başlayabiliyor. Graf
   rotasıyla birleşiyor.
   *Bitti:* test binasının açık bir alanında, koridor dışındaki bir noktadan
   rota çıkıyor, duvarlara sürtmüyor.
-- [ ] **4.3 Yapıya göre yönerge** (O). "Kapıdan geç, sağa dön", "duvar
+- [ ] **4.3 Yapıya göre yönerge** (O). **Kod hazır:** bacak boyunca bir
+  yanda duvar varsa "Duvar solunda; onu takip edebilirsin" ekleniyor; kapı
+  uyarısı ve engeller adıyla söyleniyor. Kör kullanıcılarla denenecek. "Kapıdan geç, sağa dön", "duvar
   solunda kalsın" gibi kapıya ve duvara dayalı cümleler.
   *Bitti:* yönergeler kör test kullanıcılarıyla denendi, anlaşılırlıkları
   yazıldı.
-- [ ] **4.4 Pil ve ısı** (K). Kamera açıkken pil tüketimi ölçülüyor ve
+- [ ] **4.4 Pil ve ısı** (K). **Kod hazır:** "ciddi" ısıda kamera durur,
+  "orta" ısıda ya da %20 altı pilde seyrekleşir, ikisi de söylenir.
+  Tüketim 30 dakikalık yürüyüşte ölçülecek. Kamera açıkken pil tüketimi ölçülüyor ve
   sınırlanıyor (derinlik sıklığı, düşük çözünürlük). Isınınca uygulama
   adım ve beacon moduna iniyor ve bunu söylüyor.
   *Bitti:* 30 dakikalık yönlendirmede tüketim ölçüldü ve yazıldı.
-- [ ] **4.5 Telefonu tutma** (K). Göğüs askısı veya boyun askısı önerisi.
+- [ ] **4.5 Telefonu tutma** (K). **Kod hazır:** kamera yere ya da tavana
+  bakınca söyleniyor; kurulum kılavuzu göğüs askısı öneriyor. Göğüs askısı veya boyun askısı önerisi.
   Uygulama telefonun yanlış tutulduğunu (yere ya da tavana baktığını) sesle
   söylüyor.
 
@@ -257,7 +275,8 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   beacon yok").
 - [x] **5.2 Kurulum kılavuzu** (K). `docs/KURULUM.md`. Bir kurumun Umay'ı kurması: beacon
   yerleştirme, harita çıkarma, sunucu, test.
-- [ ] **5.3 Kör kullanıcılarla test** (O). En az 5 kişiyle, gerçek bir
+- [ ] **5.3 Kör kullanıcılarla test** (O). Protokol hazır:
+  [KULLANICI_TESTI.md](KULLANICI_TESTI.md). Test yapılacak. En az 5 kişiyle, gerçek bir
   binada, gözlemli. Sonuçlar ve düzeltmeler yazılı.
 - [ ] **5.4 Erişilebilirlik denetimi** (K). Kod üzerinden tarama yapıldı ve
   bulunanlar düzeltildi (rolsüz tıklanabilir satırlar, TalkBack'e görünmeyen
@@ -316,6 +335,12 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Faz 1–5'in kodla yapılabilen bütün işleri bitti: kurum
+  sunucusu (1.5), kaynakların birleşmesi (3.4), açık alan bağlantıları (4.2),
+  duvara dayalı yönerge (4.3), ısı ve pil (4.4), tutuş uyarısı (4.5),
+  kullanıcı testi protokolü (5.3). Bundan sonrası telefonda ve sahada
+  doğrulama: Faz 0'daki denemeler ve "Kod hazır" yazan her işin bitti ölçütü.
 
 - **10 Ekim 2026:** Karar 1 (yönlendirmede ARCore yok) ve karar 2 (kurum
   sunucusu) alındı. İnsan algılama LiteRT'ye taşındı ve 16 KB sorunu kapandı;
