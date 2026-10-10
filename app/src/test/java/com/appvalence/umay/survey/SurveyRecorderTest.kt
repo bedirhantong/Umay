@@ -2,9 +2,16 @@ package com.appvalence.umay.survey
 
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.coremodel.StepEvent
 import com.appvalence.umay.positioning.ble.BleScanState
+import com.appvalence.umay.positioning.mapping.ArPose
+import com.appvalence.umay.positioning.mapping.DepthFrame
+import com.appvalence.umay.survey.ar.ArCameraStatus
+import com.appvalence.umay.survey.ar.ArFrameSample
+import com.appvalence.umay.survey.ar.ArTrackingProblem
+import com.appvalence.umay.testing.FakeArSurveyCamera
 import com.appvalence.umay.testing.FakeBeaconScanner
 import com.appvalence.umay.testing.FakeCapabilities
 import com.appvalence.umay.testing.FakeMotionSensors
@@ -18,6 +25,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -30,15 +38,19 @@ class SurveyRecorderTest {
     private val scanner = FakeBeaconScanner()
     private val motion = FakeMotionSensors()
     private val settings = FakeUserSettings(calibratedStepLengthMeters = 0.7)
+    private val camera = FakeArSurveyCamera()
+    private val announcer = FakeSurveyAnnouncer()
 
     private fun TestScope.recorder() = SurveyRecorder(
         scanner = scanner,
         motion = motion,
         capabilities = FakeCapabilities(hasBarometer = false),
         settings = settings,
-        announcer = FakeSurveyAnnouncer(),
+        announcer = announcer,
+        camera = camera,
         scope = backgroundScope,
         default = main.dispatcher,
+        mapping = main.dispatcher,
     )
 
     private var stepTime = 0L
@@ -168,5 +180,144 @@ class SurveyRecorderTest {
         recorder.deleteWaypoint(0)
 
         assertEquals(listOf("B"), recorder.state.value.taggedWaypoints.map { it.name })
+    }
+
+    // --- Camera survey ---
+
+    private var frameTime = 10_000L
+
+    /** A tracked frame with the camera at AR (x, −z = [forward]), facing AR −Z. */
+    private suspend fun cameraAt(x: Double, forward: Double, depth: DepthFrame? = null, planes: List<Double> = listOf(0.0)) {
+        frameTime += 1_100
+        camera.frames.emit(ArFrameSample(ArPose(x, 1.35, -forward, 0.0, frameTime), planes, depth))
+    }
+
+    /** What a level camera at AR (x, 1.35, z) sees of a wall [distance] m ahead. */
+    private fun wallAhead(x: Float, z: Float, distance: Double) = DepthFrame(
+        width = 32, height = 24,
+        depthMm = ShortArray(32 * 24) { (distance * 1000).toInt().toShort() },
+        confidence = null,
+        fx = 25f, fy = 25f, cx = 16f, cy = 12f,
+        cameraPose = floatArrayOf(1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, x, 1.35f, z, 1f),
+    )
+
+    @Test
+    fun `a camera walk takes its path from the camera, in metres, and only while on screen`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+
+        recorder.start(SurveyMode.CAMERA)
+        assertFalse("the camera must not open before the screen is shown", camera.resumed)
+        recorder.setScreenVisible(true)
+        assertTrue(camera.resumed)
+
+        camera.status.value = ArCameraStatus.Tracking
+        cameraAt(0.0, 0.0)
+        cameraAt(0.0, 0.1) // too close to the last point to add one
+        cameraAt(0.0, 2.0)
+        advanceUntilIdle()
+
+        val state = recorder.state.value
+        assertEquals(SurveyMode.CAMERA, state.mode)
+        assertEquals(2, state.trajectory.size)
+        assertEquals(2.0, state.trajectory.last().y, 1e-9)
+        assertEquals(2.0, state.livePosition!!.y, 1e-9)
+
+        recorder.setScreenVisible(false)
+        assertFalse(camera.resumed)
+    }
+
+    @Test
+    fun `depth draws the wall map of the floor being walked`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.setScreenVisible(true)
+        recorder.start(SurveyMode.CAMERA)
+        camera.status.value = ArCameraStatus.Tracking
+
+        repeat(3) { cameraAt(0.0, 0.0, depth = wallAhead(0f, 0f, 3.0)) }
+        recorder.stop()
+        advanceUntilIdle()
+
+        val wallMap = recorder.state.value.wallMaps[0]
+        assertNotNull(wallMap)
+        val cells = wallMap!!.decodeCells()!!
+        assertTrue(cells.any { it == OccupancyRaster.OCCUPIED })
+        assertTrue(cells.any { it == OccupancyRaster.FREE })
+        assertFalse("stopping must release the camera", camera.resumed)
+    }
+
+    @Test
+    fun `a place tagged on a camera walk is where the camera is now, with its point in the path`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.setScreenVisible(true)
+        recorder.start(SurveyMode.CAMERA)
+        camera.status.value = ArCameraStatus.Tracking
+        assertFalse("nothing to tag before the camera has a position", recorder.tag("Giriş", NodeType.WAYPOINT))
+
+        cameraAt(0.0, 0.0)
+        cameraAt(0.0, 3.0)
+        cameraAt(0.0, 3.1)
+        advanceUntilIdle()
+        assertTrue(recorder.tag("Kapı", NodeType.DOOR))
+
+        val tagged = recorder.state.value.taggedWaypoints.single()
+        assertEquals(3.1, tagged.y, 1e-9)
+        assertEquals(recorder.state.value.trajectory.size, tagged.trajectoryIndex)
+    }
+
+    @Test
+    fun `a lasting camera loss is said out loud once, and so is its end`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.setScreenVisible(true)
+        recorder.start(SurveyMode.CAMERA)
+        camera.status.value = ArCameraStatus.Tracking
+        advanceUntilIdle()
+
+        camera.status.value = ArCameraStatus.Lost(ArTrackingProblem.INSUFFICIENT_LIGHT)
+        advanceTimeBy(1_000)
+        assertTrue("a short glitch isn't announced", announcer.cameraLosses.isEmpty())
+        advanceTimeBy(1_500)
+        assertEquals(listOf(ArTrackingProblem.INSUFFICIENT_LIGHT), announcer.cameraLosses)
+
+        camera.status.value = ArCameraStatus.Tracking
+        advanceUntilIdle()
+        assertEquals(1, announcer.cameraBacks)
+        recorder.stop()
+    }
+
+    @Test
+    fun `a resumed walk keeps the mode it was started with`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.setScreenVisible(true)
+        recorder.start(SurveyMode.CAMERA)
+        camera.status.value = ArCameraStatus.Tracking
+        cameraAt(0.0, 0.0)
+        advanceUntilIdle()
+        recorder.stop()
+        advanceUntilIdle()
+
+        recorder.start(SurveyMode.FOOTSTEPS)
+
+        assertEquals(SurveyMode.CAMERA, recorder.state.value.mode)
+        assertTrue(camera.resumed)
+        recorder.stop()
+    }
+
+    @Test
+    fun `clearing a camera walk ends the camera session for a fresh frame`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.setScreenVisible(true)
+        recorder.start(SurveyMode.CAMERA)
+        camera.status.value = ArCameraStatus.Tracking
+        cameraAt(0.0, 0.0)
+        advanceUntilIdle()
+        recorder.stop()
+        advanceUntilIdle()
+
+        recorder.clear()
+        advanceUntilIdle()
+
+        assertEquals(1, camera.closed)
+        assertEquals(SurveyMode.FOOTSTEPS, recorder.state.value.mode)
+        assertTrue(recorder.state.value.wallMaps.isEmpty())
     }
 }

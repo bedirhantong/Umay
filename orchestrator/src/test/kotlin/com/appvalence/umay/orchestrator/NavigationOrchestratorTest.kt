@@ -61,6 +61,8 @@ private object TokenPhrases : GuidancePhrases {
     private fun meters(distance: Double) = "%.1f".format(java.util.Locale.ROOT, distance)
     override fun walkToward(placeName: String, distanceMeters: Double, thenTurn: TurnDirection?) =
         "WALK $placeName ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
+    override fun walkAhead(distanceMeters: Double, thenTurn: TurnDirection?) =
+        "AHEAD ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
     override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =
         "CHANGE_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor $arrivalPlaceName"
@@ -270,6 +272,35 @@ class NavigationOrchestratorTest {
 
         val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
         assertTrue(guidance.message.endsWith("RIGHT"), guidance.message)
+    }
+
+    @Test
+    fun `an unnamed corner is announced by distance and turn, never by its id`() = runTest {
+        val nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.WAYPOINT, name = "Giris"),
+            MapNode("corner-uuid", 0.0, 10.0, NodeType.CORRIDOR),
+            MapNode("C", 10.0, 10.0, NodeType.WAYPOINT, name = "Oda"),
+        )
+        val edges = listOf(
+            MapEdge("A", "corner-uuid", accessible = true, distanceMeters = 10.0),
+            MapEdge("corner-uuid", "C", accessible = true, distanceMeters = 10.0),
+        )
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, edges)))
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+            phrases = TokenPhrases,
+        )
+
+        orchestrator.start().toList()
+
+        val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
+        assertEquals("AHEAD 10.0 RIGHT", guidance.message)
     }
 
     @Test

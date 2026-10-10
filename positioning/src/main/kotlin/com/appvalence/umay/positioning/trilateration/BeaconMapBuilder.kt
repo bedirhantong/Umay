@@ -6,7 +6,9 @@ import com.appvalence.umay.coremodel.FloorTransition
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.TaggedWaypoint
+import com.appvalence.umay.positioning.mapping.PathSimplifier
 import java.util.UUID
 import kotlin.math.hypot
 
@@ -69,6 +71,7 @@ object BeaconMapBuilder {
         beaconResults: List<BeaconSurveyResult> = emptyList(),
         maxEdgeDistanceMeters: Double = DEFAULT_MAX_EDGE_DISTANCE_METERS,
         anchorName: (floorIndex: Int, number: Int) -> String = DEFAULT_ANCHOR_NAME,
+        trajectory: List<Position> = emptyList(),
     ): BuildingMap {
         // Assigned once, up front, so the same id can be used both inside each
         // floor's node list and when detecting cross-floor transitions below.
@@ -84,7 +87,7 @@ object BeaconMapBuilder {
             if (indices.isEmpty()) {
                 buildFloor(floorIndex, floorBeaconResults, maxEdgeDistanceMeters, anchorName)
             } else {
-                buildWaypointFloor(floorIndex, indices, taggedWaypoints, waypointNodeIds, floorBeaconResults)
+                buildWaypointFloor(floorIndex, indices, taggedWaypoints, waypointNodeIds, floorBeaconResults, trajectory)
             }
         }
 
@@ -110,6 +113,7 @@ object BeaconMapBuilder {
         taggedWaypoints: List<TaggedWaypoint>,
         waypointNodeIds: List<String>,
         beaconResults: List<BeaconSurveyResult>,
+        trajectory: List<Position>,
     ): FloorMap {
         val waypointNodes = indices.map { i ->
             val waypoint = taggedWaypoints[i]
@@ -123,15 +127,43 @@ object BeaconMapBuilder {
             )
         }
 
-        val edges = waypointNodes.zipWithNext { from, to ->
-            MapEdge(fromId = from.id, toId = to.id, accessible = true, distanceMeters = hypot(from.x - to.x, from.y - to.y))
+        val cornerNodes = mutableListOf<MapNode>()
+        val edges = indices.zipWithNext().flatMap { (fromIndex, toIndex) ->
+            val from = waypointNodes[indices.indexOf(fromIndex)]
+            val to = waypointNodes[indices.indexOf(toIndex)]
+            val corners = cornersBetween(taggedWaypoints[fromIndex], taggedWaypoints[toIndex], trajectory, floorIndex)
+            cornerNodes += corners
+            (listOf(from) + corners + to).zipWithNext { a, b ->
+                MapEdge(fromId = a.id, toId = b.id, accessible = true, distanceMeters = hypot(a.x - b.x, a.y - b.y))
+            }
         }
 
         val anchorNodes = beaconResults.map { result ->
             MapNode(id = result.beaconId, x = result.x, y = result.y, type = NodeType.BLE_ANCHOR)
         }
 
-        return FloorMap(floorIndex = floorIndex, nodes = waypointNodes + anchorNodes, edges = edges)
+        return FloorMap(floorIndex = floorIndex, nodes = waypointNodes + cornerNodes + anchorNodes, edges = edges)
+    }
+
+    /**
+     * The bends of the walked path between two consecutive tags, as unnamed
+     * [NodeType.CORRIDOR] nodes — so an edge follows the corridor round a corner
+     * instead of cutting straight through the wall between two tagged places.
+     * Only for a trajectory precise enough to trust its shape (the camera survey's);
+     * dead reckoning's wobble would invent corners that aren't there.
+     */
+    private fun cornersBetween(from: TaggedWaypoint, to: TaggedWaypoint, trajectory: List<Position>, floorIndex: Int): List<MapNode> {
+        val start = from.trajectoryIndex ?: return emptyList()
+        val end = to.trajectoryIndex ?: return emptyList()
+        if (start >= end || end > trajectory.size) return emptyList()
+        // trajectoryIndex is the point count when tagged, so the tag stood on point index - 1.
+        val walked = trajectory.subList((start - 1).coerceAtLeast(0), end)
+        if (walked.any { it.floor != floorIndex }) return emptyList()
+        val path = listOf(from.x to from.y) + walked.map { it.x to it.y } + (to.x to to.y)
+        return PathSimplifier.simplify(path, CORNER_TOLERANCE_METERS)
+            .drop(1)
+            .dropLast(1)
+            .map { (x, y) -> MapNode(id = UUID.randomUUID().toString(), x = x, y = y, type = NodeType.CORRIDOR) }
     }
 
     private fun buildFloor(
@@ -169,6 +201,9 @@ object BeaconMapBuilder {
     }
 
     const val DEFAULT_MAX_EDGE_DISTANCE_METERS = 20.0
+
+    // Half a corridor's width: a walk that wanders less than this is still "straight".
+    const val CORNER_TOLERANCE_METERS = 0.5
 
     // A fixed penalty, not a measured distance — stairs/elevators cost real time and
     // effort A* should weigh against a same-floor detour, but there's no PDR distance

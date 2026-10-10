@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appvalence.umay.common.DeviceCapabilities
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.coremodel.isCorridorBend
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.feedback.Speaker
 import com.appvalence.umay.fieldlog.FieldLogFiles
@@ -123,7 +124,8 @@ class NavigationViewModel @Inject constructor(
     }
 
     private fun selectedBuilding(map: BuildingMap, start: Int, destination: Int): SelectedBuilding {
-        val nodes = map.floors.flatMap { it.nodes }
+        // Beacon nodes stay pickable (a beacon-only map has nothing else); corridor bends don't.
+        val nodes = map.floors.flatMap { it.nodes }.filterNot { it.isCorridorBend }
         val lastIndex = (nodes.size - 1).coerceAtLeast(0)
         return SelectedBuilding(
             map = map,

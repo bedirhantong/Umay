@@ -19,6 +19,7 @@ firebaseBom = "34.19.0"
 ksp = "2.3.12"
 hilt = "2.60.1"
 androidxHilt = "1.3.0"
+arcore = "1.56.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -63,6 +64,11 @@ mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition"
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+# Camera-based survey only (motion tracking + depth for the wall map). The client library
+# is Apache-2.0; it talks to the "Google Play Services for AR" app, which is installed on
+# demand. Declared optional in the manifest: phones without it survey by footsteps.
+# 1.56.0's native libraries are 16 KB page aligned.
+google-ar-core = { group = "com.google.ar", name = "core", version.ref = "arcore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

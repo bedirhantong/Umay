@@ -191,6 +191,9 @@
     <string name="say_walk_straight">%1$s yönünde yaklaşık %2$s ilerle.</string>
     <string name="say_walk_then_right">%1$s yönünde yaklaşık %2$s ilerle, sonra sağa dön.</string>
     <string name="say_walk_then_left">%1$s yönünde yaklaşık %2$s ilerle, sonra sola dön.</string>
+    <string name="say_walk_ahead">Yaklaşık %1$s düz ilerle.</string>
+    <string name="say_walk_ahead_then_right">Yaklaşık %1$s ilerle, sonra sağa dön.</string>
+    <string name="say_walk_ahead_then_left">Yaklaşık %1$s ilerle, sonra sola dön.</string>
     <string name="say_approach_destination">Hedefe yaklaşık %1$s kaldı.</string>
     <string name="say_floor_stairs_up">Merdivenle yukarı çık: %1$s, %2$s.</string>
     <string name="say_floor_stairs_down">Merdivenle aşağı in: %1$s, %2$s.</string>
@@ -238,6 +241,39 @@
     <string name="survey_clear">Kaydı sil ve baştan başla</string>
     <string name="survey_recording">Kaydediliyor…</string>
     <string name="survey_recording_stats">%1$s · %2$s · %3$s</string>
+    <string name="survey_walked_meters">%1$d m yol</string>
+
+    <!-- Camera survey (ARCore): the path from motion tracking, walls from depth. -->
+    <string name="survey_mode_title">Yolu nasıl ölçelim?</string>
+    <string name="survey_mode_camera">Kamerayla</string>
+    <string name="survey_mode_footsteps">Adım sayarak</string>
+    <string name="survey_mode_camera_body">Telefonu göğüs hizasında, arka kamerası önüne bakacak şekilde tutarak yürü. Yol santimetre düzeyinde ölçülür ve telefon destekliyorsa duvarlar da robot süpürge haritası gibi çizilir. Kamera görüntüsü kaydedilmez.</string>
+    <string name="survey_mode_footsteps_body">Telefon cebinde ya da elinde olabilir; konum adımlardan hesaplanır.</string>
+    <string name="survey_mode_checking">Kamerayla haritalama desteği kontrol ediliyor…</string>
+    <string name="survey_mode_needs_install">Kamerayla haritalamak için "Google Play Hizmetleri (AR)" uygulaması gerekiyor.</string>
+    <string name="survey_mode_install">Yükle</string>
+    <string name="survey_mode_install_failed">Yükleme yapılamadı. Adım sayarak haritalayabilirsin.</string>
+    <string name="survey_mode_unsupported">Bu telefon kamerayla haritalamayı desteklemiyor; yol adım sayarak ölçülecek.</string>
+    <string name="survey_camera_permission_denied">Kamera izni verilmedi. Kamerayla haritalamak için izin ver ya da adım sayarak haritala.</string>
+    <string name="survey_camera_starting">Kamera başlatılıyor… Telefonu yavaşça biraz sağa sola çevir.</string>
+    <string name="survey_camera_tracking">Kamera konumu izliyor.</string>
+    <string name="survey_camera_tracking_no_walls">Kamera konumu izliyor. Bu telefon derinlik ölçemediği için duvarlar çizilmiyor, yalnızca yol ölçülüyor.</string>
+    <string name="survey_camera_hold_hint">Kamerayı kapatma, telefonu göğüs hizasında tut. Duvarlar, kameranın baktığı yerde çizilir.</string>
+    <string name="survey_camera_lost">Kamera konumu kaybetti: %1$s Bu sırada adımların sayılıyor.</string>
+    <string name="survey_camera_lost_spoken">Kamera konumu kaybetti. %1$s</string>
+    <string name="survey_camera_back">Kamera konumu yeniden buldu.</string>
+    <string name="survey_camera_problem_light">ortam çok karanlık, daha aydınlık bir yere geç.</string>
+    <string name="survey_camera_problem_motion">telefon çok hızlı hareket ediyor, daha yavaş yürü.</string>
+    <string name="survey_camera_problem_features">kamera ayırt edici bir şey görmüyor, düz bir duvara değil koridora doğru tut.</string>
+    <string name="survey_camera_problem_camera">kamera başka bir uygulama tarafından kullanılıyor.</string>
+    <string name="survey_camera_problem_other">telefonu sabit tutup etrafa yavaşça bak.</string>
+    <string name="survey_camera_failed_not_installed">Kamera başlatılamadı: "Google Play Hizmetleri (AR)" yüklü değil ya da eski.</string>
+    <string name="survey_camera_failed_unsupported">Kamera başlatılamadı: bu telefon kamerayla haritalamayı desteklemiyor.</string>
+    <string name="survey_camera_failed_permission">Kamera başlatılamadı: kamera izni yok.</string>
+    <string name="survey_camera_failed_in_use">Kamera başlatılamadı: kamera başka bir yerde kullanılıyor (açık bir yönlendirme olabilir).</string>
+    <string name="survey_camera_failed_other">Kamera beklenmedik şekilde durdu.</string>
+    <string name="survey_camera_failed_hint">Kaydı durdurup buraya kadar ölçüleni haritaya kaydedebilirsin. Devamını adım sayarak yeni bir kayıtla haritalayabilirsin.</string>
+    <string name="survey_preview_legend_walls">⬛ duvar   ▫️ görülen zemin</string>
     <string name="survey_floor_down">Bir alt kat</string>
     <string name="survey_floor_up">Bir üst kat</string>
     <string name="survey_floor_hint">Merdiven/asansörden önce güncelle</string>
@@ -372,6 +408,10 @@
     <plurals name="import_problem_dangling_transitions">
         <item quantity="one">%1$d kat geçişi var olmayan bir noktayı gösteriyor</item>
         <item quantity="other">%1$d kat geçişi var olmayan bir noktayı gösteriyor</item>
+    </plurals>
+    <plurals name="import_problem_invalid_wall_map">
+        <item quantity="one">%1$d katın duvar haritası bozuk</item>
+        <item quantity="other">%1$d katın duvar haritası bozuk</item>
     </plurals>
 
     <!-- Settings (Ayarlar) -->

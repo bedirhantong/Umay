@@ -88,7 +88,7 @@ import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.coremodel.MapNode
-import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.isPlace
 import com.appvalence.umay.files.rememberMapFilePicker
 import com.appvalence.umay.survey.round1
 import kotlin.math.roundToInt
@@ -774,7 +774,7 @@ private fun GroundTruthControls(session: NavigationSession, currentFloorIndex: I
         val nodes = remember(buildingMap, currentFloorIndex) {
             buildingMap.floors
                 .sortedBy { if (it.floorIndex == currentFloorIndex) Int.MIN_VALUE else it.floorIndex }
-                .flatMap { floor -> floor.nodes.filter { it.type != NodeType.BLE_ANCHOR }.sortedBy { it.name } }
+                .flatMap { floor -> floor.nodes.filter { it.isPlace }.sortedBy { it.name } }
         }
         AlertDialog(
             onDismissRequest = { choosing = false },

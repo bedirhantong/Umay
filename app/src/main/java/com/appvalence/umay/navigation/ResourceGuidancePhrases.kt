@@ -35,6 +35,12 @@ class ResourceGuidancePhrases(context: Context) : GuidancePhrases {
         TurnDirection.LEFT -> resources.getString(R.string.say_walk_then_left, placeName, meters(distanceMeters))
     }
 
+    override fun walkAhead(distanceMeters: Double, thenTurn: TurnDirection?): String = when (thenTurn) {
+        null -> resources.getString(R.string.say_walk_ahead, meters(distanceMeters))
+        TurnDirection.RIGHT -> resources.getString(R.string.say_walk_ahead_then_right, meters(distanceMeters))
+        TurnDirection.LEFT -> resources.getString(R.string.say_walk_ahead_then_left, meters(distanceMeters))
+    }
+
     override fun approachDestination(distanceMeters: Double): String =
         resources.getString(R.string.say_approach_destination, meters(distanceMeters))
 

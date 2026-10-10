@@ -1,5 +1,6 @@
 package com.appvalence.umay.testing
 
+import android.app.Activity
 import com.appvalence.umay.cloud.ConnectivityMonitor
 import com.appvalence.umay.cloud.PublicBuildingSummary
 import com.appvalence.umay.cloud.RemoteBuildingMapRepository
@@ -30,6 +31,12 @@ import com.appvalence.umay.positioning.ble.ScanTarget
 import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.storage.BuildingMapStore
 import com.appvalence.umay.survey.SurveyAnnouncer
+import com.appvalence.umay.survey.ar.ArAvailability
+import com.appvalence.umay.survey.ar.ArCameraStatus
+import com.appvalence.umay.survey.ar.ArFrameSample
+import com.appvalence.umay.survey.ar.ArInstallResult
+import com.appvalence.umay.survey.ar.ArSurveyCamera
+import com.appvalence.umay.survey.ar.ArTrackingProblem
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -167,8 +174,39 @@ class FakeBeaconScanner : BeaconScanner {
 
 class FakeSurveyAnnouncer : SurveyAnnouncer {
     val floors = mutableListOf<Int>()
+    val cameraLosses = mutableListOf<ArTrackingProblem>()
+    var cameraBacks = 0
     override fun floorChanged(floor: Int) {
         floors += floor
+    }
+    override fun cameraLost(problem: ArTrackingProblem) {
+        cameraLosses += problem
+    }
+    override fun cameraBack() {
+        cameraBacks++
+    }
+}
+
+class FakeArSurveyCamera(availability: ArAvailability = ArAvailability.READY) : ArSurveyCamera {
+    override val availability = MutableStateFlow(availability)
+    override val supportsDepth = MutableStateFlow<Boolean?>(null)
+    override val status = MutableStateFlow<ArCameraStatus>(ArCameraStatus.Off)
+    override val frames = MutableSharedFlow<ArFrameSample>(extraBufferCapacity = 64)
+    var resumed = false
+    var closed = 0
+    var installResult = ArInstallResult.INSTALLED
+
+    override fun checkAvailability() = Unit
+    override fun requestInstall(activity: Activity, userRequested: Boolean) = installResult
+    override fun resume() {
+        resumed = true
+    }
+    override fun pause() {
+        resumed = false
+    }
+    override fun close() {
+        resumed = false
+        closed++
     }
 }
 

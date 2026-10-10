@@ -24,6 +24,9 @@ interface GuidancePhrases {
     /** Toward a named place, optionally turning once there. */
     fun walkToward(placeName: String, distanceMeters: Double, thenTurn: TurnDirection?): String
 
+    /** Toward a node nobody named — a bend in the corridor a camera survey added — optionally turning there. */
+    fun walkAhead(distanceMeters: Double, thenTurn: TurnDirection?): String
+
     /** The final leg, to the destination itself. */
     fun approachDestination(distanceMeters: Double): String
 

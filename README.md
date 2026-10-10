@@ -42,6 +42,15 @@ Bir binanın haritası bir kez, **Beacon Tarayıcı** ekranıyla binada yürüye
 merdivenler, asansörler ve rampalar işaretlenir. Haritalar `.umay.json`
 dosyası olarak cihazlar arasında dışa ve içe aktarılabilir.
 
+Haritayı çıkaran kişinin telefonu ARCore'u destekliyorsa harita **kamerayla**
+çıkarılabilir; robot süpürgelerin evi haritalamasına benzer. Telefon göğüs
+hizasında, kamera önüne bakarken yürünür: yürünen yol adım saymak yerine
+kameranın hareket takibinden santimetre düzeyinde ölçülür, köşeler haritaya
+kendiliğinden eklenir. Telefon derinlik ölçebiliyorsa duvarlar da ölçülür ve
+yürüdükçe ekranda 2D bir kat planı oluşur; bu plan haritayla birlikte
+kaydedilir ve yönlendirme ekranında gösterilir. Kamera görüntüsü hiçbir yere
+kaydedilmez. Yönlendirilen kişinin telefonunda kamera ya da ARCore gerekmez.
+
 Telefonda basınç sensörü (barometre) varsa kat değişimi merdivende de
 asansörde de hava basıncından kendiliğinden algılanır. Yoksa merdivende
 adımlardan anlaşılır, asansörde bir düğmeyle onaylanır.

@@ -85,6 +85,8 @@ private fun rejectionText(reason: ImportRejection): String {
                     is MapProblem.DanglingEdges -> resources.getQuantityString(R.plurals.import_problem_dangling_edges, problem.count, problem.count)
                     is MapProblem.DanglingTransitions ->
                         resources.getQuantityString(R.plurals.import_problem_dangling_transitions, problem.count, problem.count)
+                    is MapProblem.InvalidWallMap ->
+                        resources.getQuantityString(R.plurals.import_problem_invalid_wall_map, problem.floorCount, problem.floorCount)
                 }
             },
         )

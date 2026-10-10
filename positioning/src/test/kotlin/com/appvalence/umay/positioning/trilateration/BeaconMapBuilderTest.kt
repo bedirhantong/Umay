@@ -1,6 +1,8 @@
 package com.appvalence.umay.positioning.trilateration
 
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.Position
+import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -160,5 +162,40 @@ class BeaconMapBuilderTest {
         val map = BeaconMapBuilder.buildFromWaypoints("test-building", waypoints)
 
         assertTrue(map.floorTransitions.isEmpty())
+    }
+
+    private fun walked(vararg points: Pair<Double, Double>, floor: Int = 0) =
+        points.mapIndexed { i, (x, y) -> Position(x, y, floor, 0.0, 0.1, PositionSource.MAP_MATCHED, i.toLong()) }
+
+    @Test
+    fun `a camera-surveyed walk round a corner adds the corner as an unnamed corridor node`() {
+        // Tagged at the start and after turning the corner; the walk between them is an L.
+        val trajectory = walked(0.0 to 0.0, 0.0 to 5.0, 0.0 to 10.0, 5.0 to 10.0, 10.0 to 10.0)
+        val waypoints = listOf(
+            TaggedWaypoint("Giriş", 0.0, 0.0, 0, emptyList(), trajectoryIndex = 1),
+            TaggedWaypoint("Oda", 10.0, 10.0, 0, emptyList(), trajectoryIndex = 5),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints, trajectory = trajectory).floors.single()
+
+        val corner = floor.nodes.single { it.type == NodeType.CORRIDOR }
+        assertEquals(0.0, corner.x, 1e-9)
+        assertEquals(10.0, corner.y, 1e-9)
+        assertEquals(2, floor.edges.size)
+        assertEquals(20.0, floor.edges.sumOf { it.distanceMeters }, 1e-9, "the edges follow the walk, not the diagonal")
+    }
+
+    @Test
+    fun `waypoints without a trajectory index keep their straight edges`() {
+        val trajectory = walked(0.0 to 0.0, 0.0 to 10.0, 10.0 to 10.0)
+        val waypoints = listOf(
+            TaggedWaypoint("Giriş", 0.0, 0.0, 0, emptyList()),
+            TaggedWaypoint("Oda", 10.0, 10.0, 0, emptyList()),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints, trajectory = trajectory).floors.single()
+
+        assertTrue(floor.nodes.none { it.type == NodeType.CORRIDOR })
+        assertEquals(1, floor.edges.size)
     }
 }

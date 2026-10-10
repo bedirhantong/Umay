@@ -33,6 +33,8 @@ import com.appvalence.umay.storage.BuildingMapStorage
 import com.appvalence.umay.storage.BuildingMapStore
 import com.appvalence.umay.survey.ResourceSurveyAnnouncer
 import com.appvalence.umay.survey.SurveyAnnouncer
+import com.appvalence.umay.survey.ar.ArCoreSurveyCamera
+import com.appvalence.umay.survey.ar.ArSurveyCamera
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -55,6 +57,11 @@ object AppModule {
     @Provides
     @DefaultDispatcher
     fun defaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
+
+    // A new one-at-a-time slice per injection: each user gets its own serial lane.
+    @Provides
+    @SerialDispatcher
+    fun serialDispatcher(): CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
 
     @Provides
     @Singleton
@@ -125,4 +132,7 @@ abstract class BindingsModule {
 
     @Binds
     abstract fun surveyAnnouncer(impl: ResourceSurveyAnnouncer): SurveyAnnouncer
+
+    @Binds
+    abstract fun arSurveyCamera(impl: ArCoreSurveyCamera): ArSurveyCamera
 }

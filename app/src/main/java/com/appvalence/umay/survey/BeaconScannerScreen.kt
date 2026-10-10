@@ -1,6 +1,9 @@
 package com.appvalence.umay.survey
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.ClipData
 import android.content.pm.PackageManager
 import android.os.Build
@@ -19,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -26,6 +30,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
@@ -44,6 +49,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,23 +62,31 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.appvalence.umay.R
 import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.common.countText
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.ble.BleScanFailure
 import com.appvalence.umay.positioning.ble.BleScanState
 import com.appvalence.umay.positioning.trilateration.BeaconSurveySolver
+import com.appvalence.umay.survey.ar.ArAvailability
+import com.appvalence.umay.survey.ar.ArCameraFailure
+import com.appvalence.umay.survey.ar.ArCameraStatus
+import com.appvalence.umay.survey.ar.ArInstallResult
 import kotlinx.coroutines.launch
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 private val REQUIRED_BLE_PERMISSIONS = buildList {
@@ -147,6 +161,51 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
 
     val survey by viewModel.survey.collectAsStateWithLifecycle()
     val save by viewModel.save.collectAsStateWithLifecycle()
+    val cameraAvailability by viewModel.cameraAvailability.collectAsStateWithLifecycle()
+    val cameraMeasuresWalls by viewModel.cameraMeasuresWalls.collectAsStateWithLifecycle()
+
+    // The camera may only run while this screen is actually shown.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.setScreenVisible(true)
+        onPauseOrDispose { viewModel.setScreenVisible(false) }
+    }
+    // Camera tracking stops when the screen sleeps; a camera walk keeps it awake.
+    val keepAwake = survey.isRecording && survey.mode == SurveyMode.CAMERA
+    val view = LocalView.current
+    DisposableEffect(view, keepAwake) {
+        view.keepScreenOn = keepAwake
+        onDispose { view.keepScreenOn = false }
+    }
+
+    // A new walk picks its mode; a resumed one keeps the mode it was started with.
+    val newWalk = survey.trajectory.isEmpty() && survey.taggedWaypoints.isEmpty()
+    var modeChoice by rememberSaveable { mutableStateOf<SurveyMode?>(null) }
+    val walkMode = when {
+        !newWalk -> survey.mode
+        cameraAvailability != ArAvailability.READY -> SurveyMode.FOOTSTEPS
+        else -> modeChoice ?: SurveyMode.CAMERA
+    }
+    var cameraDenied by rememberSaveable { mutableStateOf(false) }
+    var installFailed by rememberSaveable { mutableStateOf(false) }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        cameraDenied = !granted
+        if (granted) viewModel.startRecording(SurveyMode.CAMERA)
+    }
+    val startRecording = {
+        if (walkMode == SurveyMode.CAMERA &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+        ) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        } else {
+            viewModel.startRecording(walkMode)
+        }
+    }
+    val walkedMeters = remember(survey.trajectory) { walkedMeters(survey.trajectory) }
+    val progressText = if (walkMode == SurveyMode.CAMERA) {
+        stringResource(R.string.survey_walked_meters, walkedMeters.roundToInt())
+    } else {
+        countText(R.plurals.count_steps, survey.trajectory.size)
+    }
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     var showOnlyIBeacon by rememberSaveable { mutableStateOf(true) }
@@ -172,18 +231,40 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
             RecordingCard(
                 isRecording = survey.isRecording,
                 trajectoryPointCount = survey.trajectory.size,
+                progressText = progressText,
                 rawReadingCount = survey.rawReadingCount,
                 taggedWaypointCount = survey.taggedWaypoints.size,
                 currentFloor = survey.currentFloor,
-                strideCalibrated = viewModel.strideCalibrated,
+                // A camera walk is measured in metres directly; the stride doesn't matter.
+                strideCalibrated = viewModel.strideCalibrated || walkMode == SurveyMode.CAMERA,
                 autoFloorDetection = viewModel.hasBarometer,
                 lastAutoFloorChange = survey.lastAutoFloor?.let {
                     stringResource(R.string.survey_floor_auto, stringResource(R.string.common_floor, it))
                 },
-                onStart = viewModel::startRecording,
+                onStart = startRecording,
                 onStop = viewModel::stopRecording,
                 onFloorChange = viewModel::changeFloor,
                 onClear = viewModel::clear,
+                startOptions = {
+                    if (newWalk) {
+                        SurveyModeSection(
+                            availability = cameraAvailability,
+                            selected = walkMode,
+                            onSelect = { modeChoice = it },
+                            onInstall = {
+                                val activity = context.findActivity()
+                                installFailed = activity == null || viewModel.installCameraSupport(activity).let {
+                                    it == ArInstallResult.FAILED || it == ArInstallResult.DECLINED
+                                }
+                            },
+                            cameraDenied = cameraDenied,
+                            installFailed = installFailed,
+                        )
+                    }
+                },
+                recordingDetails = {
+                    if (survey.mode == SurveyMode.CAMERA) CameraStatusSection(survey.cameraStatus, cameraMeasuresWalls)
+                },
             )
         }
 
@@ -198,7 +279,14 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
         }
 
         item {
-            SurveyMapCanvas(trajectory = floorTrajectory, results = floorResults, waypoints = floorWaypoints)
+            SurveyMapCanvas(
+                trajectory = floorTrajectory,
+                results = floorResults,
+                waypoints = floorWaypoints,
+                wallMap = survey.wallMaps[survey.currentFloor],
+                livePosition = survey.livePosition?.takeIf { it.floor == survey.currentFloor },
+                height = if (survey.mode == SurveyMode.CAMERA) 360.dp else 240.dp,
+            )
         }
 
         if (survey.solving) {
@@ -288,6 +376,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
 private fun RecordingCard(
     isRecording: Boolean,
     trajectoryPointCount: Int,
+    progressText: String,
     rawReadingCount: Int,
     taggedWaypointCount: Int,
     currentFloor: Int,
@@ -298,6 +387,8 @@ private fun RecordingCard(
     onStop: () -> Unit,
     onFloorChange: (Int) -> Unit,
     onClear: () -> Unit,
+    startOptions: @Composable () -> Unit,
+    recordingDetails: @Composable () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -315,6 +406,7 @@ private fun RecordingCard(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                startOptions()
                 if (!strideCalibrated) {
                     Text(
                         text = stringResource(R.string.survey_calibrate_hint),
@@ -327,7 +419,7 @@ private fun RecordingCard(
                     Text(
                         text = stringResource(
                             R.string.survey_unfinished,
-                            countText(R.plurals.count_steps, trajectoryPointCount),
+                            progressText,
                             countText(R.plurals.count_named_places, taggedWaypointCount),
                         ),
                         style = MaterialTheme.typography.bodySmall,
@@ -362,13 +454,14 @@ private fun RecordingCard(
                 Text(
                     text = stringResource(
                         R.string.survey_recording_stats,
-                        countText(R.plurals.count_steps, trajectoryPointCount),
+                        progressText,
                         countText(R.plurals.count_beacon_readings, rawReadingCount),
                         countText(R.plurals.count_named_places, taggedWaypointCount),
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                recordingDetails()
                 Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(text = stringResource(R.string.common_floor, currentFloor), style = MaterialTheme.typography.bodyMedium)
                     // No explicit size here: IconButton's Material3 default already
@@ -407,6 +500,110 @@ private fun RecordingCard(
             }
         }
     }
+}
+
+@Composable
+private fun SurveyModeSection(
+    availability: ArAvailability,
+    selected: SurveyMode,
+    onSelect: (SurveyMode) -> Unit,
+    onInstall: () -> Unit,
+    cameraDenied: Boolean,
+    installFailed: Boolean,
+) {
+    Column(modifier = Modifier.padding(top = 12.dp)) {
+        Text(text = stringResource(R.string.survey_mode_title), style = MaterialTheme.typography.titleSmall)
+        Row(modifier = Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = selected == SurveyMode.CAMERA,
+                enabled = availability == ArAvailability.READY,
+                onClick = { onSelect(SurveyMode.CAMERA) },
+                label = { Text(stringResource(R.string.survey_mode_camera)) },
+                leadingIcon = { Icon(Icons.Filled.PhotoCamera, contentDescription = null) },
+            )
+            FilterChip(
+                selected = selected == SurveyMode.FOOTSTEPS,
+                onClick = { onSelect(SurveyMode.FOOTSTEPS) },
+                label = { Text(stringResource(R.string.survey_mode_footsteps)) },
+                leadingIcon = { Icon(Icons.AutoMirrored.Filled.DirectionsWalk, contentDescription = null) },
+            )
+        }
+        val explanation = when (availability) {
+            ArAvailability.READY -> if (selected == SurveyMode.CAMERA) R.string.survey_mode_camera_body else R.string.survey_mode_footsteps_body
+            ArAvailability.CHECKING -> R.string.survey_mode_checking
+            ArAvailability.NEEDS_INSTALL -> R.string.survey_mode_needs_install
+            ArAvailability.UNSUPPORTED -> R.string.survey_mode_unsupported
+        }
+        Text(
+            text = stringResource(explanation),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (availability == ArAvailability.NEEDS_INSTALL) {
+            TextButton(onClick = onInstall) { Text(stringResource(R.string.survey_mode_install)) }
+            if (installFailed) {
+                Text(
+                    text = stringResource(R.string.survey_mode_install_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        if (cameraDenied && selected == SurveyMode.CAMERA) {
+            Text(
+                text = stringResource(R.string.survey_camera_permission_denied),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+/** What the camera is doing, and what to do when it can't track (a lasting loss is also spoken, see SurveyAnnouncer). */
+@Composable
+private fun CameraStatusSection(status: ArCameraStatus, measuresWalls: Boolean?) {
+    val (text, isProblem) = when (status) {
+        ArCameraStatus.Off, ArCameraStatus.Starting -> stringResource(R.string.survey_camera_starting) to false
+        ArCameraStatus.Tracking ->
+            stringResource(if (measuresWalls == false) R.string.survey_camera_tracking_no_walls else R.string.survey_camera_tracking) to false
+        is ArCameraStatus.Lost -> stringResource(R.string.survey_camera_lost, stringResource(trackingProblemText(status.problem))) to true
+        is ArCameraStatus.Failed -> stringResource(
+            when (status.failure) {
+                ArCameraFailure.NOT_INSTALLED -> R.string.survey_camera_failed_not_installed
+                ArCameraFailure.UNSUPPORTED -> R.string.survey_camera_failed_unsupported
+                ArCameraFailure.NO_PERMISSION -> R.string.survey_camera_failed_permission
+                ArCameraFailure.CAMERA_IN_USE -> R.string.survey_camera_failed_in_use
+                ArCameraFailure.OTHER -> R.string.survey_camera_failed_other
+            },
+        ) + " " + stringResource(R.string.survey_camera_failed_hint) to true
+    }
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isProblem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
+        if (status == ArCameraStatus.Tracking) {
+            Text(
+                text = stringResource(R.string.survey_camera_hold_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
+/** Distance along the path, floor by floor — a floor change isn't a stretch of corridor. */
+private fun walkedMeters(trajectory: List<Position>): Double =
+    trajectory.zipWithNext().sumOf { (a, b) -> if (a.floor == b.floor) hypot(b.x - a.x, b.y - a.y) else 0.0 }
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 // The types worth offering at tagging time — plain WAYPOINT is the default and not

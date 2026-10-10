@@ -95,6 +95,7 @@ dependencies {
     implementation(project(":cloud"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.camera.view)
+    implementation(libs.google.ar.core)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

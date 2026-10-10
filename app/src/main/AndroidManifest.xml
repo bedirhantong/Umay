@@ -32,6 +32,12 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Umay">
+        <!-- The camera survey uses ARCore when the phone has it; nothing else does, and
+             surveying by footsteps works without it, so it's never required to install. -->
+        <meta-data
+            android:name="com.google.ar.core"
+            android:value="optional" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

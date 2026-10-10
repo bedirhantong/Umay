@@ -21,6 +21,19 @@ data class MapNode(
     val fingerprint: List<RadioFingerprint> = emptyList(),
 )
 
+/** Nobody named this node (its [MapNode.name] is just its id) — like the corridor bends a camera survey adds. */
+val MapNode.isUnnamed: Boolean get() = name == id
+
+/**
+ * Whether this node is a place a person would pick or be told about — not a
+ * beacon's position or an unnamed bend in a corridor that only exists so the
+ * graph follows the walked path. Named corridor nodes in hand-made maps stay places.
+ */
+val MapNode.isPlace: Boolean get() = type != NodeType.BLE_ANCHOR && !isCorridorBend
+
+/** An unnamed corridor node: a bend a camera survey added to the graph, never something to pick or announce. */
+val MapNode.isCorridorBend: Boolean get() = type == NodeType.CORRIDOR && isUnnamed
+
 @Serializable
 data class MapEdge(
     val fromId: String,
@@ -34,6 +47,9 @@ data class FloorMap(
     val floorIndex: Int,
     val nodes: List<MapNode>,
     val edges: List<MapEdge>,
+    // The camera-measured wall map of this floor, when it was surveyed with one
+    // (null for maps recorded by footsteps alone, and every map saved before this).
+    val occupancy: OccupancyRaster? = null,
 )
 
 // A stairs/elevator crossing between two nodes on different floors — the only way

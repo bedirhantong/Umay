@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -17,8 +18,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
+import com.appvalence.umay.common.drawWallLayer
+import com.appvalence.umay.common.rememberWallMapImage
+import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.trilateration.BeaconSurveyResult
@@ -32,6 +37,11 @@ import kotlin.math.min
  * inputs are already floor-filtered by the caller — this view has no opinion
  * about floors, it just draws points.
  *
+ * In a camera survey, the [wallMap] measured so far is drawn underneath —
+ * walls and the floor seen between them, filling in as the surveyor walks,
+ * like a robot vacuum's map — and [livePosition] is where the camera puts
+ * the phone right now.
+ *
  * Coordinates are auto-fit to the canvas: whatever (x, y) range the data
  * currently spans is scaled to fill the available space, so the drawing
  * stays legible whether the survey covers a small room or a long corridor.
@@ -42,10 +52,18 @@ fun SurveyMapCanvas(
     results: List<BeaconSurveyResult>,
     modifier: Modifier = Modifier,
     waypoints: List<TaggedWaypoint> = emptyList(),
+    wallMap: OccupancyRaster? = null,
+    livePosition: Position? = null,
+    height: Dp = 240.dp,
 ) {
+    val wallImage by rememberWallMapImage(
+        raster = wallMap,
+        seenFloorColor = MaterialTheme.colorScheme.surfaceVariant,
+        wallColor = MaterialTheme.colorScheme.onSurface,
+    )
     Column(modifier = modifier) {
         Text(text = stringResource(R.string.survey_preview_title), style = MaterialTheme.typography.titleSmall)
-        if (trajectory.isEmpty() && results.isEmpty() && waypoints.isEmpty()) {
+        if (trajectory.isEmpty() && results.isEmpty() && waypoints.isEmpty() && wallMap == null) {
             Text(
                 text = stringResource(R.string.survey_preview_empty),
                 style = MaterialTheme.typography.bodySmall,
@@ -64,11 +82,15 @@ fun SurveyMapCanvas(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
+                .height(height)
                 .padding(top = 4.dp),
         ) {
-            val allX = trajectory.map { it.x } + results.map { it.x } + waypoints.map { it.x }
-            val allY = trajectory.map { it.y } + results.map { it.y } + waypoints.map { it.y }
+            val walls = wallImage
+            val wallXs = walls?.let { listOf(it.originX, it.originX + it.widthMeters) }.orEmpty()
+            val wallYs = walls?.let { listOf(it.originY, it.originY + it.heightMeters) }.orEmpty()
+            val allX = trajectory.map { it.x } + results.map { it.x } + waypoints.map { it.x } + wallXs + listOfNotNull(livePosition?.x)
+            val allY = trajectory.map { it.y } + results.map { it.y } + waypoints.map { it.y } + wallYs + listOfNotNull(livePosition?.y)
+            if (allX.isEmpty()) return@Canvas
             val minX = allX.min()
             val maxX = allX.max()
             val minY = allY.min()
@@ -89,6 +111,12 @@ fun SurveyMapCanvas(
                 // coordinate convention (see BeaconScannerScreen's field notes).
                 y = (size.height / 2 - (y - centerY) * scale).toFloat(),
             )
+
+            if (walls != null) {
+                val topLeft = toOffset(walls.originX, walls.originY + walls.heightMeters)
+                drawWallLayer(walls.seenFloor, walls, topLeft, scale.toFloat())
+                drawWallLayer(walls.walls, walls, topLeft, scale.toFloat())
+            }
 
             if (trajectory.size >= 2) {
                 val path = Path().apply {
@@ -117,7 +145,7 @@ fun SurveyMapCanvas(
                 )
             }
 
-            trajectory.lastOrNull()?.let { last ->
+            (livePosition ?: trajectory.lastOrNull())?.let { last ->
                 drawCircle(color = CURRENT_POSITION_COLOR, radius = CURRENT_POSITION_RADIUS_PX, center = toOffset(last.x, last.y))
             }
         }
@@ -126,6 +154,9 @@ fun SurveyMapCanvas(
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 4.dp),
         )
+        if (wallMap != null) {
+            Text(text = stringResource(R.string.survey_preview_legend_walls), style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

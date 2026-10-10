@@ -48,6 +48,9 @@ object BuildingMapJson {
         }
         if (danglingTransitions > 0) problems += MapProblem.DanglingTransitions(danglingTransitions)
 
+        val brokenWallMaps = map.floors.count { floor -> floor.occupancy?.let { it.cellSizeMeters <= 0.0 || it.decodeCells() == null } == true }
+        if (brokenWallMaps > 0) problems += MapProblem.InvalidWallMap(brokenWallMaps)
+
         return problems
     }
 }
@@ -59,4 +62,5 @@ sealed interface MapProblem {
     data object DuplicateFloors : MapProblem
     data class DanglingEdges(val count: Int) : MapProblem
     data class DanglingTransitions(val count: Int) : MapProblem
+    data class InvalidWallMap(val floorCount: Int) : MapProblem
 }
