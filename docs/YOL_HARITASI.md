@@ -120,6 +120,16 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   *Bitti:* kayıt sırasında uygulama zorla kapatılıp açılınca yürüyüş, isimli
   yerler ve okunan sinyaller yerinde; testle korunuyor.
 
+- [ ] **0.8 Sanal saha testi** (O). Bir binayı ve içinde yürüyen kişiyi
+  simüle eden test düzeneği: gürültülü adımlar, uzaklıkla zayıflayan ve
+  dalgalanan beacon sinyalleri, yer işaretleri. Filtre ayarlarını gerçek
+  kayıt gelmeden kabaca yapmaya ve konum doğruluğunu her değişiklikte
+  otomatik denetlemeye yarar.
+  *Bitti:* birkaç senaryoda hata eşikleri testle korunuyor.
+- [ ] **0.9 Telefonda saha kaydı özeti** (K). Dosyalar'da her kaydın
+  "Buradayım" işaretlerinden ortalama ve en kötü hatası, en kötü yerin adıyla.
+  *Bitti:* sahada kaydı göndermeden doğruluk görülebiliyor.
+
 ### Faz 1: Gizlilik ve kurum içi çalışma
 
 Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
@@ -265,6 +275,18 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   bakınca söyleniyor; kurulum kılavuzu göğüs askısı öneriyor. Göğüs askısı veya boyun askısı önerisi.
   Uygulama telefonun yanlış tutulduğunu (yere ya da tavana baktığını) sesle
   söylüyor.
+
+- [ ] **4.6 Rotadan çıkınca uyarı ve yeniden rota** (O). Konum birkaç adım
+  boyunca rotadan uzaklaşırsa ya da kullanıcı ters yöne yürürse "Rotadan
+  çıktın" denir ve bulunduğu yerden yeni rota çıkarılır.
+  *Bitti:* simülasyonda yanlış koridora sapan yürüyüşte uyarı ve yeni rota
+  geliyor; doğru yürüyüşte yanlış alarm yok.
+- [ ] **4.7 "Neredeyim?"** (K). Sesli soruya en yakın yer, iki yer
+  arasındaysa ikisi, rotadaysa sıradaki hedef ve uzaklığıyla yanıt.
+- [ ] **4.8 Merdivensiz rota** (K). Ayarlardan "Merdiven kullanma":
+  rota merdiven geçişleri yerine asansör ve rampadan çıkar; yoksa söylenir.
+- [ ] **4.9 Saat yönüyle anlatım** (K). Ayarlardan seçilebilen "saat 2
+  yönünde" anlatımı; varsayılan "sağa dön" kalır.
 
 ### Faz 5: Kurumda yayın
 
