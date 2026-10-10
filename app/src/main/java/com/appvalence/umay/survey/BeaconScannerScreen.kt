@@ -84,6 +84,7 @@ import com.appvalence.umay.positioning.trilateration.BeaconSurveySolver
 import com.appvalence.umay.survey.ar.ArAvailability
 import com.appvalence.umay.survey.ar.ArCameraFailure
 import com.appvalence.umay.survey.ar.ArCameraStatus
+import com.appvalence.umay.survey.ar.ArCoreDisclosure
 import com.appvalence.umay.survey.ar.ArInstallResult
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
@@ -540,6 +541,9 @@ private fun SurveyModeSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp),
         )
+        if (availability == ArAvailability.READY || availability == ArAvailability.NEEDS_INSTALL) {
+            ArCoreDisclosure(modifier = Modifier.padding(top = 4.dp))
+        }
         if (availability == ArAvailability.NEEDS_INSTALL) {
             TextButton(onClick = onInstall) { Text(stringResource(R.string.survey_mode_install)) }
             if (installFailed) {

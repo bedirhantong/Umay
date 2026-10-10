@@ -252,7 +252,7 @@
     <string name="survey_mode_camera_body">Telefonu göğüs hizasında, arka kamerası önüne bakacak şekilde tutarak yürü. Yol santimetre düzeyinde ölçülür ve telefon destekliyorsa duvarlar da robot süpürge haritası gibi çizilir. Kamera görüntüsü kaydedilmez.</string>
     <string name="survey_mode_footsteps_body">Telefon cebinde ya da elinde olabilir; konum adımlardan hesaplanır.</string>
     <string name="survey_mode_checking">Kamerayla haritalama desteği kontrol ediliyor…</string>
-    <string name="survey_mode_needs_install">Kamerayla haritalamak için "Google Play Hizmetleri (AR)" uygulaması gerekiyor.</string>
+    <string name="survey_mode_needs_install">Kamerayla haritalamak için \"Google Play Services for AR\" uygulaması gerekiyor.</string>
     <string name="survey_mode_install">Yükle</string>
     <string name="survey_mode_install_failed">Yükleme yapılamadı. Adım sayarak haritalayabilirsin.</string>
     <string name="survey_mode_unsupported">Bu telefon kamerayla haritalamayı desteklemiyor; yol adım sayarak ölçülecek.</string>
@@ -269,7 +269,7 @@
     <string name="survey_camera_problem_features">kamera ayırt edici bir şey görmüyor, düz bir duvara değil koridora doğru tut.</string>
     <string name="survey_camera_problem_camera">kamera başka bir uygulama tarafından kullanılıyor.</string>
     <string name="survey_camera_problem_other">telefonu sabit tutup etrafa yavaşça bak.</string>
-    <string name="survey_camera_failed_not_installed">Kamera başlatılamadı: "Google Play Hizmetleri (AR)" yüklü değil ya da eski.</string>
+    <string name="survey_camera_failed_not_installed">Kamera başlatılamadı: \"Google Play Services for AR\" yüklü değil ya da eski.</string>
     <string name="survey_camera_failed_unsupported">Kamera başlatılamadı: bu telefon kamerayla haritalamayı desteklemiyor.</string>
     <string name="survey_camera_failed_permission">Kamera başlatılamadı: kamera izni yok.</string>
     <string name="survey_camera_failed_in_use">Kamera başlatılamadı: kamera başka bir yerde kullanılıyor (açık bir yönlendirme olabilir).</string>
@@ -453,8 +453,15 @@
     <string name="settings_about_version">Umay %1$s</string>
     <string name="settings_about_license">Umay açık kaynaklıdır ve GNU Genel Kamu Lisansı sürüm 3 (GPL-3.0) ile dağıtılır: kaynak kodunu inceleyebilir, değiştirip paylaşabilirsin; paylaşılan her türev de aynı lisansla ve kaynak koduyla birlikte yayınlanmalıdır.</string>
     <string name="settings_about_source">Kaynak kodunu aç</string>
-    <string name="settings_about_third_party">Kullanılan açık kaynak bileşenler (Apache 2.0 lisanslı): AndroidX ve Jetpack Compose, CameraX, TensorFlow Lite ve EfficientDet-Lite0 modeli, kotlinx.coroutines, kotlinx.serialization.</string>
+    <string name="settings_about_third_party">Kullanılan açık kaynak bileşenler (Apache 2.0 lisanslı): AndroidX ve Jetpack Compose, CameraX, Dagger ve Hilt, TensorFlow Lite ve EfficientDet-Lite0 modeli, kotlinx.coroutines, kotlinx.serialization.</string>
+    <string name="settings_about_closed_components">Kapalı kaynak Google bileşenleri: tabela okuma için cihazda çalışan ML Kit metin tanıma ve kamerayla haritalama için ARCore.</string>
     <string name="source_code_url" translatable="false">https://github.com/bedirhantong/Umay</string>
+    <string name="arcore_service_url" translatable="false">https://play.google.com/store/apps/details?id=com.google.ar.core</string>
+    <string name="google_privacy_policy_url" translatable="false">https://policies.google.com/privacy</string>
+    <!-- Required by Google wherever ARCore is used; %1$s and %2$s become links. -->
+    <string name="arcore_disclosure">Kamerayla haritalama, Google tarafından sağlanan ve %2$s\'na tabi olan %1$s üzerinde çalışır.</string>
+    <string name="arcore_disclosure_service">Google Play Services for AR (ARCore)</string>
+    <string name="arcore_disclosure_privacy_policy">Google Gizlilik Politikası</string>
     <string name="settings_tour_title">Tanıtım</string>
     <string name="settings_tour_replay">Sesli tanıtımı yeniden dinle</string>
 
