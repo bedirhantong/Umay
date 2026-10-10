@@ -130,6 +130,7 @@ class FakeUserSettings(
     override var hapticsEnabled: Boolean = true,
     override var speechRate: Float = 1f,
     override var keepScreenOnDuringNavigation: Boolean = false,
+    override var avoidStairs: Boolean = false,
     override var onboardingCompleted: Boolean = false,
 ) : UserSettings
 

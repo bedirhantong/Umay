@@ -4,6 +4,7 @@ import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
+import com.appvalence.umay.coremodel.NodeType
 import kotlin.math.hypot
 
 /**
@@ -37,18 +38,32 @@ object AStarPathfinder {
      * optimality guarantee. The heuristic is 0 whenever the two nodes are on
      * different floors instead (still admissible, just uninformed there,
      * which is irrelevant at building scale).
+     *
+     * [avoidStairs] keeps the route off every edge that touches a
+     * [NodeType.STAIRS] place (a staircase between floors, or a few steps in a
+     * corridor) — for a walker who can't or won't take stairs. The start and
+     * goal themselves are exempt: someone standing on a landing can still
+     * leave it. Null when no step-free route exists.
      */
     fun findPathAcrossFloors(
         buildingMap: BuildingMap,
         startNodeId: String,
         goalNodeId: String,
         blockedEdges: Set<Pair<String, String>> = emptySet(),
+        avoidStairs: Boolean = false,
     ): List<MapNode>? {
         val nodes = buildingMap.floors.flatMap { it.nodes }
         val nodeFloor = buildingMap.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap()
-        val edges = buildingMap.floors.flatMap { it.edges } + buildingMap.floorTransitions.map {
-            MapEdge(fromId = it.fromNodeId, toId = it.toNodeId, accessible = true, distanceMeters = it.costMeters)
+        val stairs = if (avoidStairs) {
+            nodes.filter { it.type == NodeType.STAIRS && it.id != startNodeId && it.id != goalNodeId }.map { it.id }.toSet()
+        } else {
+            emptySet()
         }
+        val edges = (
+            buildingMap.floors.flatMap { it.edges } + buildingMap.floorTransitions.map {
+                MapEdge(fromId = it.fromNodeId, toId = it.toNodeId, accessible = true, distanceMeters = it.costMeters)
+            }
+        ).map { if (it.fromId in stairs || it.toId in stairs) it.copy(accessible = false) else it }
         return search(nodes, edges, startNodeId, goalNodeId, blockedEdges) { a, b ->
             if (nodeFloor[a.id] == nodeFloor[b.id]) hypot(a.x - b.x, a.y - b.y) else 0.0
         }

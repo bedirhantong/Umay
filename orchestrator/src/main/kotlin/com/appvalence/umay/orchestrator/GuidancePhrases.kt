@@ -46,6 +46,9 @@ interface GuidancePhrases {
 
     fun rerouted(): String
 
+    /** Stairs were to be avoided, but every route to the destination takes them. */
+    fun noStepFreeRoute(): String
+
     /** Left the route (another corridor): a new one was planned from here. */
     fun offRoute(): String
 

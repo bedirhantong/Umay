@@ -61,6 +61,9 @@ class NavigationOrchestrator(
     private val startNodeId: String,
     private val destinationNodeId: String,
     private val phrases: GuidancePhrases,
+    // The walker asked for routes without stairs (Settings): lifts and ramps only,
+    // falling back to stairs — said out loud — when the building offers nothing else.
+    private val avoidStairs: Boolean = false,
 ) {
     // Decoded once per floor that has a wall map (see WallSide).
     private val wallSides: Map<Int, WallSide> = map.floors.mapNotNull { floor -> floor.occupancy?.let { floor.floorIndex to WallSide(it) } }.toMap()
@@ -81,6 +84,8 @@ class NavigationOrchestrator(
     private var lastLegAnnouncedAtMs = 0L
     private var arrivalAnnounced = false
     private var noRouteAnnounced = false
+    private var stairsFallbackPending = false
+    private var stairsFallbackAnnounced = false
     private var pendingFloorChange: FloorChangeHint? = null
 
     // Steps taken while a STAIRS crossing is pending — there's no barometer, but a
@@ -128,8 +133,22 @@ class NavigationOrchestrator(
         // re-key this on — plan once, replan only via an obstacle-triggered reroute.
         if (hasPlannedRoute) return
         hasPlannedRoute = true
-        currentRoute = AStarPathfinder.findPathAcrossFloors(map, startNodeId, destinationNodeId, blockedEdges).orEmpty()
+        currentRoute = planRoute(startNodeId).orEmpty()
         resetRouteProgress()
+    }
+
+    /**
+     * The route from [fromNodeId] to the destination, step-free when the walker asked
+     * for that and the building has one; otherwise the ordinary route, with a one-time
+     * notice that it uses stairs.
+     */
+    private fun planRoute(fromNodeId: String): List<MapNode>? {
+        if (avoidStairs) {
+            AStarPathfinder.findPathAcrossFloors(map, fromNodeId, destinationNodeId, blockedEdges, avoidStairs = true)?.let { return it }
+        }
+        val route = AStarPathfinder.findPathAcrossFloors(map, fromNodeId, destinationNodeId, blockedEdges) ?: return null
+        if (avoidStairs && !stairsFallbackAnnounced) stairsFallbackPending = true
+        return route
     }
 
     private fun resetRouteProgress() {
@@ -150,6 +169,7 @@ class NavigationOrchestrator(
         val nodesById = floorMap?.nodes?.associateBy { it.id } ?: emptyMap()
         val alerts = mutableListOf<NavigationAlert>()
 
+        stairsFallbackNotice(position)?.let { alerts += it }
         deriveRouteGuidance(position)?.let { alerts += it }
 
         for (obstacle in obstacles) {
@@ -177,6 +197,22 @@ class NavigationOrchestrator(
             }
         }
         return alerts
+    }
+
+    // Said before the first leg, so the walker knows a staircase is coming before
+    // being sent toward it. Once per navigation: a later reroute that also needs the
+    // stairs adds nothing new.
+    private fun stairsFallbackNotice(position: Position): NavigationAlert? {
+        if (!stairsFallbackPending) return null
+        stairsFallbackPending = false
+        stairsFallbackAnnounced = true
+        return NavigationAlert(
+            id = "no-step-free-route-${position.timestampMs}",
+            priority = AlertPriority.INFO,
+            message = phrases.noStepFreeRoute(),
+            relatedObstacle = null,
+            createdAtMs = position.timestampMs,
+        )
     }
 
     private fun deriveRouteGuidance(position: Position): NavigationAlert? {
@@ -294,7 +330,7 @@ class NavigationOrchestrator(
         val nearest = map.floors.firstOrNull { it.floorIndex == position.floor }?.nodes
             ?.minByOrNull { hypot(it.x - position.x, it.y - position.y) } ?: return null
         // Already at the destination's node: nothing to replan, arrival takes it from here.
-        val replanned = AStarPathfinder.findPathAcrossFloors(map, nearest.id, destinationNodeId, blockedEdges)?.takeIf { it.size >= 2 } ?: return null
+        val replanned = planRoute(nearest.id)?.takeIf { it.size >= 2 } ?: return null
         currentRoute = replanned
         resetRouteProgress()
         // Not standing on the new route's first place: the first leg is getting back to it.
@@ -423,7 +459,7 @@ class NavigationOrchestrator(
         val nearestNode = nodesById.values.minByOrNull { hypot(it.x - position.x, it.y - position.y) } ?: return null
         // The destination may be on a different floor than this obstacle, so replanning
         // has to consider the whole building again, not just the floor it was found on.
-        val rerouted = AStarPathfinder.findPathAcrossFloors(map, nearestNode.id, destinationNodeId, blockedEdges) ?: return null
+        val rerouted = planRoute(nearestNode.id) ?: return null
         currentRoute = rerouted
         resetRouteProgress()
 

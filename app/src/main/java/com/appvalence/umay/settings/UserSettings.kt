@@ -25,6 +25,9 @@ interface UserSettings {
      */
     var keepScreenOnDuringNavigation: Boolean
 
+    /** Routes keep off stairs (lifts and ramps only) whenever the building allows it. */
+    var avoidStairs: Boolean
+
     var onboardingCompleted: Boolean
 
     /** The stride dead reckoning should use: the calibrated one when there is one. */
@@ -54,6 +57,10 @@ class SharedPreferencesUserSettings @Inject constructor(@ApplicationContext cont
         get() = preferences.getBoolean(KEY_KEEP_SCREEN_ON, false)
         set(value) = preferences.edit { putBoolean(KEY_KEEP_SCREEN_ON, value) }
 
+    override var avoidStairs: Boolean
+        get() = preferences.getBoolean(KEY_AVOID_STAIRS, false)
+        set(value) = preferences.edit { putBoolean(KEY_AVOID_STAIRS, value) }
+
     override var onboardingCompleted: Boolean
         get() = preferences.getBoolean(KEY_ONBOARDING_COMPLETED, false)
         set(value) = preferences.edit { putBoolean(KEY_ONBOARDING_COMPLETED, value) }
@@ -65,5 +72,6 @@ class SharedPreferencesUserSettings @Inject constructor(@ApplicationContext cont
         const val KEY_HAPTICS_ENABLED = "haptics_enabled"
         const val KEY_SPEECH_RATE = "speech_rate"
         const val KEY_KEEP_SCREEN_ON = "keep_screen_on_during_navigation"
+        const val KEY_AVOID_STAIRS = "avoid_stairs"
     }
 }

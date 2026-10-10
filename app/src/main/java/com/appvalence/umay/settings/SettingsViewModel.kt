@@ -19,6 +19,7 @@ data class SettingsUiState(
     val speechRate: Float,
     val hapticsEnabled: Boolean,
     val keepScreenOn: Boolean,
+    val avoidStairs: Boolean,
     /** The step-length calibration walk is showing instead of the settings list. */
     val calibrating: Boolean = false,
 )
@@ -36,6 +37,7 @@ class SettingsViewModel @Inject constructor(
             speechRate = settings.speechRate,
             hapticsEnabled = settings.hapticsEnabled,
             keepScreenOn = settings.keepScreenOnDuringNavigation,
+            avoidStairs = settings.avoidStairs,
         ),
     )
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
@@ -78,6 +80,11 @@ class SettingsViewModel @Inject constructor(
     fun setKeepScreenOn(enabled: Boolean) {
         settings.keepScreenOnDuringNavigation = enabled
         _state.update { it.copy(keepScreenOn = enabled) }
+    }
+
+    fun setAvoidStairs(enabled: Boolean) {
+        settings.avoidStairs = enabled
+        _state.update { it.copy(avoidStairs = enabled) }
     }
 
     fun playHaptic(cue: GuidanceCue) {

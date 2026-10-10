@@ -71,6 +71,8 @@ class ResourceGuidancePhrases(context: Context) : GuidancePhrases {
 
     override fun rerouted(): String = resources.getString(R.string.say_rerouted)
 
+    override fun noStepFreeRoute(): String = resources.getString(R.string.say_no_step_free_route)
+
     override fun offRoute(): String = resources.getString(R.string.say_off_route)
 
     override fun wrongWay(): String = resources.getString(R.string.say_wrong_way)

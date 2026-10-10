@@ -73,6 +73,7 @@ private object TokenPhrases : GuidancePhrases {
     override fun arrived() = "ARRIVED"
     override fun noRoute() = "NO_ROUTE"
     override fun rerouted() = "REROUTED"
+    override fun noStepFreeRoute() = "NO_STEP_FREE_ROUTE"
     override fun offRoute() = "OFF_ROUTE"
     override fun wrongWay() = "WRONG_WAY"
     override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double) =
@@ -666,6 +667,51 @@ class NavigationOrchestratorTest {
         ),
         floorTransitions = listOf(FloorTransition(fromNodeId = "B", fromFloorIndex = 0, toNodeId = "C", toFloorIndex = 1, costMeters = 15.0)),
     )
+
+    @Test
+    fun `avoiding stairs with no other way says so once and still routes over the stairs`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, floor = 0, timestampMs = 0L),
+            position(0.0, 1.0, floor = 0, timestampMs = 1_000L),
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = stairsMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+            phrases = TokenPhrases,
+            avoidStairs = true,
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(listOf("A", "B", "C", "D"), states.last().route.map { it.id })
+        assertEquals(1, feedback.emitted.count { it.message == "NO_STEP_FREE_ROUTE" })
+        // Said before the first leg, so the walker hears it before heading for the stairs.
+        assertEquals("NO_STEP_FREE_ROUTE", feedback.emitted.first().message)
+    }
+
+    @Test
+    fun `avoiding stairs says nothing extra when the route has none`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0, floor = 0, timestampMs = 0L)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = twoFloorMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+            phrases = TokenPhrases,
+            avoidStairs = true,
+        )
+
+        orchestrator.start().toList()
+
+        assertTrue(feedback.emitted.none { it.message == "NO_STEP_FREE_ROUTE" })
+    }
 
     @Test
     fun `approaching a STAIRS-tagged node gets a hazard prefix and WARNING priority`() = runTest {
