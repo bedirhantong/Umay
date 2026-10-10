@@ -143,7 +143,9 @@
     <string name="voice_query_answer_no_distance">%1$s var, ama şu an ne kadar uzakta olduğunu söyleyemiyorum.</string>
     <string name="voice_query_not_understood">Anlayamadım, farklı bir şekilde sorabilir misin?</string>
     <string name="voice_query_no_speech">Bir şey duyamadım.</string>
-    <string name="voice_query_not_available">Bu cihazda konuşarak soru sorma özelliği kullanılamıyor.</string>
+    <string name="voice_query_not_available">Bu cihazda konuşarak soru sorma kullanılamıyor: telefonda Türkçe konuşmayı internetsiz tanıyan bir hizmet yok. Sesin cihazından çıkmaması için internet üzerinden tanıma kullanılmıyor.</string>
+    <string name="voice_query_language_downloading">Türkçe konuşma tanıma paketi telefona indiriliyor. İndirme bitince tekrar sorabilirsin.</string>
+    <string name="voice_query_language_not_supported">Telefonun konuşma tanıma hizmeti Türkçeyi internetsiz tanıyamıyor. Sesin cihazından çıkmaması için internet üzerinden tanıma kullanılmıyor.</string>
     <string name="voice_query_permission_denied">Mikrofon izni verilmedi.</string>
     <string name="voice_query_error">Bir şeyler ters gitti, tekrar dener misin?</string>
     <string name="nav_progress_next">Sonraki</string>

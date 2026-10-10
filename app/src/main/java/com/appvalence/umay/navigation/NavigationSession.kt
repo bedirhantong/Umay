@@ -416,7 +416,8 @@ class NavigationSession internal constructor(
     /**
      * "Bir şey sor" — listens for a single question ("en yakın tuvalet nerede",
      * "asansör nerede") and answers it against this building's own graph
-     * ([BuildingQueryMatcher]), entirely offline. Caller must already hold
+     * ([BuildingQueryMatcher]), entirely offline: recognition is on-device only
+     * (see [SpeechToText]), so the voice never leaves the phone. Caller must already hold
      * RECORD_AUDIO; this doesn't request it. A no-op while a question is
      * already being asked.
      */
@@ -450,6 +451,8 @@ class NavigationSession internal constructor(
                     appContext.getString(
                         when (heard.reason) {
                             SpeechRecognitionFailure.NOT_AVAILABLE -> R.string.voice_query_not_available
+                            SpeechRecognitionFailure.LANGUAGE_DOWNLOADING -> R.string.voice_query_language_downloading
+                            SpeechRecognitionFailure.LANGUAGE_NOT_SUPPORTED -> R.string.voice_query_language_not_supported
                             SpeechRecognitionFailure.NO_SPEECH -> R.string.voice_query_no_speech
                             SpeechRecognitionFailure.PERMISSION_DENIED -> R.string.voice_query_permission_denied
                             SpeechRecognitionFailure.OTHER -> R.string.voice_query_error
