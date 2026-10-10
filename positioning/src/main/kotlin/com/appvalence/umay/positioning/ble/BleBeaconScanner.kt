@@ -214,6 +214,8 @@ class BleBeaconScanner(private val context: Context) : BeaconScanner {
         private const val IBEACON_PAYLOAD_LENGTH = 23
         private const val IBEACON_TRAILER_LENGTH = 5
         private val UUID_DASH_POSITIONS = setOf(4, 6, 8, 10)
-        private const val STALE_THRESHOLD_MS = 15_000L
+
+        /** How long a beacon stays in [beaconUpdates] after its last sighting. Field-log replay mirrors it. */
+        const val STALE_THRESHOLD_MS = 15_000L
     }
 }

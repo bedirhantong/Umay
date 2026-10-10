@@ -18,7 +18,8 @@ duyduğu tüm metinler kaynak dosyalarındadır, başka dillere çevrilmeye haz�
 
 ## Nasıl çalışır
 
-Bina içinde GPS çalışmaz. Konum, birbirini tamamlayan iki kaynaktan bulunur:
+Bina içinde GPS çalışmaz. Konum, birbirini tamamlayan iki kaynaktan ve
+binanın haritasından bulunur:
 
 - **Adım sayarak konum takibi (PDR):** Adımlar ivmeölçerden, yön yalnızca
   jiroskoptan alınır. Pusula (manyetometre) bilerek kullanılmaz, çünkü
@@ -26,8 +27,15 @@ Bina içinde GPS çalışmaz. Konum, birbirini tamamlayan iki kaynaktan bulunur:
   uzunluğu her kişi için ayrıca ölçülür.
 - **Bluetooth parmak izi:** Harita çıkarılırken isim verilen her noktada
   çevredeki Bluetooth işaretçilerinin (beacon) sinyal güçleri kaydedilir.
-  Yönlendirme sırasında güvenilir bir eşleşme olunca konum o noktaya
-  düzeltilir, böylece adım saymanın zamanla biriken sapması giderilir.
+  Yönlendirme sırasında güvenilir bir eşleşme olunca konum tahmini o noktaya
+  doğru çekilir, böylece adım saymanın zamanla biriken sapması giderilir.
+- **Koridorlara oturtma (parçacık filtresi):** Konum tek bir nokta olarak
+  değil, haritadaki koridorlar üzerinde yürüyen yüzlerce olası tahmin olarak
+  izlenir. Koridorun gitmediği bir yöne atılan adımla uyuşmayan tahminler
+  elenir, böylece tahmin duvarlardan geçemez ve kullanıcının yola hangi yöne
+  bakarak başladığı ilk birkaç adımdan kendiliğinden anlaşılır. Yaklaşım,
+  görme engelliler için geliştirilen açık kaynak
+  [HULOP/NavCog](https://github.com/hulop) projesininkine dayanır.
 
 Bir binanın haritası bir kez, **Beacon Tarayıcı** ekranıyla binada yürüyerek
 çıkarılır: kayıt başlatılır, geçilen yerlere isim verilir, kapılar,
@@ -43,7 +51,7 @@ adımlardan anlaşılır, asansörde bir düğmeyle onaylanır.
 | Modül | İçerik |
 |---|---|
 | `core-model` | Saf Kotlin veri modeli: bina haritaları, konumlar, uyarılar, saha kaydı olayları, JSON |
-| `positioning` | Adım algılama, adım sayarak konum takibi, Bluetooth tarama ve parmak izi eşleştirme, konum birleştirme, barometre |
+| `positioning` | Adım algılama, adım sayarak konum takibi, Bluetooth tarama ve parmak izi eşleştirme, koridor grafiği üzerinde parçacık filtresi, saha kaydını yeniden oynatma, barometre |
 | `perception` | CameraX ve TensorFlow Lite (EfficientDet-Lite0) ile insan algılama, mesafe ve yön tahmini |
 | `orchestrator` | Katlar arası A* rota bulma, adım adım yönergeler, engel uyarıları, rotayı yeniden hesaplama |
 | `feedback` | Metin okuma (ses seçimi, ses odağı yönetimi) ve titreşim desenleri |

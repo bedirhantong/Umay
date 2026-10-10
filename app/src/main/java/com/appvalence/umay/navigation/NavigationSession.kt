@@ -47,12 +47,10 @@ import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.baro.BarometricFloorChangeDetector
 import com.appvalence.umay.positioning.ble.BeaconScanTargets
 import com.appvalence.umay.positioning.ble.BleBeaconScanner
-import com.appvalence.umay.positioning.engine.FingerprintPositioningEngine
-import com.appvalence.umay.positioning.engine.PdrPositioningEngine
-import com.appvalence.umay.positioning.engine.PositionFusionEngine
+import com.appvalence.umay.positioning.engine.ParticleFilterPositioningEngine
 import com.appvalence.umay.positioning.engine.PositioningEngine
 import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
-import com.appvalence.umay.positioning.pdr.PdrIntegrator
+import com.appvalence.umay.positioning.particle.GraphParticleFilter
 import com.appvalence.umay.positioning.pdr.StepDetector
 import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
 import com.appvalence.umay.settings.UserSettings
@@ -67,6 +65,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -188,38 +187,34 @@ class NavigationSession internal constructor(
     val isRecording: Boolean get() = recorder != null
     val recordingFailed: Boolean get() = recorder?.failed == true
 
-    private val pdrEngine = allNodesById.getValue(startNodeId).let { startNode ->
-        PdrPositioningEngine(
-            stepDetector = StepDetector(appContext, stepLengthMeters),
-            startX = startNode.x,
-            startY = startNode.y,
-            floor = startFloorIndex,
-        )
-    }
+    // Walks a cloud of hypotheses along the surveyed corridors (see GraphParticleFilter):
+    // dead reckoning can't drift through walls, the starting heading is learned from the
+    // first few steps instead of assumed, and fingerprint matches (see FingerprintMatcher)
+    // reweight the cloud rather than snapping it. RSSI-to-distance trilateration stays
+    // out of it — too noisy in real buildings (see BeaconMapBuilder's field notes).
+    private val particleConfig = GraphParticleFilter.Config()
+    private val positioningEngine = ParticleFilterPositioningEngine(
+        stepEvents = StepDetector(appContext, stepLengthMeters).stepEvents(),
+        beaconReadings = scanner.beaconUpdates(),
+        map = buildingMap,
+        startNodeId = startNodeId,
+        config = particleConfig,
+    )
 
     private val orchestrator: NavigationOrchestrator = run {
-        // RSSI-to-distance trilateration is too noisy in real buildings to trust as the
-        // primary signal (see BeaconMapBuilder's field notes); instead we walk continuously
-        // via PDR and only correct against named waypoints' recorded RSSI fingerprints
-        // (see FingerprintMatcher) — the RF-engineering-standard approach for indoor radio
-        // positioning.
-        val fingerprintEngine = FingerprintPositioningEngine(
-            beaconReadings = scanner.beaconUpdates(),
-            waypoints = allNodesById.values.filter { it.fingerprint.isNotEmpty() },
-            floor = startFloorIndex,
-        )
-        val fusion = PositionFusionEngine(pdrResettable = pdrEngine)
-        val fusedPositioning = object : PositioningEngine {
-            override fun positionUpdates() = fusion.fuse(
-                fingerprintEngine.positionUpdates().onEach {
-                    _ui.update { ui -> ui.copy(fingerprintCorrections = ui.fingerprintCorrections + 1) }
-                    recorder?.record(PositionEvent.of(PositionStream.FINGERPRINT, it))
-                },
-                pdrEngine.positionUpdates().onEach { recorder?.record(PositionEvent.of(PositionStream.PDR, it)) },
-            )
+        val loggedPositioning = object : PositioningEngine {
+            override fun positionUpdates() = positioningEngine.updates()
+                .onEach { update ->
+                    update.rawPdr?.let { recorder?.record(PositionEvent.of(PositionStream.PDR, it)) }
+                    update.fingerprintFix?.let {
+                        _ui.update { ui -> ui.copy(fingerprintCorrections = ui.fingerprintCorrections + 1) }
+                        recorder?.record(PositionEvent.of(PositionStream.FINGERPRINT, it))
+                    }
+                }
+                .map { it.position }
         }
         NavigationOrchestrator(
-            positioning = fusedPositioning,
+            positioning = loggedPositioning,
             perception = detector,
             map = buildingMap,
             feedback = feedback,
@@ -310,7 +305,7 @@ class NavigationSession internal constructor(
                     // piled up (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap
                     // needed, which matters since a blind user's hands may well be full on a
                     // staircase. Elevators never set autoConfirm; those wait for the button.
-                    confirmFloorChange(hint.targetNodeId, hint.targetFloor, newState.position.headingDeg, FloorChangePhase.CONFIRMED_AUTOMATICALLY)
+                    confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_AUTOMATICALLY)
                 }
             }
         } catch (e: CancellationException) {
@@ -353,14 +348,14 @@ class NavigationSession internal constructor(
                 val current = _ui.value.state ?: return@collect
                 val hint = current.pendingFloorChange ?: return@collect
                 barometerConfirmedTargetId = hint.targetNodeId
-                confirmFloorChange(hint.targetNodeId, hint.targetFloor, current.position.headingDeg, FloorChangePhase.CONFIRMED_BY_BAROMETER)
+                confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_BY_BAROMETER)
             }
         }
     }
 
-    private fun confirmFloorChange(targetNodeId: String, targetFloor: Int, headingDeg: Double, phase: FloorChangePhase) {
-        val targetNode = allNodesById[targetNodeId] ?: return
-        pdrEngine.changeFloor(newFloor = targetFloor, x = targetNode.x, y = targetNode.y, headingDeg = headingDeg)
+    private fun confirmFloorChange(targetNodeId: String, targetFloor: Int, phase: FloorChangePhase) {
+        if (targetNodeId !in allNodesById) return
+        positioningEngine.changeFloor(targetNodeId, System.currentTimeMillis())
         recorder?.record(FloorChangeEvent(System.currentTimeMillis(), phase, targetNodeId, targetFloor))
     }
 
@@ -368,7 +363,7 @@ class NavigationSession internal constructor(
     fun confirmFloorChangeManually() {
         val current = _ui.value.state ?: return
         val hint = current.pendingFloorChange ?: return
-        confirmFloorChange(hint.targetNodeId, hint.targetFloor, current.position.headingDeg, FloorChangePhase.CONFIRMED_MANUALLY)
+        confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_MANUALLY)
     }
 
     /**
@@ -577,12 +572,22 @@ class NavigationSession internal constructor(
                 "StepDetector.STEP_FALL_THRESHOLD_MPS2" to StepDetector.STEP_FALL_THRESHOLD_MPS2,
                 "StepDetector.MIN_STEP_INTERVAL_MS" to StepDetector.MIN_STEP_INTERVAL_MS.toDouble(),
                 "StepDetector.BASELINE_TIME_CONSTANT_SECONDS" to StepDetector.BASELINE_TIME_CONSTANT_SECONDS,
-                "PdrIntegrator.DEFAULT_DRIFT_PER_STEP_METERS" to PdrIntegrator.DEFAULT_DRIFT_PER_STEP_METERS,
                 "FingerprintMatcher.MIN_SHARED_BEACONS" to FingerprintMatcher.MIN_SHARED_BEACONS.toDouble(),
                 "FingerprintMatcher.MAX_MATCH_DISTANCE" to FingerprintMatcher.MAX_MATCH_DISTANCE,
                 "FingerprintMatcher.AMBIGUITY_MARGIN" to FingerprintMatcher.AMBIGUITY_MARGIN,
                 "FingerprintMatcher.MISSING_BEACON_RSSI" to FingerprintMatcher.MISSING_BEACON_RSSI,
-                "FingerprintPositioningEngine.ASSUMED_ACCURACY_METERS" to FingerprintPositioningEngine.ASSUMED_ACCURACY_METERS,
+                "GraphParticleFilter.particleCount" to particleConfig.particleCount.toDouble(),
+                "GraphParticleFilter.stepLengthNoiseFraction" to particleConfig.stepLengthNoiseFraction,
+                "GraphParticleFilter.stepScaleSpread" to particleConfig.stepScaleSpread,
+                "GraphParticleFilter.headingNoiseDeg" to particleConfig.headingNoiseDeg,
+                "GraphParticleFilter.headingOffsetDriftDeg" to particleConfig.headingOffsetDriftDeg,
+                "GraphParticleFilter.edgeAlignmentSigmaDeg" to particleConfig.edgeAlignmentSigmaDeg,
+                "GraphParticleFilter.waitAtNodeLikelihood" to particleConfig.waitAtNodeLikelihood,
+                "GraphParticleFilter.fingerprintSigmaMeters" to particleConfig.fingerprintSigmaMeters,
+                "GraphParticleFilter.minFingerprintIntervalMs" to particleConfig.minFingerprintIntervalMs.toDouble(),
+                "GraphParticleFilter.reseedDistanceMeters" to particleConfig.reseedDistanceMeters,
+                "GraphParticleFilter.reseedFraction" to particleConfig.reseedFraction,
+                "GraphParticleFilter.MAX_TURN_AT_NODE_DEG" to GraphParticleFilter.MAX_TURN_AT_NODE_DEG,
                 "NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS" to NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS,
                 "NavigationOrchestrator.ARRIVAL_DISTANCE_METERS" to NavigationOrchestrator.ARRIVAL_DISTANCE_METERS,
                 "NavigationOrchestrator.TURN_ANGLE_THRESHOLD_DEG" to NavigationOrchestrator.TURN_ANGLE_THRESHOLD_DEG,
