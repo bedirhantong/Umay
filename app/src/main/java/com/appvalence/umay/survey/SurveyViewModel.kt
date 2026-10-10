@@ -9,6 +9,7 @@ import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.di.DefaultDispatcher
 import com.appvalence.umay.feedback.Speaker
 import com.appvalence.umay.positioning.fingerprint.RadioMapBudget
+import com.appvalence.umay.positioning.mapping.OpenSpaceLinks
 import com.appvalence.umay.positioning.mapping.WallMapBudget
 import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
 import com.appvalence.umay.settings.UserSettings
@@ -115,7 +116,8 @@ class SurveyViewModel @Inject constructor(
                 val wallMaps = WallMapBudget.fit(survey.wallMaps)
                 built.copy(
                     // Doors cut into the walls after fitting, so a coarser map still gets them.
-                    floors = built.floors.map { MapDoors.apply(it.copy(occupancy = wallMaps[it.floorIndex])) },
+                    // Then shortcuts across open space the camera saw (see OpenSpaceLinks).
+                    floors = built.floors.map { OpenSpaceLinks.add(MapDoors.apply(it.copy(occupancy = wallMaps[it.floorIndex]))) },
                     // A camera-measured map isn't steps × stride, so there's no stride to rescale by.
                     surveyStepLengthMeters = if (cameraSurvey) null else survey.stepLengthMeters ?: settings.stepLengthMeters,
                 )
