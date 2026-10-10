@@ -118,6 +118,25 @@ bile yürüyüş taslak olarak saklanır ve açılışta geri gelir.
 
 Düzenleyici, bir değişiklik bir yeri ulaşılmaz bıraktığında bunu söyler.
 
+### Yer işaretleri
+
+**Dosyalar → (bina) → Düzenle → Yer işaretlerini yazdır** her isimli yer için
+bir sayfa hazırlar: ortasında 15 cm'lik bir QR kod, altında yerin adı.
+
+- Sayfaları **gerçek boyutta** (%100, "sayfaya sığdır" kapalı) yazdırın; Umay
+  uzaklığı QR kodun 15 cm olduğunu bilerek hesaplar. Bir sayfayı cetvelle ölçün.
+- Her sayfayı adı yazan yerin duvarına, **göz hizasında** (yerden 1,3–1,6 m),
+  yürüme yönünden görülecek şekilde yapıştırın. Parlak ve kırışık olmayan kâğıt
+  ya da laminasyon kullanın.
+- Kritik yerlere öncelik verin: giriş, danışma, asansör ve merdiven önleri,
+  kavşaklar, tuvaletler.
+- Kamerası açık bir telefon işareti birkaç metreden görünce kullanıcı nerede
+  olduğunu kesin olarak öğrenir; yola çıkmadan **Kamerayla bul** da işaretten
+  başlar. İşaretlerin içinde yalnızca yerin kimliği vardır, bina ya da kişi
+  hakkında bilgi yoktur.
+- Harita yeniden çıkarılırsa yer kimlikleri değişir: işaretleri yeniden yazdırıp
+  değiştirin. Haritayı düzenleyiciyle düzeltmek kimlikleri değiştirmez.
+
 ---
 
 ## 5. Beacon'ları denetlemek
@@ -175,8 +194,14 @@ sunucusu** bölümünden sunucuya yükler; ziyaretçi telefonları oradan indiri
 - Umay'ı açıp binayı, bulunduğu yeri ve gideceği yeri seçmek. Beacon'lar
   duyulunca Umay bulunduğu yeri kendisi önerir: "Danışma yakınında gibi
   görünüyorsun, buradan mı başlıyorsun?"
-- Telefon cepteyken de yönlendirme sürer; insan uyarısı için telefonun
-  göğüs hizasında, kamerası önüne bakarak tutulması gerekir.
+- Yer işaretleri asılıysa: bulunduğu yeri bilmiyorsa **Kamerayla bul**'a
+  basıp telefonu göğüs hizasında tutarak yavaşça kendi etrafında dönmek.
+- Telefon cepteyken de yönlendirme sürer. Önündeki insan, sandalye, masa gibi
+  engellerin uyarısı ve yer işaretlerinin görülmesi için telefon göğüs
+  hizasında, kamerası önüne bakarak tutulmalı; bir göğüs askısı elleri serbest
+  bırakır. Kamera yere ya da tavana bakarsa Umay bunu söyler.
+- Telefon çok ısınırsa ya da pil azalırsa Umay kamerayı kısar ve bunu söyler;
+  yönlendirme adım ve beacon'larla sürer.
 - Telefonda internetsiz Türkçe konuşma sesi yüklü olmalı. Umay eksikse bunu
   söyler ve yükleme ekranını açar.
 - Umay bir yardımcıdır; baston ya da rehber köpeğin yerini tutmaz.
