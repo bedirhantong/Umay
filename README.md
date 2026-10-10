@@ -134,6 +134,11 @@ veri cihazdan çıkmaz.
 Her pull request'te aynı testler, lint ve debug derlemesi GitHub Actions'ta
 otomatik çalışır.
 
+## Bir binada kurulum
+
+Beacon seçimi ve yerleşimi, haritanın çıkarılması, denetlenmesi ve
+dağıtılması [docs/KURULUM.md](docs/KURULUM.md) dosyasında.
+
 ## Yol haritası
 
 Umay'ın hedefi ve oraya hangi sırayla gidileceği [docs/YOL_HARITASI.md](docs/YOL_HARITASI.md)
