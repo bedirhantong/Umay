@@ -59,5 +59,6 @@ object HapticPatterns {
         )
         GuidanceCue.REROUTED -> pattern(off(0), on(80, SOFT), off(120), on(280, MEDIUM))
         GuidanceCue.NO_ROUTE -> pattern(off(0), on(700, MEDIUM))
+        GuidanceCue.WRONG_WAY -> pattern(off(0), on(250, STRONG), off(120), on(60, STRONG), off(120), on(250, STRONG))
     }
 }

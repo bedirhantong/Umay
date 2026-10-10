@@ -91,6 +91,12 @@ class NavigationOrchestrator(
     private var pendingFloorChangeStepCount = 0
     private var lastCountedPositionTimestampMs = -1L
 
+    // Leaving the route (see RouteMonitor): judged once per position sample, said at
+    // most every OFF_ROUTE_REPEAT_MS so a walker finding their way isn't talked over.
+    private val routeMonitor = RouteMonitor()
+    private var lastMonitoredTimestampMs = -1L
+    private var lastDeviationAlertMs = Long.MIN_VALUE / 2
+
     fun start(): Flow<NavigationState> =
         combine(
             positioning.positionUpdates(),
@@ -134,6 +140,7 @@ class NavigationOrchestrator(
         pendingFloorChange = null
         pendingFloorChangeStepCount = 0
         lastCountedPositionTimestampMs = -1L
+        routeMonitor.reset()
     }
 
     private fun deriveAlerts(position: Position, obstacles: List<DetectedObstacle>, floorMap: FloorMap?): List<NavigationAlert> {
@@ -200,6 +207,7 @@ class NavigationOrchestrator(
             if (hypot(target.x - position.x, target.y - position.y) > WAYPOINT_ARRIVAL_METERS) break
             routeTargetIndex++
             lastAnnouncedLegIndex = -1 // force an immediate announcement of the new leg
+            routeMonitor.reset()
         }
 
         val target = currentRoute[routeTargetIndex]
@@ -235,6 +243,8 @@ class NavigationOrchestrator(
             }
         }
 
+        checkDeviation(position, target, targetFloor)?.let { return it }
+
         val now = position.timestampMs
         val isNewLeg = routeTargetIndex != lastAnnouncedLegIndex
         val isDueForRepeat = now - lastLegAnnouncedAtMs >= ROUTE_GUIDANCE_REPEAT_INTERVAL_MS
@@ -257,6 +267,49 @@ class NavigationOrchestrator(
     }
 
     /**
+     * Off the route: plan again from the nearest place on this floor. Walking the
+     * wrong way along it: say so. Null when neither (or said too recently).
+     */
+    private fun checkDeviation(position: Position, target: MapNode, targetFloor: Int?): NavigationAlert? {
+        if (targetFloor != position.floor || position.timestampMs == lastMonitoredTimestampMs) return null
+        lastMonitoredTimestampMs = position.timestampMs
+        val segments = currentRoute.zipWithNext()
+            .filter { (a, b) -> nodeFloor[a.id] == position.floor && nodeFloor[b.id] == position.floor }
+            .map { (a, b) -> RouteSegment(a.x, a.y, b.x, b.y) }
+        val status = routeMonitor.update(position.x, position.y, segments, target.x, target.y)
+        if (status == RouteMonitor.Status.ON_ROUTE || position.timestampMs - lastDeviationAlertMs < OFF_ROUTE_REPEAT_MS) return null
+        lastDeviationAlertMs = position.timestampMs
+        routeMonitor.reset()
+
+        if (status == RouteMonitor.Status.WRONG_WAY) {
+            return NavigationAlert(
+                id = "wrong-way-${position.timestampMs}",
+                priority = AlertPriority.WARNING,
+                message = phrases.wrongWay(),
+                relatedObstacle = null,
+                createdAtMs = position.timestampMs,
+                cue = GuidanceCue.WRONG_WAY,
+            )
+        }
+        val nearest = map.floors.firstOrNull { it.floorIndex == position.floor }?.nodes
+            ?.minByOrNull { hypot(it.x - position.x, it.y - position.y) } ?: return null
+        // Already at the destination's node: nothing to replan, arrival takes it from here.
+        val replanned = AStarPathfinder.findPathAcrossFloors(map, nearest.id, destinationNodeId, blockedEdges)?.takeIf { it.size >= 2 } ?: return null
+        currentRoute = replanned
+        resetRouteProgress()
+        // Not standing on the new route's first place: the first leg is getting back to it.
+        if (hypot(nearest.x - position.x, nearest.y - position.y) > WAYPOINT_ARRIVAL_METERS) routeTargetIndex = 0
+        return NavigationAlert(
+            id = "off-route-${position.timestampMs}",
+            priority = AlertPriority.WARNING,
+            message = phrases.offRoute(),
+            relatedObstacle = null,
+            createdAtMs = position.timestampMs,
+            cue = GuidanceCue.REROUTED,
+        )
+    }
+
+    /**
      * The instruction for where the user is *right now*, worded exactly like
      * the spoken guidance but with a fresh distance — for a "repeat that"
      * request, where replaying the last announcement verbatim would quote a
@@ -274,7 +327,8 @@ class NavigationOrchestrator(
     /** What kind of moment the start of this leg is, mirroring [legInstruction]'s wording choices. */
     private fun legCue(targetIndex: Int): GuidanceCue {
         val target = currentRoute[targetIndex]
-        val previous = currentRoute[targetIndex - 1]
+        // Index 0: back to the route's first place after leaving it (see checkDeviation).
+        val previous = currentRoute.getOrNull(targetIndex - 1) ?: return GuidanceCue.CONTINUE
         if (nodeFloor[target.id] != nodeFloor[previous.id]) return GuidanceCue.FLOOR_CHANGE
         // A tagged hazard right ahead outranks the turn after it: the stairs come first.
         if (target.type in HAZARD_TYPES) return GuidanceCue.HAZARD_AHEAD
@@ -289,6 +343,11 @@ class NavigationOrchestrator(
 
     private fun legInstruction(targetIndex: Int, position: Position): String {
         val target = currentRoute[targetIndex]
+        if (targetIndex == 0) {
+            // Back to the route's first place, from wherever leaving the route ended up.
+            val distance = hypot(target.x - position.x, target.y - position.y)
+            return if (target.isUnnamed) phrases.walkAhead(distance, null) else phrases.walkToward(target.name, distance, null)
+        }
         val previous = currentRoute[targetIndex - 1]
         val targetFloor = nodeFloor[target.id] ?: 0
         val previousFloor = nodeFloor[previous.id] ?: 0
@@ -404,6 +463,7 @@ class NavigationOrchestrator(
         const val ARRIVAL_DISTANCE_METERS = 1.5
         const val TURN_ANGLE_THRESHOLD_DEG = 25.0
         const val ROUTE_GUIDANCE_REPEAT_INTERVAL_MS = 8_000L
+        const val OFF_ROUTE_REPEAT_MS = 15_000L
 
         // A rough single flight of stairs — no real building has been measured yet, so
         // this is a starting guess (see BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS,

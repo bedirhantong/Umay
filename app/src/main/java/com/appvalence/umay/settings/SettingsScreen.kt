@@ -216,6 +216,7 @@ private val HAPTIC_GUIDE = listOf(
     GuidanceCue.ARRIVED to R.string.haptic_arrived,
     GuidanceCue.REROUTED to R.string.haptic_rerouted,
     GuidanceCue.NO_ROUTE to R.string.haptic_no_route,
+    GuidanceCue.WRONG_WAY to R.string.haptic_wrong_way,
 )
 
 /**

@@ -46,6 +46,12 @@ interface GuidancePhrases {
 
     fun rerouted(): String
 
+    /** Left the route (another corridor): a new one was planned from here. */
+    fun offRoute(): String
+
+    /** Heading back the way they came. */
+    fun wrongWay(): String
+
     /** Something the camera saw ahead, by what it is ([ObstacleKind.UNKNOWN]: just "an obstacle"). */
     fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String
 }

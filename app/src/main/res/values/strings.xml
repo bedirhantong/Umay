@@ -213,6 +213,8 @@
     <string name="say_walk_then_left">%1$s yönünde yaklaşık %2$s ilerle, sonra sola dön.</string>
     <string name="say_wall_left">Duvar solunda; onu takip edebilirsin.</string>
     <string name="say_wall_right">Duvar sağında; onu takip edebilirsin.</string>
+    <string name="say_off_route">Rotadan çıktın. Bulunduğun yerden yeni rota hesaplandı.</string>
+    <string name="say_wrong_way">Ters yöne gidiyorsun gibi görünüyor, geri dön.</string>
     <string name="say_walk_ahead">Yaklaşık %1$s düz ilerle.</string>
     <string name="say_walk_ahead_then_right">Yaklaşık %1$s ilerle, sonra sağa dön.</string>
     <string name="say_walk_ahead_then_left">Yaklaşık %1$s ilerle, sonra sola dön.</string>
@@ -567,6 +569,7 @@
     <string name="haptic_arrived">Hedefe vardın: uzun, sonra kısa</string>
     <string name="haptic_rerouted">Rota değişti: kısa, sonra uzun</string>
     <string name="haptic_no_route">Rota bulunamadı: tek uzun titreşim</string>
+    <string name="haptic_wrong_way">Ters yöndesin: uzun, kısa, uzun</string>
     <string name="settings_screen_title">Yönlendirme sırasında</string>
     <string name="settings_keep_screen_on">Ekranı açık tut</string>
     <string name="settings_keep_screen_on_body">Ekran kapansa da konum ve yönergeler devam eder, ama kamera durur ve engel algılanmaz. Ekranı açık tutarsan engel algılama da sürer; pil daha çok harcanır. TalkBack açıkken pil için ekran en düşük parlaklığa indirilir.</string>

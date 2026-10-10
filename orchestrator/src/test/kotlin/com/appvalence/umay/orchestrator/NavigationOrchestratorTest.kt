@@ -73,6 +73,8 @@ private object TokenPhrases : GuidancePhrases {
     override fun arrived() = "ARRIVED"
     override fun noRoute() = "NO_ROUTE"
     override fun rerouted() = "REROUTED"
+    override fun offRoute() = "OFF_ROUTE"
+    override fun wrongWay() = "WRONG_WAY"
     override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double) =
         "OBSTACLE $priority $kind ${meters(distanceMeters)}"
 }
@@ -333,6 +335,68 @@ class NavigationOrchestratorTest {
 
         val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
         assertTrue(guidance.message.endsWith("WALL LEFT"), guidance.message)
+    }
+
+    // A T: the route goes north from Giris to Oda; a side corridor leads west from the junction.
+    private val tMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(
+            FloorMap(
+                0,
+                listOf(
+                    MapNode("G", 0.0, 0.0, NodeType.WAYPOINT, name = "Giris"),
+                    MapNode("K", 0.0, 10.0, NodeType.WAYPOINT, name = "Kavsak"),
+                    MapNode("O", 0.0, 25.0, NodeType.WAYPOINT, name = "Oda"),
+                    MapNode("Y", -15.0, 10.0, NodeType.WAYPOINT, name = "Yan"),
+                ),
+                listOf(MapEdge("G", "K", true, 10.0), MapEdge("K", "O", true, 15.0), MapEdge("K", "Y", true, 15.0)),
+            ),
+        ),
+    )
+
+    private suspend fun walk(positions: List<Position>): List<com.appvalence.umay.coremodel.NavigationAlert> {
+        val feedback = RecordingFeedbackController()
+        NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = tMap,
+            feedback = feedback,
+            startNodeId = "G",
+            destinationNodeId = "O",
+            phrases = TokenPhrases,
+        ).start().toList()
+        return feedback.emitted
+    }
+
+    @Test
+    fun `a wrong turn into the side corridor gets a new route from there`() = runTest {
+        val north = (0..10).map { position(0.0, it.toDouble(), timestampMs = 1_000L * it) }
+        val west = (1..10).map { position(-it.toDouble(), 10.0, timestampMs = 11_000L + 1_000L * it) }
+
+        val alerts = walk(north + west)
+
+        val offRoute = alerts.single { it.id.startsWith("off-route-") }
+        assertEquals("OFF_ROUTE", offRoute.message)
+        // …followed by guidance for the new route, starting back toward the junction.
+        assertTrue(alerts.any { it.createdAtMs > offRoute.createdAtMs && it.message.startsWith("WALK Kavsak") }, alerts.map { it.message }.toString())
+    }
+
+    @Test
+    fun `turning back along the route is told to turn around, without replanning`() = runTest {
+        val north = (0..12).map { position(0.0, it * 0.7, timestampMs = 1_000L * it) }
+        val back = (1..8).map { position(0.0, 8.4 - it * 0.7, timestampMs = 13_000L + 1_000L * it) }
+
+        val alerts = walk(north + back)
+
+        assertEquals(1, alerts.count { it.id.startsWith("wrong-way-") })
+        assertTrue(alerts.none { it.id.startsWith("off-route-") })
+    }
+
+    @Test
+    fun `walking the route raises neither`() = runTest {
+        val alerts = walk((0..25).map { position(if (it % 2 == 0) 0.8 else -0.8, it.toDouble(), timestampMs = 1_000L * it) })
+
+        assertTrue(alerts.none { it.id.startsWith("off-route-") || it.id.startsWith("wrong-way-") })
     }
 
     @Test

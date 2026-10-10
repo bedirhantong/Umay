@@ -71,6 +71,10 @@ class ResourceGuidancePhrases(context: Context) : GuidancePhrases {
 
     override fun rerouted(): String = resources.getString(R.string.say_rerouted)
 
+    override fun offRoute(): String = resources.getString(R.string.say_off_route)
+
+    override fun wrongWay(): String = resources.getString(R.string.say_wrong_way)
+
     // A critical warning is kept as short as possible — it has to be over before the
     // person takes another step — so it says *stop*, not how many meters away.
     override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String {

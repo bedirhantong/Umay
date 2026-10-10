@@ -22,6 +22,9 @@ enum class GuidanceCue {
     OBSTACLE_CRITICAL,
     REROUTED,
     NO_ROUTE,
+
+    /** Walking away from the next route point: turn around. */
+    WRONG_WAY,
 }
 
 data class NavigationAlert(
