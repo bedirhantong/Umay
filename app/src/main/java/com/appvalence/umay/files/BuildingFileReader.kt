@@ -5,6 +5,7 @@ import android.net.Uri
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
 import com.appvalence.umay.coremodel.MapProblem
+import com.appvalence.umay.coremodel.NewerMapFormatException
 import com.appvalence.umay.di.IoDispatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -17,6 +18,9 @@ sealed interface ImportRejection {
     data object Unreadable : ImportRejection
     data object TooLarge : ImportRejection
     data object NotAMap : ImportRejection
+
+    /** Made by a newer Umay: updating the app is what's needed, not a different file. */
+    data object NewerFormat : ImportRejection
     data class Corrupt(val problems: List<MapProblem>) : ImportRejection
 }
 
@@ -64,8 +68,13 @@ internal const val MAX_IMPORT_BYTES = 20 * 1024 * 1024
 
 /** The format and consistency checks every imported file goes through. */
 internal fun parseBuildingMap(bytes: ByteArray): ImportRead {
-    val map = runCatching { BuildingMapJson.decode(bytes.decodeToString()) }.getOrNull()
-        ?: return ImportRead.Rejected(ImportRejection.NotAMap)
+    val map = try {
+        BuildingMapJson.decode(bytes.decodeToString())
+    } catch (e: NewerMapFormatException) {
+        return ImportRead.Rejected(ImportRejection.NewerFormat)
+    } catch (e: Exception) {
+        return ImportRead.Rejected(ImportRejection.NotAMap)
+    }
     val problems = BuildingMapJson.problems(map)
     if (problems.isNotEmpty()) return ImportRead.Rejected(ImportRejection.Corrupt(problems))
     return ImportRead.Parsed(map)

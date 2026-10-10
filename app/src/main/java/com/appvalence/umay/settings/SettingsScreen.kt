@@ -53,6 +53,7 @@ import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.appvalence.umay.R
+import com.appvalence.umay.survey.ar.ArCoreDisclosure
 import com.appvalence.umay.common.VoiceStatusNotice
 import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.coremodel.GuidanceCue
@@ -285,6 +286,13 @@ private fun AboutSection() {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp),
     )
+    Text(
+        text = stringResource(R.string.settings_about_closed_components),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    ArCoreDisclosure(modifier = Modifier.padding(top = 8.dp))
 }
 
 /**

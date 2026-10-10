@@ -28,7 +28,8 @@ dependencies {
     api(libs.androidx.camera.core)
     api(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.camera2)
-    implementation(libs.tensorflow.lite.task.vision)
+    implementation(libs.litert)
+    api(libs.zxing.core)
     implementation(libs.mlkit.text.recognition)
     implementation(libs.kotlinx.coroutines.android)
 

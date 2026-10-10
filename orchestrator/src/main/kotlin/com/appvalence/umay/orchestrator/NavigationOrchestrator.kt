@@ -9,7 +9,7 @@ import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.NodeType
-import com.appvalence.umay.coremodel.ObstacleType
+import com.appvalence.umay.coremodel.isUnnamed
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.feedback.FeedbackController
 import com.appvalence.umay.perception.ObstacleDetector
@@ -62,6 +62,9 @@ class NavigationOrchestrator(
     private val destinationNodeId: String,
     private val phrases: GuidancePhrases,
 ) {
+    // Decoded once per floor that has a wall map (see WallSide).
+    private val wallSides: Map<Int, WallSide> = map.floors.mapNotNull { floor -> floor.occupancy?.let { floor.floorIndex to WallSide(it) } }.toMap()
+
     private val nodeFloor: Map<String, Int> =
         map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap()
 
@@ -315,9 +318,15 @@ class NavigationOrchestrator(
             } else {
                 null
             }
-            phrases.walkToward(target.name, distance, turn)
+            // A camera survey's corner nodes have no name worth saying (just an id).
+            if (target.isUnnamed) phrases.walkAhead(distance, turn) else phrases.walkToward(target.name, distance, turn)
         }
-        return listOfNotNull(hazard, instruction).joinToString(" ")
+        // From where the walker is, not where the leg began: halfway along, only the rest matters.
+        val wall = wallSides[targetFloor]
+            ?.takeIf { position.floor == targetFloor }
+            ?.along(position.x, position.y, target.x, target.y)
+            ?.let(phrases::followWall)
+        return listOfNotNull(hazard, instruction, wall).joinToString(" ")
     }
 
     // Compass bearing (0 = north/+y, 90 = east/+x, clockwise) — matches PdrIntegrator's
@@ -382,7 +391,7 @@ class NavigationOrchestrator(
     }
 
     private fun obstacleMessage(priority: AlertPriority, obstacle: DetectedObstacle): String =
-        phrases.obstacle(priority, isPerson = obstacle.type == ObstacleType.PERSON, distanceMeters = obstacle.distanceMeters)
+        phrases.obstacle(priority, obstacle.kind, distanceMeters = obstacle.distanceMeters)
 
     companion object {
         private val HAZARD_TYPES = setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)

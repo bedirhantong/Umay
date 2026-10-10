@@ -2,6 +2,7 @@ package com.appvalence.umay.orchestrator
 
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.ObstacleKind
 
 enum class TurnDirection { LEFT, RIGHT }
 
@@ -24,6 +25,12 @@ interface GuidancePhrases {
     /** Toward a named place, optionally turning once there. */
     fun walkToward(placeName: String, distanceMeters: Double, thenTurn: TurnDirection?): String
 
+    /** Toward a node nobody named — a bend in the corridor a camera survey added — optionally turning there. */
+    fun walkAhead(distanceMeters: Double, thenTurn: TurnDirection?): String
+
+    /** A wall runs along this side of the leg: follow it ("shorelining"). Said after the leg's instruction. */
+    fun followWall(side: TurnDirection): String
+
     /** The final leg, to the destination itself. */
     fun approachDestination(distanceMeters: Double): String
 
@@ -39,5 +46,6 @@ interface GuidancePhrases {
 
     fun rerouted(): String
 
-    fun obstacle(priority: AlertPriority, isPerson: Boolean, distanceMeters: Double): String
+    /** Something the camera saw ahead, by what it is ([ObstacleKind.UNKNOWN]: just "an obstacle"). */
+    fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String
 }

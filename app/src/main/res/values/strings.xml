@@ -9,6 +9,7 @@
     <string name="voice_missing_data">Türkçe konuşma sesi bu cihazda henüz indirilmemiş. Yönergeler yabancı aksanlı bir sesle okunabilir. Doğal bir Türkçe ses için ses paketini yükle.</string>
     <string name="voice_not_supported">Bu cihazın konuşma motoru Türkçe desteklemiyor, yönergeler yabancı aksanlı okunabilir. Ayarlardan Türkçe destekleyen bir motor (örneğin Google Konuşma Hizmetleri) seçip Türkçe sesi yükle.</string>
     <string name="voice_engine_unavailable">Bu cihazda çalışan bir metin okuma (konuşma) motoru bulunamadı, sesli yönergeler verilemiyor. Ayarlardan bir konuşma motoru etkinleştir.</string>
+    <string name="voice_network_only">Bu cihazdaki Türkçe ses internet üzerinden okunuyor: yönergelerin metni ses motorunun sunucusuna gidiyor ve internet olmayan yerde ses kesiliyor. İnternetsiz Türkçe sesi yükle.</string>
     <string name="voice_install">Türkçe sesi yükle</string>
     <string name="voice_ready">Türkçe ses hazır.</string>
     <string name="voice_checking">Konuşma sesi kontrol ediliyor…</string>
@@ -97,6 +98,18 @@
     <string name="nav_pick_route_subtitle">Bulunduğun noktayı ve gitmek istediğin yeri seç.</string>
     <string name="nav_start_label">Bulunduğum yer</string>
     <string name="nav_destination_label">Gitmek istediğim yer</string>
+    <string name="nav_find_start_camera">Kamerayla bul</string>
+    <string name="nav_find_start_scanning">Telefonu göğüs hizasında tut ve yavaşça kendi etrafında dön. Bir yer işareti görünce söyleyeceğim.</string>
+    <string name="nav_find_start_found">%1$s işaretini buldum, yola oradan başlıyorsun.</string>
+    <string name="nav_find_start_not_found">Yakında bir yer işareti bulamadım. Bulunduğun yeri listeden seç.</string>
+    <string name="nav_find_start_camera_failed">Kamera açılamadı. Bulunduğun yeri listeden seç.</string>
+    <string name="nav_marker_seen">%1$s işaretini gördüm, konumun güncellendi.</string>
+    <string name="nav_start_suggestion">%1$s yakınında gibi görünüyorsun. Yola buradan mı başlıyorsun?</string>
+    <string name="nav_start_suggestion_yes">Evet, buradan başla</string>
+    <string name="nav_start_suggestion_no">Hayır</string>
+    <string name="nav_start_nearby">%1$s, yakında</string>
+    <string name="nav_start_nearby_hint">Yakındaki yerler listenin başında.</string>
+    <string name="nav_start_confirmed">Başlangıç: %1$s</string>
     <string name="nav_begin">Yönlendirmeyi başlat</string>
 
     <!-- Navigation: active -->
@@ -123,6 +136,11 @@
     <string name="nav_camera_paused_first">Engel algılama duraklatıldı, çünkü ekran kapalıyken kamera çalışamaz. Konum ve yönergeler devam ediyor. Engel algılamanın da sürmesi için Ayarlar\'dan ekranı açık tutmayı seçebilirsin.</string>
     <string name="nav_camera_paused">Engel algılama duraklatıldı. Konum ve yönergeler devam ediyor.</string>
     <string name="nav_camera_resumed">Engel algılama yeniden açık.</string>
+    <string name="nav_camera_hot">Telefon çok ısındı, engel algılama bir süreliğine kapatıldı. Konum ve yönergeler devam ediyor.</string>
+    <string name="nav_camera_cooled">Telefon soğudu, engel algılama yeniden açık.</string>
+    <string name="nav_camera_saving">Pil azaldı ya da telefon ısınıyor; kamera pil korumak için daha seyrek bakıyor.</string>
+    <string name="nav_aim_too_low">Telefonu biraz kaldır, kamera yere bakıyor.</string>
+    <string name="nav_aim_too_high">Telefonu biraz indir, kamera tavana bakıyor.</string>
     <string name="nav_radio_lost">Bluetooth ya da konum kapalı. Konumunu şimdilik sadece adımlarından takip ediyorum, zamanla sapabilir. İkisini de açarsan kendiliğinden düzeltmeye devam ederim.</string>
     <string name="nav_radio_back">Bluetooth ve konum açık, konum düzeltmesi devam ediyor.</string>
     <string name="notification_channel_name">Yönlendirme</string>
@@ -143,7 +161,9 @@
     <string name="voice_query_answer_no_distance">%1$s var, ama şu an ne kadar uzakta olduğunu söyleyemiyorum.</string>
     <string name="voice_query_not_understood">Anlayamadım, farklı bir şekilde sorabilir misin?</string>
     <string name="voice_query_no_speech">Bir şey duyamadım.</string>
-    <string name="voice_query_not_available">Bu cihazda konuşarak soru sorma özelliği kullanılamıyor.</string>
+    <string name="voice_query_not_available">Bu cihazda konuşarak soru sorma kullanılamıyor: telefonda Türkçe konuşmayı internetsiz tanıyan bir hizmet yok. Sesin cihazından çıkmaması için internet üzerinden tanıma kullanılmıyor.</string>
+    <string name="voice_query_language_downloading">Türkçe konuşma tanıma paketi telefona indiriliyor. İndirme bitince tekrar sorabilirsin.</string>
+    <string name="voice_query_language_not_supported">Telefonun konuşma tanıma hizmeti Türkçeyi internetsiz tanıyamıyor. Sesin cihazından çıkmaması için internet üzerinden tanıma kullanılmıyor.</string>
     <string name="voice_query_permission_denied">Mikrofon izni verilmedi.</string>
     <string name="voice_query_error">Bir şeyler ters gitti, tekrar dener misin?</string>
     <string name="nav_progress_next">Sonraki</string>
@@ -191,6 +211,11 @@
     <string name="say_walk_straight">%1$s yönünde yaklaşık %2$s ilerle.</string>
     <string name="say_walk_then_right">%1$s yönünde yaklaşık %2$s ilerle, sonra sağa dön.</string>
     <string name="say_walk_then_left">%1$s yönünde yaklaşık %2$s ilerle, sonra sola dön.</string>
+    <string name="say_wall_left">Duvar solunda; onu takip edebilirsin.</string>
+    <string name="say_wall_right">Duvar sağında; onu takip edebilirsin.</string>
+    <string name="say_walk_ahead">Yaklaşık %1$s düz ilerle.</string>
+    <string name="say_walk_ahead_then_right">Yaklaşık %1$s ilerle, sonra sağa dön.</string>
+    <string name="say_walk_ahead_then_left">Yaklaşık %1$s ilerle, sonra sola dön.</string>
     <string name="say_approach_destination">Hedefe yaklaşık %1$s kaldı.</string>
     <string name="say_floor_stairs_up">Merdivenle yukarı çık: %1$s, %2$s.</string>
     <string name="say_floor_stairs_down">Merdivenle aşağı in: %1$s, %2$s.</string>
@@ -205,12 +230,25 @@
     <string name="say_arrived">Hedefe ulaştın.</string>
     <string name="say_no_route">Bu iki nokta arasında bir rota bulunamadı.</string>
     <string name="say_rerouted">Önündeki engel yüzünden rota değişti.</string>
-    <string name="say_obstacle_critical_person">Dur! Hemen önünde biri var.</string>
-    <string name="say_obstacle_critical_other">Dur! Hemen önünde bir engel var.</string>
-    <string name="say_obstacle_warning_person">Dikkat, yaklaşık %1$s önünde biri var.</string>
-    <string name="say_obstacle_warning_other">Dikkat, yaklaşık %1$s önünde bir engel var.</string>
-    <string name="say_obstacle_info_person">Yaklaşık %1$s önünde biri var.</string>
-    <string name="say_obstacle_info_other">Yaklaşık %1$s önünde bir engel var.</string>
+    <!-- %1$s / %2$s: what it is, as below ("biri", "bir sandalye"). -->
+    <string name="say_obstacle_critical">Dur! Hemen önünde %1$s var.</string>
+    <string name="say_obstacle_warning">Dikkat, yaklaşık %1$s önünde %2$s var.</string>
+    <string name="say_obstacle_info">Yaklaşık %1$s önünde %2$s var.</string>
+    <string name="obstacle_person">biri</string>
+    <string name="obstacle_bicycle">bir bisiklet</string>
+    <string name="obstacle_motorcycle">bir motosiklet</string>
+    <string name="obstacle_fire_hydrant">bir yangın musluğu</string>
+    <string name="obstacle_bench">bir bank</string>
+    <string name="obstacle_dog">bir köpek</string>
+    <string name="obstacle_suitcase">bir valiz</string>
+    <string name="obstacle_chair">bir sandalye</string>
+    <string name="obstacle_couch">bir kanepe</string>
+    <string name="obstacle_potted_plant">bir saksı</string>
+    <string name="obstacle_bed">bir yatak</string>
+    <string name="obstacle_table">bir masa</string>
+    <string name="obstacle_toilet">bir klozet</string>
+    <string name="obstacle_refrigerator">bir buzdolabı</string>
+    <string name="obstacle_unknown">bir engel</string>
 
     <!-- Survey (Beacon Tarayıcı) -->
     <string name="survey_permission_message">Binadaki beacon\'ları bulmak için konum ve Bluetooth\'a ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.</string>
@@ -232,24 +270,63 @@
     <string name="survey_new_area_title">Yeni bir alan haritala</string>
     <string name="survey_new_area_body">Kaydı başlat, binada normal şekilde yürü, önemli yerlere isim ver, bitince durdur. Elle konum girmene gerek yok, telefon adım sayarak kendi hesaplar.</string>
     <string name="survey_calibrate_hint">Adım uzunluğun henüz ölçülmedi. Haritanın mesafeleri doğru olsun diye önce \"Ayarlar\" sekmesinden adımını kalibre etmeni öneririm.</string>
-    <string name="survey_unfinished">Bitmemiş bir kayıt var: %1$s, %2$s.</string>
+    <string name="survey_unfinished">Bitmemiş bir kayıt var: %1$s, %2$s. Devam etmeden önce kaydı durdurduğun yere dön ve o zamanki yöne bak.</string>
     <string name="survey_resume">Kayda devam et</string>
     <string name="survey_start">Haritalamayı başlat</string>
     <string name="survey_clear">Kaydı sil ve baştan başla</string>
     <string name="survey_recording">Kaydediliyor…</string>
     <string name="survey_recording_stats">%1$s · %2$s · %3$s</string>
+    <string name="survey_walked_meters">%1$d m yol</string>
+
+    <!-- Camera survey (ARCore): the path from motion tracking, walls from depth. -->
+    <string name="survey_mode_title">Yolu nasıl ölçelim?</string>
+    <string name="survey_mode_camera">Kamerayla</string>
+    <string name="survey_mode_footsteps">Adım sayarak</string>
+    <string name="survey_mode_camera_body">Telefonu göğüs hizasında, arka kamerası önüne bakacak şekilde tutarak yürü. Yol santimetre düzeyinde ölçülür ve telefon destekliyorsa duvarlar da robot süpürge haritası gibi çizilir. Kamera görüntüsü kaydedilmez.</string>
+    <string name="survey_mode_footsteps_body">Telefon cebinde ya da elinde olabilir; konum adımlardan hesaplanır.</string>
+    <string name="survey_mode_checking">Kamerayla haritalama desteği kontrol ediliyor…</string>
+    <string name="survey_mode_needs_install">Kamerayla haritalamak için \"Google Play Services for AR\" uygulaması gerekiyor.</string>
+    <string name="survey_mode_install">Yükle</string>
+    <string name="survey_mode_install_failed">Yükleme yapılamadı. Adım sayarak haritalayabilirsin.</string>
+    <string name="survey_mode_unsupported">Bu telefon modeli kamerayla haritalamayı desteklemiyor: kamerası olsa da Google\'ın ARCore için test edip onayladığı modeller arasında değil. Yol adım sayarak ölçülecek.</string>
+    <string name="survey_mode_unknown">Kamerayla haritalama desteği kontrol edilemedi. Telefon internete bağlıyken tekrar dene. \"Google Play Services for AR\" yüklü değilse Play Store\'dan yüklemeyi de deneyebilirsin.</string>
+    <string name="survey_camera_permission_denied">Kamera izni verilmedi. Kamerayla haritalamak için izin ver ya da adım sayarak haritala.</string>
+    <string name="survey_camera_starting">Kamera başlatılıyor… Telefonu yavaşça biraz sağa sola çevir.</string>
+    <string name="survey_camera_tracking">Kamera konumu izliyor.</string>
+    <string name="survey_camera_tracking_no_walls">Kamera konumu izliyor. Bu telefon derinlik ölçemediği için duvarlar çizilmiyor, yalnızca yol ölçülüyor.</string>
+    <string name="survey_camera_hold_hint">Kamerayı kapatma, telefonu göğüs hizasında tut. Duvarlar, kameranın baktığı yerde çizilir.</string>
+    <string name="survey_camera_lost">Kamera konumu kaybetti: %1$s Bu sırada adımların sayılıyor.</string>
+    <string name="survey_camera_lost_spoken">Kamera konumu kaybetti. %1$s</string>
+    <string name="survey_camera_back">Kamera konumu yeniden buldu.</string>
+    <string name="survey_camera_problem_light">ortam çok karanlık, daha aydınlık bir yere geç.</string>
+    <string name="survey_camera_problem_motion">telefon çok hızlı hareket ediyor, daha yavaş yürü.</string>
+    <string name="survey_camera_problem_features">kamera ayırt edici bir şey görmüyor, düz bir duvara değil koridora doğru tut.</string>
+    <string name="survey_camera_problem_camera">kamera başka bir uygulama tarafından kullanılıyor.</string>
+    <string name="survey_camera_problem_other">telefonu sabit tutup etrafa yavaşça bak.</string>
+    <string name="survey_camera_failed_not_installed">Kamera başlatılamadı: \"Google Play Services for AR\" yüklü değil ya da eski.</string>
+    <string name="survey_camera_failed_unsupported">Kamera başlatılamadı: bu telefon kamerayla haritalamayı desteklemiyor.</string>
+    <string name="survey_camera_failed_permission">Kamera başlatılamadı: kamera izni yok.</string>
+    <string name="survey_camera_failed_in_use">Kamera başlatılamadı: kamera başka bir yerde kullanılıyor (açık bir yönlendirme olabilir).</string>
+    <string name="survey_camera_failed_other">Kamera beklenmedik şekilde durdu.</string>
+    <string name="survey_camera_failed_hint">Kaydı durdurup buraya kadar ölçüleni haritaya kaydedebilirsin. Devamını adım sayarak yeni bir kayıtla haritalayabilirsin.</string>
+    <string name="survey_preview_legend_walls">⬛ duvar   ▫️ görülen zemin</string>
     <string name="survey_floor_down">Bir alt kat</string>
     <string name="survey_floor_up">Bir üst kat</string>
     <string name="survey_floor_hint">Merdiven/asansörden önce güncelle</string>
     <string name="survey_floor_hint_auto">Kat değişimi basınçtan algılanıyor, gerekirse düzelt</string>
     <string name="survey_floor_auto">Kat değişimi algılandı, şimdi %1$s.</string>
     <string name="survey_stop">Kaydı durdur</string>
+    <string name="survey_notification_channel_name">Harita kaydı</string>
+    <string name="survey_notification_channel_description">Harita çıkarılırken gösterilir; başka bir uygulamaya geçince kaydın kaybolmamasını sağlar.</string>
+    <string name="survey_notification_title">Umay harita kaydediyor</string>
+    <string name="survey_notification_text">%1$s · %2$s</string>
+    <string name="survey_restored">Uygulama kapanmadan önceki kayıt geri yüklendi.</string>
     <string name="survey_type_door">Kapı</string>
     <string name="survey_type_stairs">Merdiven</string>
     <string name="survey_type_elevator">Asansör</string>
     <string name="survey_type_ramp">Rampa</string>
     <string name="survey_tag_title">Bulunduğun yeri isimlendir</string>
-    <string name="survey_tag_body">\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. Kapı, merdiven, asansör ya da rampa gibi bir tehlike veya kat geçişiyse türünü de seç: kamera bunları göremez, navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir.</string>
+    <string name="survey_tag_body">\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. Kapı, merdiven, asansör ya da rampa gibi bir tehlike veya kat geçişiyse türünü de seç: kamera bunları göremez, navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir. Bir kavşağa ya da merdivene geri döndüğünde ona aynı adı yeniden ver: Umay ikisini tek yer sayar ve koridorları orada birleştirir.</string>
     <string name="survey_tag_name_label">Yer adı</string>
     <string name="survey_tag_button">İşaretle</string>
     <string name="survey_tagged_with_type">%1$s (%2$s, kat %3$d)</string>
@@ -282,6 +359,11 @@
     <string name="survey_unknown_device">Bilinmeyen cihaz</string>
     <string name="survey_distance_uncalibrated">%1$s m (kalibre edilmemiş)</string>
     <string name="survey_rssi_line">RSSI: %1$d dBm, tahmini mesafe: %2$s</string>
+    <plurals name="survey_preview_description">
+        <item quantity="one">Bu katın harita önizlemesi: yürünen yol ve %1$d isimli yer%2$s.</item>
+        <item quantity="other">Bu katın harita önizlemesi: yürünen yol ve %1$d isimli yer%2$s.</item>
+    </plurals>
+    <string name="survey_preview_with_walls">, ölçülen duvarlarla</string>
     <string name="survey_preview_title">Harita önizleme (bu kat)</string>
     <string name="survey_preview_empty">Henüz veri yok. Kaydı başlatıp yürümeye başla.</string>
     <string name="survey_preview_legend">🔵 yürüdüğün yol   🔴 konumlanan beacon   🟠 isimlendirilen yer   🟢 son konum</string>
@@ -291,6 +373,82 @@
     <string name="files_buildings_body">Bir cihazda taranan haritayı dışa aktarıp başka bir cihazda içe aktarabilirsin.</string>
     <string name="files_no_buildings">Henüz kayıtlı bina yok.</string>
     <string name="files_export_building_description">%1$s haritasını dışa aktar</string>
+    <!-- Map editor (Dosyalar → a building → Düzenle) -->
+    <string name="files_edit_building_description">%1$s haritasını düzenle</string>
+    <string name="editor_title">Haritayı düzenle</string>
+    <string name="editor_body">Yanlış yazılmış bir adı, yanlış türü, fazladan bir yeri ya da duvardan geçen bir bağlantıyı binayı yeniden yürümeden düzelt. Değişiklikler \"Kaydet\"e basana kadar haritaya yazılmaz.</string>
+    <string name="editor_undo">Geri al</string>
+    <string name="editor_building_name">Bina adı</string>
+    <string name="editor_building_name_apply">Adı değiştir</string>
+    <string name="editor_places">Yerler</string>
+    <string name="editor_no_places">Bu katta isimlendirilmiş yer yok.</string>
+    <string name="editor_links">Bağlantılar</string>
+    <string name="editor_no_links">Bu katta iki yer arasında bağlantı yok.</string>
+    <string name="editor_link">%1$s ↔ %2$s, %3$s</string>
+    <string name="editor_link_remove_description">%1$s ile %2$s arasındaki bağlantıyı kaldır</string>
+    <string name="editor_link_add">Bağlantı ekle</string>
+    <string name="editor_link_add_title">Hangi iki yer birbirine bağlansın?</string>
+    <string name="editor_link_add_body">İki yer arasında düz bir yol çizilir. Yalnızca gerçekten düz yürünebilen yerleri bağla.</string>
+    <string name="editor_link_first">Birinci yer</string>
+    <string name="editor_link_second">İkinci yer</string>
+    <string name="editor_place_edit_description">%1$s yerini düzenle</string>
+    <string name="editor_place_delete_description">%1$s yerini sil</string>
+    <string name="editor_place_edit_title">Yeri düzenle</string>
+    <string name="editor_place_name">Yerin adı</string>
+    <string name="editor_place_type_plain">Sıradan yer</string>
+    <string name="editor_place_delete_title">\'%1$s\' silinsin mi?</string>
+    <string name="editor_place_delete_body">Rota bu yerden geçiyorsa yer adıyla birlikte listeden kalkar ama koridor yürünebilir kalır.</string>
+    <string name="editor_walls">Duvar haritası</string>
+    <string name="editor_walls_body">Haritada duvar gibi görünen hatalı bir leke varsa (yürüyüp geçen biri, bir yansıma) üzerine dokunarak sil.</string>
+    <string name="editor_walls_description">%1$s duvar haritası. Hatalı bir lekeyi silmek için üzerine dokun.</string>
+    <string name="editor_walls_clear">Bu katın duvar haritasını sil</string>
+    <string name="editor_walls_clear_title">Duvar haritası silinsin mi?</string>
+    <string name="editor_walls_clear_body">Yerler ve bağlantılar kalır; yalnızca bu katın duvar çizimi silinir.</string>
+    <string name="editor_unreachable">Şu yerlere ulaşılamıyor: %1$s. Bir bağlantı ekle ya da son değişikliği geri al.</string>
+    <string name="editor_leave_title">Değişiklikler kaydedilmedi</string>
+    <string name="editor_leave_body">Kaydetmeden çıkarsan yaptığın düzeltmeler kaybolur.</string>
+    <string name="editor_leave">Kaydetmeden çık</string>
+    <string name="editor_saved">Harita kaydedildi.</string>
+    <string name="editor_save_failed">Harita kaydedilemedi.</string>
+    <string name="editor_name_taken">Bu adda başka bir bina var. Başka bir ad seç.</string>
+    <string name="editor_name_blank">Bina adı boş olamaz.</string>
+    <!-- Printed place markers (Dosyalar → Düzenle → Yer işaretlerini yazdır) -->
+    <string name="markers_print">Yer işaretlerini yazdır</string>
+    <string name="markers_print_body">Her isimli yer için bir QR işaret sayfası hazırlar. Her sayfayı o yerin duvarına, göz hizasında yapıştır: kamerası açık bir telefon işareti görünce nerede olduğunu kesin olarak bilir.</string>
+    <string name="markers_print_chooser">İşaret sayfalarını yazdır ya da paylaş</string>
+    <string name="markers_print_failed">İşaret sayfaları hazırlanamadı.</string>
+    <string name="markers_sheet_floor">%1$s, %2$s</string>
+    <string name="markers_sheet_print_note" formatted="false">Gerçek boyutta (%100, sayfaya sığdırmadan) yazdırın: karenin bir kenarı 15 cm olmalı.</string>
+    <string name="markers_sheet_place_note">Umay yer işareti. Bu sayfayı adı yazan yerin duvarına, göz hizasında yapıştırın.</string>
+    <!-- Beacon check-up (Dosyalar → Düzenle → Beacon durumu) -->
+    <string name="beacons_open">Beacon durumu</string>
+    <string name="beacons_title">Beacon durumu</string>
+    <string name="beacons_body">Binada dolaşırken beacon\'lar yaklaştıkça sırayla duyulur. Bir süre dolaştıktan sonra hâlâ duyulmayan bir beacon yerinden çıkmış, bozulmuş ya da pili bitmiş olabilir. Pil bilgisi yalnızca Eddystone-TLM yayını yapan beacon\'larda görünür.</string>
+    <plurals name="beacons_scanning">
+        <item quantity="one">%1$d saniyedir dinleniyor.</item>
+        <item quantity="other">%1$d saniyedir dinleniyor.</item>
+    </plurals>
+    <string name="beacons_scan_failed">Tarama yapılamıyor: %1$s</string>
+    <string name="beacons_none">Bu haritada beacon kaydı yok: harita beacon\'sız çıkarılmış.</string>
+    <string name="beacons_unheard">Duyulmayanlar (%1$d)</string>
+    <string name="beacons_low_battery">Pili zayıf (%1$d)</string>
+    <string name="beacons_heard">Duyulanlar (%1$d)</string>
+    <string name="beacons_unknown">Haritada olmayanlar (%1$d)</string>
+    <string name="beacons_unknown_body">Bu beacon\'lar binanın beacon ailesinden ama haritada yoklar; harita çıkarıldıktan sonra takılmış olabilirler. Konumda kullanılmaları için haritayı yeniden çıkar.</string>
+    <string name="beacons_id">Beacon %1$s</string>
+    <string name="beacons_signal">sinyal %1$d dBm</string>
+    <string name="beacons_battery">pil %1$.2f V</string>
+    <string name="beacons_battery_low">pil %1$.2f V, değiştirilmeli</string>
+    <string name="beacons_not_heard_yet">henüz duyulmadı</string>
+    <string name="beacons_coverage">Kapsama</string>
+    <string name="beacons_coverage_ok">%1$s: her yerde en az üç beacon duyuluyor.</string>
+    <string name="beacons_coverage_unknown">%1$s: bu kat sinyaller yol boyunca kaydedilmeden önce haritalanmış, kapsama bilinmiyor.</string>
+    <string name="beacons_coverage_none_near">%1$s yakınında beacon duyulmuyor; buraya beacon ekle.</string>
+    <plurals name="beacons_coverage_weak_near">
+        <item quantity="one">%1$s yakınında yalnızca %2$d beacon duyuluyor; bir beacon daha eklemek konumu iyileştirir.</item>
+        <item quantity="other">%1$s yakınında yalnızca %2$d beacon duyuluyor; bir beacon daha eklemek konumu iyileştirir.</item>
+    </plurals>
+    <string name="beacons_coverage_place_unknown">Adsız bir noktanın</string>
     <string name="files_export_chooser">Haritayı paylaş</string>
     <string name="files_export_failed">Harita dışa aktarılamadı.</string>
     <string name="files_delete_building_body">Bu binanın haritası kalıcı olarak silinecek. Önce dışa aktarmadıysan geri alınamaz.</string>
@@ -344,7 +502,7 @@
     <string name="cloud_error_no_connection">İnternete ulaşılamadı. Bağlantını kontrol edip tekrar dene.</string>
     <string name="cloud_error_not_found">Bu harita artık orada değil, kaldırılmış olabilir.</string>
     <string name="cloud_error_too_large">Bu harita paylaşım için fazla büyük.</string>
-    <string name="cloud_error_invalid_map">Harita bozuk görünüyor, paylaşılamadı.</string>
+    <string name="cloud_error_invalid_map">Harita bozuk görünüyor, işlem yapılamadı.</string>
     <string name="cloud_error_not_owner">Bu haritayı sadece onu ilk yükleyen cihaz kaldırabilir.</string>
     <string name="cloud_error_other">Bir şeyler ters gitti: %1$s</string>
 
@@ -360,6 +518,7 @@
     <string name="import_unreadable">Dosya okunamadı.</string>
     <string name="import_too_large">Dosya okunamadı ya da bir harita dosyası için fazla büyük.</string>
     <string name="import_not_a_map">Bu dosya bir Umay haritası değil.</string>
+    <string name="map_newer_format">Bu harita Umay\'ın daha yeni bir sürümüyle oluşturulmuş. Açmak için uygulamayı güncelle.</string>
     <string name="import_corrupt">Harita bozuk görünüyor: %1$s.</string>
     <string name="import_problem_blank_name">binanın adı yok</string>
     <string name="import_problem_no_nodes">haritada hiç nokta yok</string>
@@ -372,6 +531,10 @@
     <plurals name="import_problem_dangling_transitions">
         <item quantity="one">%1$d kat geçişi var olmayan bir noktayı gösteriyor</item>
         <item quantity="other">%1$d kat geçişi var olmayan bir noktayı gösteriyor</item>
+    </plurals>
+    <plurals name="import_problem_invalid_wall_map">
+        <item quantity="one">%1$d katın duvar haritası bozuk</item>
+        <item quantity="other">%1$d katın duvar haritası bozuk</item>
     </plurals>
 
     <!-- Settings (Ayarlar) -->
@@ -411,8 +574,15 @@
     <string name="settings_about_version">Umay %1$s</string>
     <string name="settings_about_license">Umay açık kaynaklıdır ve GNU Genel Kamu Lisansı sürüm 3 (GPL-3.0) ile dağıtılır: kaynak kodunu inceleyebilir, değiştirip paylaşabilirsin; paylaşılan her türev de aynı lisansla ve kaynak koduyla birlikte yayınlanmalıdır.</string>
     <string name="settings_about_source">Kaynak kodunu aç</string>
-    <string name="settings_about_third_party">Kullanılan açık kaynak bileşenler (Apache 2.0 lisanslı): AndroidX ve Jetpack Compose, CameraX, TensorFlow Lite ve EfficientDet-Lite0 modeli, kotlinx.coroutines, kotlinx.serialization.</string>
+    <string name="settings_about_third_party">Kullanılan açık kaynak bileşenler (Apache 2.0 lisanslı): AndroidX ve Jetpack Compose, CameraX, Dagger ve Hilt, LiteRT (TensorFlow Lite) ve EfficientDet-Lite0 modeli, kotlinx.coroutines, kotlinx.serialization.</string>
+    <string name="settings_about_closed_components">Kapalı kaynak Google bileşenleri: tabela okuma için cihazda çalışan ML Kit metin tanıma ve kamerayla haritalama için ARCore.</string>
     <string name="source_code_url" translatable="false">https://github.com/bedirhantong/Umay</string>
+    <string name="arcore_service_url" translatable="false">https://play.google.com/store/apps/details?id=com.google.ar.core</string>
+    <string name="google_privacy_policy_url" translatable="false">https://policies.google.com/privacy</string>
+    <!-- Required by Google wherever ARCore is used; %1$s and %2$s become links. -->
+    <string name="arcore_disclosure">Kamerayla haritalama, Google tarafından sağlanan ve %2$s\'na tabi olan %1$s üzerinde çalışır.</string>
+    <string name="arcore_disclosure_service">Google Play Services for AR (ARCore)</string>
+    <string name="arcore_disclosure_privacy_policy">Google Gizlilik Politikası</string>
     <string name="settings_tour_title">Tanıtım</string>
     <string name="settings_tour_replay">Sesli tanıtımı yeniden dinle</string>
 

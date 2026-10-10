@@ -6,9 +6,11 @@
     <cloud-backup>
         <exclude domain="file" path="field-logs/" />
         <exclude domain="file" path="crash-logs/" />
+        <exclude domain="file" path="survey-draft/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="field-logs/" />
         <exclude domain="file" path="crash-logs/" />
+        <exclude domain="file" path="survey-draft/" />
     </device-transfer>
 </data-extraction-rules>

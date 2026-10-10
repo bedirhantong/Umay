@@ -17,7 +17,14 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * not validated) across every network the device has, so a phone with both
  * Wi-Fi and mobile data doesn't report "offline" during a brief handover.
  */
-class AndroidConnectivityMonitor(context: Context) : ConnectivityMonitor {
+class AndroidConnectivityMonitor(
+    context: Context,
+    /**
+     * False for a server on an institution's own network: a Wi-Fi with no way out to the
+     * internet never validates, yet reaches that server fine. Any connected network counts.
+     */
+    private val requireValidated: Boolean = true,
+) : ConnectivityMonitor {
     private val connectivityManager = context.applicationContext.getSystemService(ConnectivityManager::class.java)
 
     override val isOnline: Flow<Boolean> = callbackFlow {
@@ -60,5 +67,5 @@ class AndroidConnectivityMonitor(context: Context) : ConnectivityMonitor {
     }.distinctUntilChanged()
 
     private fun NetworkCapabilities.isValidatedInternet(): Boolean =
-        hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) && hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && (!requireValidated || hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))
 }

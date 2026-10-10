@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The institution build keeps everything on the device (see docs/GIZLILIK.md):
+     no internet permission, even though some libraries (ML Kit's usage reporting)
+     ask for one; no backup to the cloud or to another phone; and, should anything
+     ever try to connect anyway, no certificate it could trust. The build checks
+     the merged result (VerifyInstitutionPrivacy in app/build.gradle.kts). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+
+    <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/institution_data_extraction_rules"
+        android:networkSecurityConfig="@xml/institution_network_security_config"
+        tools:replace="android:allowBackup,android:fullBackupContent,android:dataExtractionRules" />
+
+</manifest>

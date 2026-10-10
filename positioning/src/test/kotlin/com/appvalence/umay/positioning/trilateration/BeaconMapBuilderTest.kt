@@ -1,6 +1,8 @@
 package com.appvalence.umay.positioning.trilateration
 
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.Position
+import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -160,5 +162,98 @@ class BeaconMapBuilderTest {
         val map = BeaconMapBuilder.buildFromWaypoints("test-building", waypoints)
 
         assertTrue(map.floorTransitions.isEmpty())
+    }
+
+    private fun walked(vararg points: Pair<Double, Double>, floor: Int = 0) =
+        points.mapIndexed { i, (x, y) -> Position(x, y, floor, 0.0, 0.1, PositionSource.MAP_MATCHED, i.toLong()) }
+
+    @Test
+    fun `a camera-surveyed walk round a corner adds the corner as an unnamed corridor node`() {
+        // Tagged at the start and after turning the corner; the walk between them is an L.
+        val trajectory = walked(0.0 to 0.0, 0.0 to 5.0, 0.0 to 10.0, 5.0 to 10.0, 10.0 to 10.0)
+        val waypoints = listOf(
+            TaggedWaypoint("Giriş", 0.0, 0.0, 0, emptyList(), trajectoryIndex = 1),
+            TaggedWaypoint("Oda", 10.0, 10.0, 0, emptyList(), trajectoryIndex = 5),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints, trajectory = trajectory).floors.single()
+
+        val corner = floor.nodes.single { it.type == NodeType.CORRIDOR }
+        assertEquals(0.0, corner.x, 1e-9)
+        assertEquals(10.0, corner.y, 1e-9)
+        assertEquals(2, floor.edges.size)
+        assertEquals(20.0, floor.edges.sumOf { it.distanceMeters }, 1e-9, "the edges follow the walk, not the diagonal")
+    }
+
+    @Test
+    fun `waypoints without a trajectory index keep their straight edges`() {
+        val trajectory = walked(0.0 to 0.0, 0.0 to 10.0, 10.0 to 10.0)
+        val waypoints = listOf(
+            TaggedWaypoint("Giriş", 0.0, 0.0, 0, emptyList()),
+            TaggedWaypoint("Oda", 10.0, 10.0, 0, emptyList()),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints, trajectory = trajectory).floors.single()
+
+        assertTrue(floor.nodes.none { it.type == NodeType.CORRIDOR })
+        assertEquals(1, floor.edges.size)
+    }
+
+    private fun tag(name: String, x: Double, y: Double, floor: Int = 0, rssi: Double = -60.0, type: NodeType = NodeType.WAYPOINT) =
+        TaggedWaypoint(name, x, y, floor, listOf(com.appvalence.umay.coremodel.RadioFingerprint("b1", rssi)), type)
+
+    @Test
+    fun `coming back to a place and naming it again joins the walk's branches there`() {
+        // A T: walk from the entrance to the junction, down the left arm, back to the
+        // junction (named again, a little off by dead reckoning), then down the right arm.
+        val waypoints = listOf(
+            tag("Giriş", 0.0, 0.0),
+            tag("Kavşak", 0.0, 10.0, rssi = -60.0),
+            tag("Sol oda", -10.0, 10.0),
+            tag(" kavşak ", 0.8, 10.6, rssi = -70.0),
+            tag("Sağ oda", 10.0, 10.0),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints).floors.single()
+
+        assertEquals(4, floor.nodes.size)
+        val junction = floor.nodes.single { it.name == "Kavşak" }
+        assertEquals(0.4, junction.x, 1e-9)
+        assertEquals(-65.0, junction.fingerprint.single().rssi, 1e-9)
+        val junctionLinks = floor.edges.count { it.fromId == junction.id || it.toId == junction.id }
+        assertEquals(3, junctionLinks)
+        assertEquals(3, floor.edges.size)
+    }
+
+    @Test
+    fun `two places either side of a trip to another floor are not connected`() {
+        // Up the east stairs, along the upper corridor, down the west stairs.
+        val waypoints = listOf(
+            tag("Doğu merdiven alt", 0.0, 0.0, type = NodeType.STAIRS),
+            tag("Doğu merdiven üst", 0.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Batı merdiven üst", 30.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Batı merdiven alt", 30.0, 0.0, type = NodeType.STAIRS),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("b", waypoints)
+
+        assertTrue(map.floors.single { it.floorIndex == 0 }.edges.isEmpty(), "a straight line from one staircase to the other through the ground floor")
+        assertEquals(2, map.floorTransitions.size)
+    }
+
+    @Test
+    fun `down the same stairs that were walked up is one crossing`() {
+        val waypoints = listOf(
+            tag("Merdiven alt", 0.0, 0.0, type = NodeType.STAIRS),
+            tag("Merdiven üst", 0.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Oda", 5.0, 0.0, floor = 1),
+            tag("Merdiven üst", 0.5, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Merdiven alt", 0.5, 0.0, type = NodeType.STAIRS),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("b", waypoints)
+
+        assertEquals(1, map.floorTransitions.size)
+        assertEquals(2, map.floors.single { it.floorIndex == 1 }.nodes.size)
     }
 }

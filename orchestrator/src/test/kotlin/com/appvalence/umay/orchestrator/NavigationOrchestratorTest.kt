@@ -10,6 +10,8 @@ import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.ObstacleKind
+import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.ObstacleSensorSource
 import com.appvalence.umay.coremodel.ObstacleType
 import com.appvalence.umay.coremodel.Position
@@ -61,6 +63,9 @@ private object TokenPhrases : GuidancePhrases {
     private fun meters(distance: Double) = "%.1f".format(java.util.Locale.ROOT, distance)
     override fun walkToward(placeName: String, distanceMeters: Double, thenTurn: TurnDirection?) =
         "WALK $placeName ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
+    override fun walkAhead(distanceMeters: Double, thenTurn: TurnDirection?) =
+        "AHEAD ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
+    override fun followWall(side: TurnDirection) = "WALL $side"
     override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =
         "CHANGE_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor $arrivalPlaceName"
@@ -68,8 +73,8 @@ private object TokenPhrases : GuidancePhrases {
     override fun arrived() = "ARRIVED"
     override fun noRoute() = "NO_ROUTE"
     override fun rerouted() = "REROUTED"
-    override fun obstacle(priority: AlertPriority, isPerson: Boolean, distanceMeters: Double) =
-        "OBSTACLE $priority ${if (isPerson) "PERSON" else "OTHER"} ${meters(distanceMeters)}"
+    override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double) =
+        "OBSTACLE $priority $kind ${meters(distanceMeters)}"
 }
 
 class NavigationOrchestratorTest {
@@ -270,6 +275,64 @@ class NavigationOrchestratorTest {
 
         val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
         assertTrue(guidance.message.endsWith("RIGHT"), guidance.message)
+    }
+
+    @Test
+    fun `an unnamed corner is announced by distance and turn, never by its id`() = runTest {
+        val nodes = listOf(
+            MapNode("A", 0.0, 0.0, NodeType.WAYPOINT, name = "Giris"),
+            MapNode("corner-uuid", 0.0, 10.0, NodeType.CORRIDOR),
+            MapNode("C", 10.0, 10.0, NodeType.WAYPOINT, name = "Oda"),
+        )
+        val edges = listOf(
+            MapEdge("A", "corner-uuid", accessible = true, distanceMeters = 10.0),
+            MapEdge("corner-uuid", "C", accessible = true, distanceMeters = 10.0),
+        )
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, edges)))
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+            phrases = TokenPhrases,
+        )
+
+        orchestrator.start().toList()
+
+        val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
+        assertEquals("AHEAD 10.0 RIGHT", guidance.message)
+    }
+
+    @Test
+    fun `a wall along one side of the leg is mentioned after the instruction`() = runTest {
+        // A 10 m northward corridor with a wall 1 m to its west, surveyed with the camera.
+        val width = 40
+        val height = 120
+        val cells = ByteArray(width * height) { i -> if (i % width in 9..10) OccupancyRaster.OCCUPIED else OccupancyRaster.FREE }
+        val walls = OccupancyRaster.of(0.1, 0.0, -1.0, width, height, cells)
+        val nodes = listOf(
+            MapNode("A", 2.0, 0.0, NodeType.WAYPOINT, name = "Giris"),
+            MapNode("B", 2.0, 10.0, NodeType.WAYPOINT, name = "Oda"),
+        )
+        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(0, nodes, listOf(MapEdge("A", "B", true, 10.0)), occupancy = walls)))
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(2.0, 0.0)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = map,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "B",
+            phrases = TokenPhrases,
+        )
+
+        orchestrator.start().toList()
+
+        val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
+        assertTrue(guidance.message.endsWith("WALL LEFT"), guidance.message)
     }
 
     @Test

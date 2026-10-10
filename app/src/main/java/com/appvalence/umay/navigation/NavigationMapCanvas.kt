@@ -41,11 +41,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -56,11 +58,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.appvalence.umay.R
+import com.appvalence.umay.common.WallMapImage
+import com.appvalence.umay.common.drawWallLayer
+import com.appvalence.umay.common.rememberWallMapImage
 import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
+import com.appvalence.umay.coremodel.isPlace
+import com.appvalence.umay.coremodel.isUnnamed
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -143,6 +150,12 @@ fun NavigationMapCanvas(
         obstacle = rememberVectorPainter(Icons.Filled.PriorityHigh),
     )
     val labelPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD } }
+    // Camera-surveyed floors carry a wall map; drawn under the route, like a robot vacuum's.
+    val wallMap by rememberWallMapImage(
+        raster = floorMap.occupancy,
+        seenFloorColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        wallColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 
     Box(
         modifier = modifier
@@ -172,6 +185,7 @@ fun NavigationMapCanvas(
                 colors = colors,
                 icons = icons,
                 labelPaint = labelPaint,
+                wallMap = wallMap,
             )
         }
 
@@ -314,8 +328,10 @@ private fun DrawScope.drawFloor(
     colors: MapColors,
     icons: MapIcons,
     labelPaint: Paint,
+    wallMap: WallMapImage?,
 ) {
     val nodesById = floorMap.nodes.associateBy { it.id }
+    wallMap?.let { drawWallMapLayer(camera, it, it.seenFloor) }
     val floorIndex = floorMap.floorIndex
     fun onThisFloor(node: MapNode) = nodeFloor[node.id] == floorIndex
 
@@ -330,6 +346,19 @@ private fun DrawScope.drawFloor(
         val from = nodesById[edge.fromId] ?: return@forEach
         val to = nodesById[edge.toId] ?: return@forEach
         drawLine(colors.corridor, camera.toScreen(from.x, from.y), camera.toScreen(to.x, to.y), corridorWidth, StrokeCap.Round)
+    }
+    // Walls on top of the corridor fill: where they disagree, the measured wall is the truth.
+    wallMap?.let { drawWallMapLayer(camera, it, it.walls) }
+
+    // Doorways: a bar across the gap in the wall, so a door reads as a door, not a hole.
+    floorMap.doors.forEach { door ->
+        val node = nodesById[door.nodeId] ?: return@forEach
+        val bearing = Math.toRadians(door.passageBearingDeg)
+        val half = door.widthMeters / 2
+        // The wall runs across the passage: (cos, -sin) of its bearing.
+        val a = camera.toScreen(node.x - half * cos(bearing), node.y + half * sin(bearing))
+        val b = camera.toScreen(node.x + half * cos(bearing), node.y - half * sin(bearing))
+        drawLine(colors.hazard, a, b, 4.dp.toPx(), StrokeCap.Butt)
     }
 
     // Route, split at where the user is: walked part faded and thin, the rest bold.
@@ -361,7 +390,7 @@ private fun DrawScope.drawFloor(
         when {
             node.id == destination?.id -> Unit // drawn as a pin below, on top of everything else
             iconFor(node.type, icons) != null -> drawBadge(center, colors.hazard, colors.onHazard, iconFor(node.type, icons)!!, 11.dp.toPx())
-            node.type == NodeType.BLE_ANCHOR -> Unit // infrastructure, not a place anyone walks to
+            !node.isPlace -> Unit // a beacon or a corridor bend: not a place anyone walks to
             else -> {
                 drawCircle(colors.corridor, radius = 5.dp.toPx(), center = center)
                 drawCircle(if (node.id in routeIds) colors.route else colors.place, radius = 3.5.dp.toPx(), center = center)
@@ -388,7 +417,7 @@ private fun DrawScope.drawFloor(
     // already placed is dropped instead of making both unreadable.
     val placed = mutableListOf<Rect>()
     val labelled = floorMap.nodes
-        .filter { it.type != NodeType.BLE_ANCHOR && it.name != it.id }
+        .filter { it.isPlace && !it.isUnnamed }
         .sortedBy { node ->
             when (node.id) {
                 destination?.id -> 0
@@ -423,6 +452,19 @@ private fun polyline(points: List<Offset>): Path? {
 }
 
 private fun roundStroke(width: Float) = Stroke(width = width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+
+/** [layer] of [map], placed and rotated exactly like [Camera.toScreen] places world points. */
+private fun DrawScope.drawWallMapLayer(camera: Camera, map: WallMapImage, layer: ImageBitmap) {
+    val pixelsPerMeter = camera.pixelsPerMeter
+    // Where the map's top-left corner (lowest x, highest y) lands before rotating to heading-up.
+    val topLeft = Offset(
+        camera.anchor.x + ((map.originX - camera.centerX) * pixelsPerMeter).toFloat(),
+        camera.anchor.y - ((map.originY + map.heightMeters - camera.centerY) * pixelsPerMeter).toFloat(),
+    )
+    rotate(degrees = (-camera.headingDeg).toFloat(), pivot = camera.anchor) {
+        drawWallLayer(layer, map, topLeft, pixelsPerMeter)
+    }
+}
 
 private fun DrawScope.drawIcon(painter: VectorPainter, center: Offset, sizePx: Float, tint: Color) {
     translate(center.x - sizePx / 2, center.y - sizePx / 2) {

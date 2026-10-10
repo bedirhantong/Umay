@@ -6,7 +6,12 @@ import com.appvalence.umay.coremodel.FloorTransition
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.Position
+import com.appvalence.umay.coremodel.RadioFingerprint
+import com.appvalence.umay.coremodel.RadioSample
 import com.appvalence.umay.coremodel.TaggedWaypoint
+import com.appvalence.umay.positioning.mapping.PathSimplifier
+import java.util.Locale
 import java.util.UUID
 import kotlin.math.hypot
 
@@ -69,10 +74,26 @@ object BeaconMapBuilder {
         beaconResults: List<BeaconSurveyResult> = emptyList(),
         maxEdgeDistanceMeters: Double = DEFAULT_MAX_EDGE_DISTANCE_METERS,
         anchorName: (floorIndex: Int, number: Int) -> String = DEFAULT_ANCHOR_NAME,
+        trajectory: List<Position> = emptyList(),
+        radioSamples: Map<Int, List<RadioSample>> = emptyMap(),
     ): BuildingMap {
+        // A place named again on coming back to it (the junction of a T-shaped corridor,
+        // the foot of the stairs on the way back down) is the same place: one node, so
+        // the walk's branches join there.
+        val canonical = IntArray(taggedWaypoints.size) { it }
+        taggedWaypoints.forEachIndexed { i, waypoint ->
+            val earlier = (0 until i).firstOrNull { j ->
+                val other = taggedWaypoints[j]
+                canonical[j] == j && other.floor == waypoint.floor &&
+                    normalizedName(other.name) == normalizedName(waypoint.name) &&
+                    hypot(other.x - waypoint.x, other.y - waypoint.y) <= SAME_PLACE_METERS
+            }
+            if (earlier != null) canonical[i] = earlier
+        }
         // Assigned once, up front, so the same id can be used both inside each
         // floor's node list and when detecting cross-floor transitions below.
-        val waypointNodeIds = taggedWaypoints.map { UUID.randomUUID().toString() }
+        val nodeIds = taggedWaypoints.indices.associateWith { UUID.randomUUID().toString() }
+        fun idOf(i: Int) = nodeIds.getValue(canonical[i])
 
         val waypointIndicesByFloor = taggedWaypoints.indices.groupBy { taggedWaypoints[it].floor }
         val beaconResultsByFloor = beaconResults.groupBy { it.floor }
@@ -84,54 +105,110 @@ object BeaconMapBuilder {
             if (indices.isEmpty()) {
                 buildFloor(floorIndex, floorBeaconResults, maxEdgeDistanceMeters, anchorName)
             } else {
-                buildWaypointFloor(floorIndex, indices, taggedWaypoints, waypointNodeIds, floorBeaconResults)
+                buildWaypointFloor(floorIndex, indices, taggedWaypoints, canonical, ::idOf, floorBeaconResults, trajectory)
             }
         }
 
-        val transitions = (1 until taggedWaypoints.size).mapNotNull { i ->
-            val previous = taggedWaypoints[i - 1]
-            val current = taggedWaypoints[i]
-            if (previous.floor == current.floor) return@mapNotNull null
-            FloorTransition(
-                fromNodeId = waypointNodeIds[i - 1],
-                fromFloorIndex = previous.floor,
-                toNodeId = waypointNodeIds[i],
-                toFloorIndex = current.floor,
-                costMeters = FLOOR_TRANSITION_COST_METERS,
-            )
-        }
+        val transitions = (1 until taggedWaypoints.size)
+            .filter { i -> taggedWaypoints[i - 1].floor != taggedWaypoints[i].floor }
+            .map { i ->
+                FloorTransition(
+                    fromNodeId = idOf(i - 1),
+                    fromFloorIndex = taggedWaypoints[i - 1].floor,
+                    toNodeId = idOf(i),
+                    toFloorIndex = taggedWaypoints[i].floor,
+                    costMeters = FLOOR_TRANSITION_COST_METERS,
+                )
+            }
+            // Down the same stairs that were walked up: one crossing, not two.
+            .distinctBy { setOf(it.fromNodeId, it.toNodeId) }
 
-        return BuildingMap(id = buildingId, floors = floors, floorTransitions = transitions)
+        return BuildingMap(
+            id = buildingId,
+            floors = floors.map { it.copy(radioMap = radioSamples[it.floorIndex].orEmpty()) },
+            floorTransitions = transitions,
+        )
     }
 
     private fun buildWaypointFloor(
         floorIndex: Int,
         indices: List<Int>,
         taggedWaypoints: List<TaggedWaypoint>,
-        waypointNodeIds: List<String>,
+        canonical: IntArray,
+        idOf: (Int) -> String,
         beaconResults: List<BeaconSurveyResult>,
+        trajectory: List<Position>,
     ): FloorMap {
-        val waypointNodes = indices.map { i ->
-            val waypoint = taggedWaypoints[i]
+        // One node per place, at the average of every time it was named (dead reckoning
+        // puts each visit a little apart), with the average of their fingerprints.
+        val visitsByPlace = indices.groupBy { canonical[it] }
+        val nodesByPlace = visitsByPlace.mapValues { (place, visits) ->
+            val first = taggedWaypoints[place]
             MapNode(
-                id = waypointNodeIds[i],
-                x = waypoint.x,
-                y = waypoint.y,
-                type = waypoint.type,
-                name = waypoint.name,
-                fingerprint = waypoint.fingerprint,
+                id = idOf(place),
+                x = visits.map { taggedWaypoints[it].x }.average(),
+                y = visits.map { taggedWaypoints[it].y }.average(),
+                type = first.type,
+                name = first.name,
+                fingerprint = averageFingerprint(visits.map { taggedWaypoints[it].fingerprint }),
             )
         }
 
-        val edges = waypointNodes.zipWithNext { from, to ->
-            MapEdge(fromId = from.id, toId = to.id, accessible = true, distanceMeters = hypot(from.x - to.x, from.y - to.y))
+        // Only places named one right after the other on this floor are connected: two
+        // places either side of a trip to another floor were never walked between.
+        val cornerNodes = mutableListOf<MapNode>()
+        val edges = mutableListOf<MapEdge>()
+        val connected = mutableSetOf<Set<Int>>()
+        for (i in 1 until taggedWaypoints.size) {
+            val fromPlace = canonical[i - 1]
+            val toPlace = canonical[i]
+            if (taggedWaypoints[i - 1].floor != floorIndex || taggedWaypoints[i].floor != floorIndex) continue
+            if (fromPlace == toPlace || !connected.add(setOf(fromPlace, toPlace))) continue
+            val from = nodesByPlace.getValue(fromPlace)
+            val to = nodesByPlace.getValue(toPlace)
+            val corners = cornersBetween(taggedWaypoints[i - 1], taggedWaypoints[i], trajectory, floorIndex)
+            cornerNodes += corners
+            edges += (listOf(from) + corners + to).zipWithNext { a, b ->
+                MapEdge(fromId = a.id, toId = b.id, accessible = true, distanceMeters = hypot(a.x - b.x, a.y - b.y))
+            }
         }
 
         val anchorNodes = beaconResults.map { result ->
             MapNode(id = result.beaconId, x = result.x, y = result.y, type = NodeType.BLE_ANCHOR)
         }
 
-        return FloorMap(floorIndex = floorIndex, nodes = waypointNodes + anchorNodes, edges = edges)
+        return FloorMap(floorIndex = floorIndex, nodes = nodesByPlace.values.toList() + cornerNodes + anchorNodes, edges = edges)
+    }
+
+    private fun normalizedName(name: String) = name.trim().lowercase(Locale.forLanguageTag("tr"))
+
+    /** Per beacon, the mean of the visits that heard it. */
+    private fun averageFingerprint(visits: List<List<RadioFingerprint>>): List<RadioFingerprint> {
+        if (visits.size == 1) return visits.single()
+        return visits.flatten()
+            .groupBy { it.beaconId }
+            .map { (beaconId, heard) -> RadioFingerprint(beaconId, heard.map { it.rssi }.average()) }
+    }
+
+    /**
+     * The bends of the walked path between two consecutive tags, as unnamed
+     * [NodeType.CORRIDOR] nodes — so an edge follows the corridor round a corner
+     * instead of cutting straight through the wall between two tagged places.
+     * Only for a trajectory precise enough to trust its shape (the camera survey's);
+     * dead reckoning's wobble would invent corners that aren't there.
+     */
+    private fun cornersBetween(from: TaggedWaypoint, to: TaggedWaypoint, trajectory: List<Position>, floorIndex: Int): List<MapNode> {
+        val start = from.trajectoryIndex ?: return emptyList()
+        val end = to.trajectoryIndex ?: return emptyList()
+        if (start >= end || end > trajectory.size) return emptyList()
+        // trajectoryIndex is the point count when tagged, so the tag stood on point index - 1.
+        val walked = trajectory.subList((start - 1).coerceAtLeast(0), end)
+        if (walked.any { it.floor != floorIndex }) return emptyList()
+        val path = listOf(from.x to from.y) + walked.map { it.x to it.y } + (to.x to to.y)
+        return PathSimplifier.simplify(path, CORNER_TOLERANCE_METERS)
+            .drop(1)
+            .dropLast(1)
+            .map { (x, y) -> MapNode(id = UUID.randomUUID().toString(), x = x, y = y, type = NodeType.CORRIDOR) }
     }
 
     private fun buildFloor(
@@ -169,6 +246,13 @@ object BeaconMapBuilder {
     }
 
     const val DEFAULT_MAX_EDGE_DISTANCE_METERS = 20.0
+
+    // Half a corridor's width: a walk that wanders less than this is still "straight".
+    const val CORNER_TOLERANCE_METERS = 0.5
+
+    // Dead reckoning drifts a few metres between visits; two places of the same name
+    // farther apart than this are different places that happen to share a name.
+    const val SAME_PLACE_METERS = 5.0
 
     // A fixed penalty, not a measured distance — stairs/elevators cost real time and
     // effort A* should weigh against a same-floor detour, but there's no PDR distance

@@ -19,17 +19,21 @@ import kotlin.math.sqrt
 object FingerprintMatcher {
     data class Match(val node: MapNode, val distance: Double)
 
-    fun bestMatch(live: List<BleBeaconReading>, candidates: List<MapNode>): Match? {
-        if (live.isEmpty() || candidates.isEmpty()) return null
+    /** Every candidate sharing enough beacons with [live], closest signature first. */
+    fun rank(live: List<BleBeaconReading>, candidates: List<MapNode>): List<Match> {
+        if (live.isEmpty() || candidates.isEmpty()) return emptyList()
         val liveRssi = live.associate { it.beaconId to it.rssi.toDouble() }
-
-        val scored = candidates
+        return candidates
             .filter { node ->
                 val sharedBeaconIds = node.fingerprint.map { it.beaconId }.toSet().intersect(liveRssi.keys)
                 sharedBeaconIds.size >= MIN_SHARED_BEACONS
             }
-            .map { node -> node to distanceScore(liveRssi, node.fingerprint) }
-            .sortedBy { (_, distance) -> distance }
+            .map { node -> Match(node, distanceScore(liveRssi, node.fingerprint)) }
+            .sortedBy { it.distance }
+    }
+
+    fun bestMatch(live: List<BleBeaconReading>, candidates: List<MapNode>): Match? {
+        val scored = rank(live, candidates).map { it.node to it.distance }
 
         val best = scored.getOrNull(0) ?: return null
         if (best.second > MAX_MATCH_DISTANCE) return null

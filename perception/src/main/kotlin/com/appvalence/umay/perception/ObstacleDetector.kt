@@ -1,7 +1,9 @@
 package com.appvalence.umay.perception
 
 import com.appvalence.umay.coremodel.DetectedObstacle
+import com.appvalence.umay.coremodel.MarkerSighting
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Produces a continuous stream of obstacle detections from the camera feed
@@ -10,4 +12,7 @@ import kotlinx.coroutines.flow.Flow
  */
 interface ObstacleDetector {
     fun obstacleUpdates(): Flow<List<DetectedObstacle>>
+
+    /** Place markers the same camera happens to see (see [QrMarkerReader]); none by default. */
+    fun markerSightings(): Flow<MarkerSighting> = emptyFlow()
 }

@@ -1,7 +1,10 @@
 package com.appvalence.umay.coremodel
 
+import kotlinx.serialization.Serializable
+
 enum class PositionSource { BLE_TRILATERATION, RADIO_FINGERPRINT, PEDESTRIAN_DEAD_RECKONING, MAP_MATCHED, FUSED }
 
+@Serializable
 data class Position(
     val x: Double,
     val y: Double,
@@ -25,6 +28,7 @@ data class StepEvent(
  * type [NodeType.BLE_ANCHOR] or [NodeType.WAYPOINT] once the building's
  * beacons have been mapped to physical coordinates on-site.
  */
+@Serializable
 data class BleBeaconReading(
     val beaconId: String,
     val macAddress: String,
@@ -36,4 +40,9 @@ data class BleBeaconReading(
     val txPowerAtOneMeter: Int?,
     val estimatedDistanceMeters: Double,
     val timestampMs: Long,
+    /**
+     * Battery voltage from an Eddystone-TLM frame, when this advertisement was one
+     * (many beacons send TLM alongside iBeacon, from the same radio address).
+     */
+    val batteryMillivolts: Int? = null,
 )

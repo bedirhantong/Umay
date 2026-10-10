@@ -1,10 +1,6 @@
 package com.appvalence.umay.di
 
 import android.content.Context
-import com.appvalence.umay.cloud.AndroidConnectivityMonitor
-import com.appvalence.umay.cloud.ConnectivityMonitor
-import com.appvalence.umay.cloud.FirestoreBuildingMapRepository
-import com.appvalence.umay.cloud.RemoteBuildingMapRepository
 import com.appvalence.umay.cloudmap.PublishedBuildings
 import com.appvalence.umay.cloudmap.PublishedBuildingsStore
 import com.appvalence.umay.common.AndroidDeviceCapabilities
@@ -32,7 +28,13 @@ import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.storage.BuildingMapStorage
 import com.appvalence.umay.storage.BuildingMapStore
 import com.appvalence.umay.survey.ResourceSurveyAnnouncer
+import com.appvalence.umay.survey.AndroidSurveyForeground
+import com.appvalence.umay.survey.FileSurveyDrafts
 import com.appvalence.umay.survey.SurveyAnnouncer
+import com.appvalence.umay.survey.SurveyDrafts
+import com.appvalence.umay.survey.SurveyForeground
+import com.appvalence.umay.survey.ar.ArCoreSurveyCamera
+import com.appvalence.umay.survey.ar.ArSurveyCamera
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -55,6 +57,11 @@ object AppModule {
     @Provides
     @DefaultDispatcher
     fun defaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
+
+    // A new one-at-a-time slice per injection: each user gets its own serial lane.
+    @Provides
+    @SerialDispatcher
+    fun serialDispatcher(): CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
 
     @Provides
     @Singleton
@@ -82,15 +89,8 @@ object AppModule {
     @Provides
     fun beaconScanner(@ApplicationContext context: Context): BeaconScanner = BleBeaconScanner(context)
 
-    // Only ever injected as dagger.Lazy and first resolved on a background thread:
-    // creating the Firestore/Auth clients sets Firebase up, which isn't free.
-    @Provides
-    @Singleton
-    fun remoteBuildingMaps(): RemoteBuildingMapRepository = FirestoreBuildingMapRepository()
-
-    @Provides
-    @Singleton
-    fun connectivityMonitor(@ApplicationContext context: Context): ConnectivityMonitor = AndroidConnectivityMonitor(context)
+    // The remote map source and connectivity come from the distribution flavor's own
+    // DistributionModule (app/src/standard, app/src/institution).
 }
 
 @Module
@@ -125,4 +125,13 @@ abstract class BindingsModule {
 
     @Binds
     abstract fun surveyAnnouncer(impl: ResourceSurveyAnnouncer): SurveyAnnouncer
+
+    @Binds
+    abstract fun arSurveyCamera(impl: ArCoreSurveyCamera): ArSurveyCamera
+
+    @Binds
+    abstract fun surveyDrafts(impl: FileSurveyDrafts): SurveyDrafts
+
+    @Binds
+    abstract fun surveyForeground(impl: AndroidSurveyForeground): SurveyForeground
 }

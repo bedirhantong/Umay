@@ -43,10 +43,14 @@ data class SessionStartEvent(
 
 @Serializable
 enum class PositionStream {
-    /** What the user was actually guided by (PDR + fingerprint corrections). */
+    /** What the user was actually guided by (the corridor-graph particle filter's estimate). */
     FUSED,
 
-    /** Raw dead-reckoning output — one line per detected footstep. */
+    /**
+     * Raw dead-reckoning output — one line per detected footstep. Never corrected (logs
+     * older than the particle filter excepted), so offline replay can rebuild each
+     * step's turn from consecutive headings.
+     */
     PDR,
 
     /** A fingerprint match that was confident enough to be used as a correction. */

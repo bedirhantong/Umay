@@ -10,7 +10,11 @@ kotlin = "2.0.21"
 composeBom = "2026.06.01"
 coroutines = "1.9.0"
 cameraX = "1.5.1"
-tfliteTaskVision = "0.4.4"
+# LiteRT (TensorFlow Lite's new name), classic Interpreter API; its native code is
+# 16 KB page aligned, unlike the TFLite task library it replaced.
+litert = "1.4.2"
+# QR place markers: pure Java, no native code, no Google component.
+zxing = "3.5.4"
 kotlinxSerialization = "1.8.1"
 mlkitTextRecognition = "16.0.1"
 googleServices = "4.5.0"
@@ -19,6 +23,7 @@ firebaseBom = "34.19.0"
 ksp = "2.3.12"
 hilt = "2.60.1"
 androidxHilt = "1.3.0"
+arcore = "1.56.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -49,7 +54,8 @@ androidx-camera-core = { group = "androidx.camera", name = "camera-core", versio
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraX" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
-tensorflow-lite-task-vision = { group = "org.tensorflow", name = "tensorflow-lite-task-vision", version.ref = "tfliteTaskVision" }
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 # On-device only (downloads its small model once via Google Play Services, then never
 # calls out again) — free, no billing account, works with no connection at all.
@@ -63,6 +69,11 @@ mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition"
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+# Camera-based survey only (motion tracking + depth for the wall map). The client library
+# is Apache-2.0; it talks to the "Google Play Services for AR" app, which is installed on
+# demand. Declared optional in the manifest: phones without it survey by footsteps.
+# 1.56.0's native libraries are 16 KB page aligned.
+google-ar-core = { group = "com.google.ar", name = "core", version.ref = "arcore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

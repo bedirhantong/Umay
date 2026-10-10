@@ -1,6 +1,7 @@
 package com.appvalence.umay.orchestrator
 
 import com.appvalence.umay.coremodel.MapNode
+import com.appvalence.umay.coremodel.isCorridorBend
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
 import java.util.Locale
@@ -35,7 +36,8 @@ sealed interface BuildingQueryResult {
  * and the map canvas already follow.
  */
 object BuildingQueryMatcher {
-    fun match(question: String, nodes: List<MapNode>, nodeFloor: Map<String, Int>, from: Position? = null): BuildingQueryResult {
+    fun match(question: String, allNodes: List<MapNode>, nodeFloor: Map<String, Int>, from: Position? = null): BuildingQueryResult {
+        val nodes = allNodes.filterNot { it.isCorridorBend }
         if (nodes.isEmpty()) return BuildingQueryResult.NotUnderstood
         val normalizedQuestion = normalize(question)
         if (normalizedQuestion.isBlank()) return BuildingQueryResult.NotUnderstood

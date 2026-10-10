@@ -18,7 +18,8 @@ duyduğu tüm metinler kaynak dosyalarındadır, başka dillere çevrilmeye haz�
 
 ## Nasıl çalışır
 
-Bina içinde GPS çalışmaz. Konum, birbirini tamamlayan iki kaynaktan bulunur:
+Bina içinde GPS çalışmaz. Konum, birbirini tamamlayan iki kaynaktan ve
+binanın haritasından bulunur:
 
 - **Adım sayarak konum takibi (PDR):** Adımlar ivmeölçerden, yön yalnızca
   jiroskoptan alınır. Pusula (manyetometre) bilerek kullanılmaz, çünkü
@@ -26,13 +27,32 @@ Bina içinde GPS çalışmaz. Konum, birbirini tamamlayan iki kaynaktan bulunur:
   uzunluğu her kişi için ayrıca ölçülür.
 - **Bluetooth parmak izi:** Harita çıkarılırken isim verilen her noktada
   çevredeki Bluetooth işaretçilerinin (beacon) sinyal güçleri kaydedilir.
-  Yönlendirme sırasında güvenilir bir eşleşme olunca konum o noktaya
-  düzeltilir, böylece adım saymanın zamanla biriken sapması giderilir.
+  Yönlendirme sırasında güvenilir bir eşleşme olunca konum tahmini o noktaya
+  doğru çekilir, böylece adım saymanın zamanla biriken sapması giderilir.
+- **Koridorlara oturtma (parçacık filtresi):** Konum tek bir nokta olarak
+  değil, haritadaki koridorlar üzerinde yürüyen yüzlerce olası tahmin olarak
+  izlenir. Koridorun gitmediği bir yöne atılan adımla uyuşmayan tahminler
+  elenir, böylece tahmin duvarlardan geçemez ve kullanıcının yola hangi yöne
+  bakarak başladığı ilk birkaç adımdan kendiliğinden anlaşılır. Yaklaşım,
+  görme engelliler için geliştirilen açık kaynak
+  [HULOP/NavCog](https://github.com/hulop) projesininkine dayanır.
 
 Bir binanın haritası bir kez, **Beacon Tarayıcı** ekranıyla binada yürüyerek
 çıkarılır: kayıt başlatılır, geçilen yerlere isim verilir, kapılar,
 merdivenler, asansörler ve rampalar işaretlenir. Haritalar `.umay.json`
 dosyası olarak cihazlar arasında dışa ve içe aktarılabilir.
+Kaydedilmiş bir haritadaki hatalar (yanlış yazılmış bir ad, yanlış tür,
+fazladan bir yer, duvardan geçen bir bağlantı, duvar haritasındaki bir leke)
+binayı yeniden yürümeden **Dosyalar → Düzenle** ile düzeltilir.
+
+Haritayı çıkaran kişinin telefonu ARCore'u destekliyorsa harita **kamerayla**
+çıkarılabilir; robot süpürgelerin evi haritalamasına benzer. Telefon göğüs
+hizasında, kamera önüne bakarken yürünür: yürünen yol adım saymak yerine
+kameranın hareket takibinden santimetre düzeyinde ölçülür, köşeler haritaya
+kendiliğinden eklenir. Telefon derinlik ölçebiliyorsa duvarlar da ölçülür ve
+yürüdükçe ekranda 2D bir kat planı oluşur; bu plan haritayla birlikte
+kaydedilir ve yönlendirme ekranında gösterilir. Kamera görüntüsü hiçbir yere
+kaydedilmez. Yönlendirilen kişinin telefonunda kamera ya da ARCore gerekmez.
 
 Telefonda basınç sensörü (barometre) varsa kat değişimi merdivende de
 asansörde de hava basıncından kendiliğinden algılanır. Yoksa merdivende
@@ -43,11 +63,13 @@ adımlardan anlaşılır, asansörde bir düğmeyle onaylanır.
 | Modül | İçerik |
 |---|---|
 | `core-model` | Saf Kotlin veri modeli: bina haritaları, konumlar, uyarılar, saha kaydı olayları, JSON |
-| `positioning` | Adım algılama, adım sayarak konum takibi, Bluetooth tarama ve parmak izi eşleştirme, konum birleştirme, barometre |
+| `positioning` | Adım algılama, adım sayarak konum takibi, Bluetooth tarama ve parmak izi eşleştirme, koridor grafiği üzerinde parçacık filtresi, saha kaydını yeniden oynatma, barometre |
 | `perception` | CameraX ve TensorFlow Lite (EfficientDet-Lite0) ile insan algılama, mesafe ve yön tahmini |
 | `orchestrator` | Katlar arası A* rota bulma, adım adım yönergeler, engel uyarıları, rotayı yeniden hesaplama |
 | `feedback` | Metin okuma (ses seçimi, ses odağı yönetimi) ve titreşim desenleri |
-| `cloud` | Paylaşımlı harita havuzu (Firestore, anonim kimlik doğrulama) ve bağlantı durumu takibi — yalnızca Firebase'in ücretsiz Spark katmanı kullanılır, Cloud Storage kullanılmaz |
+| `cloud` | Uzaktaki harita kaynağının arayüzü, bağlantı durumu takibi ve kurum sunucusu istemcisi |
+| `cloud-firebase` | Play Store sürümünün paylaşımlı harita havuzu (Firestore, anonim kimlik doğrulama) — yalnızca Firebase'in ücretsiz Spark katmanı kullanılır, Cloud Storage kullanılmaz |
+| `server` | Kurum harita sunucusu: kurumun kendi ağında çalışır, haritaları dağıtır ([docs/SUNUCU.md](docs/SUNUCU.md)) |
 | `app` | Compose arayüzü (MVVM, Hilt), arka planda çalışan navigasyon oturumu, harita çıkarma, saha kaydı |
 
 ## Derleme
@@ -67,16 +89,31 @@ harita havuzu bağlanamaz. Havuzu denemek için kendi Firebase projenizi
 oluşturup ondan indirdiğiniz dosyayı kullanın ve `firestore.rules` kurallarını
 o projeye yükleyin.
 
+Uygulamanın iki dağıtımı vardır:
+
+- **standard:** Play Store'daki sürüm. Paylaşımlı harita havuzu Firebase
+  üzerinde çalışır.
+- **institution (kurum sürümü):** Bir kurumun kendi binası için. Hiçbir veri
+  cihazdan çıkmaz: APK'da Firebase yoktur, uygulamanın internet izni yoktur,
+  yedekleme kapalıdır. Haritalar telefonlar arasında dosyayla aktarılır.
+  Ayrıntılar [docs/GIZLILIK.md](docs/GIZLILIK.md) dosyasında. Kurum sürümü
+  `google-services.json` gerektirmez ve "Umay Kurum" adıyla, Play Store
+  sürümünün yanına ayrı bir uygulama olarak kurulur.
+
 ```sh
-./gradlew :app:assembleDebug          # debug APK
-./gradlew :app:installDebug           # bağlı cihaza yükle
+./gradlew :app:assembleStandardDebug        # debug APK
+./gradlew :app:installStandardDebug         # bağlı cihaza yükle
+./gradlew :app:assembleInstitutionRelease   # kurum sürümü
 ```
 
-Testler ve lint:
+Testler, lint ve kurum sürümünün gizlilik denetimi:
 
 ```sh
-./gradlew :core-model:test :positioning:test :perception:test \
-          :feedback:test :orchestrator:test :app:testDebugUnitTest :app:lintDebug
+./gradlew :core-model:test :positioning:testDebugUnitTest :perception:testDebugUnitTest \
+          :feedback:testDebugUnitTest :orchestrator:testDebugUnitTest \
+          :cloud:testDebugUnitTest :cloud-firebase:testDebugUnitTest :server:test \
+          :app:testStandardDebugUnitTest \
+          :app:verifyInstitutionReleasePrivacy :app:lintStandardDebug :app:lintInstitutionDebug
 ```
 
 Uygulamanın işe yaraması için gerçek bir cihaz gerekir: sensörler, Bluetooth
@@ -99,6 +136,16 @@ veri cihazdan çıkmaz.
 
 Her pull request'te aynı testler, lint ve debug derlemesi GitHub Actions'ta
 otomatik çalışır.
+
+## Bir binada kurulum
+
+Beacon seçimi ve yerleşimi, haritanın çıkarılması, denetlenmesi ve
+dağıtılması [docs/KURULUM.md](docs/KURULUM.md) dosyasında.
+
+## Yol haritası
+
+Umay'ın hedefi ve oraya hangi sırayla gidileceği [docs/YOL_HARITASI.md](docs/YOL_HARITASI.md)
+dosyasında. Hangi işin bittiği ve sıradakinin ne olduğu da orada takip edilir.
 
 ## Katkıda bulunmak
 
