@@ -55,7 +55,8 @@ enum class CameraPower { FULL, REDUCED, OFF }
  * looks less often. Statuses are android.os.PowerManager.THERMAL_STATUS_* values.
  */
 object CameraPowerPolicy {
-    // PowerManager.THERMAL_STATUS_MODERATE / SEVERE.
+    // PowerManager.THERMAL_STATUS_NONE / MODERATE / SEVERE (API 29; no status before that).
+    const val THERMAL_NONE = 0
     const val THERMAL_MODERATE = 2
     const val THERMAL_SEVERE = 3
     const val LOW_BATTERY_PERCENT = 20

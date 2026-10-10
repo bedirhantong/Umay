@@ -11,6 +11,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
+import com.appvalence.umay.perception.CameraPowerPolicy
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -29,8 +30,8 @@ class DeviceConditions(private val context: Context) {
 
     /** Android's thermal status; always "none" before Android 10, which has no such signal. */
     private fun thermalStatus(): Flow<Int> {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return flowOf(PowerManager.THERMAL_STATUS_NONE)
-        val powerManager = context.getSystemService(PowerManager::class.java) ?: return flowOf(PowerManager.THERMAL_STATUS_NONE)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return flowOf(CameraPowerPolicy.THERMAL_NONE)
+        val powerManager = context.getSystemService(PowerManager::class.java) ?: return flowOf(CameraPowerPolicy.THERMAL_NONE)
         return callbackFlow {
             trySend(powerManager.currentThermalStatus)
             val listener = PowerManager.OnThermalStatusChangedListener { trySend(it) }
