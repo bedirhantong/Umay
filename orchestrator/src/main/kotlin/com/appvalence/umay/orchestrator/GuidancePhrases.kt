@@ -2,6 +2,7 @@ package com.appvalence.umay.orchestrator
 
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.ObstacleKind
 
 enum class TurnDirection { LEFT, RIGHT }
 
@@ -42,5 +43,6 @@ interface GuidancePhrases {
 
     fun rerouted(): String
 
-    fun obstacle(priority: AlertPriority, isPerson: Boolean, distanceMeters: Double): String
+    /** Something the camera saw ahead, by what it is ([ObstacleKind.UNKNOWN]: just "an obstacle"). */
+    fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String
 }

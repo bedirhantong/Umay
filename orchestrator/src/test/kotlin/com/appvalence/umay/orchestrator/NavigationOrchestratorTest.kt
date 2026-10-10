@@ -10,6 +10,7 @@ import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.ObstacleKind
 import com.appvalence.umay.coremodel.ObstacleSensorSource
 import com.appvalence.umay.coremodel.ObstacleType
 import com.appvalence.umay.coremodel.Position
@@ -70,8 +71,8 @@ private object TokenPhrases : GuidancePhrases {
     override fun arrived() = "ARRIVED"
     override fun noRoute() = "NO_ROUTE"
     override fun rerouted() = "REROUTED"
-    override fun obstacle(priority: AlertPriority, isPerson: Boolean, distanceMeters: Double) =
-        "OBSTACLE $priority ${if (isPerson) "PERSON" else "OTHER"} ${meters(distanceMeters)}"
+    override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double) =
+        "OBSTACLE $priority $kind ${meters(distanceMeters)}"
 }
 
 class NavigationOrchestratorTest {

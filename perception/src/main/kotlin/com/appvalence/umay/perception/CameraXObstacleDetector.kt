@@ -14,13 +14,9 @@ import androidx.lifecycle.LifecycleOwner
 import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.LatencyTrace
 import com.appvalence.umay.coremodel.ObstacleSensorSource
-import com.appvalence.umay.coremodel.ObstacleType
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import org.tensorflow.lite.support.image.TensorImage
-import org.tensorflow.lite.task.core.BaseOptions
-import org.tensorflow.lite.task.vision.detector.ObjectDetector
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
@@ -29,9 +25,10 @@ import java.util.concurrent.atomic.AtomicReference
 enum class CameraFailure { MODEL_UNAVAILABLE, CAMERA_UNAVAILABLE }
 
 /**
- * Faz 1 obstacle detector: CameraX ImageAnalysis feeding a TFLite EfficientDet-Lite0
- * model (FR-5), with monocular distance/bearing estimation (FR-6, [ObstacleGeometry])
- * and frame-to-frame velocity tracking (FR-7, [ObstacleTracker]).
+ * Obstacle detector: CameraX ImageAnalysis feeding EfficientDet-Lite0 on LiteRT
+ * ([EfficientDetDetector]) — people and the furniture-like things a walker can
+ * bump into ([ObstacleClasses]) — with monocular distance/bearing estimation
+ * ([ObstacleGeometry]) and frame-to-frame velocity tracking ([ObstacleTracker]).
  *
  * [onLatencyTrace] reports the sense->detect latency of every processed frame so
  * callers can verify the NFR-1 320ms end-to-end budget; this class only covers the
@@ -52,7 +49,7 @@ enum class CameraFailure { MODEL_UNAVAILABLE, CAMERA_UNAVAILABLE }
  */
 class CameraXObstacleDetector(
     private val context: Context,
-    private val personScoreThreshold: Float = DEFAULT_SCORE_THRESHOLD,
+    private val scoreThreshold: Float = DEFAULT_SCORE_THRESHOLD,
     private val onLatencyTrace: (LatencyTrace) -> Unit = {},
     private val onBindFailed: (CameraFailure) -> Unit = {},
 ) : ObstacleDetector {
@@ -62,7 +59,7 @@ class CameraXObstacleDetector(
 
     // Analyzer-thread only.
     private var tracker = ObstacleTracker()
-    private var objectDetector: ObjectDetector? = null
+    private var objectDetector: EfficientDetDetector? = null
     private var modelLoadFailed = false
     private val frameThrottle = FrameThrottle(MIN_FRAME_INTERVAL_MS)
 
@@ -139,19 +136,11 @@ class CameraXObstacleDetector(
     }
 
     /** Analyzer thread only. Null if the model can't be loaded (and won't be retried). */
-    private fun loadDetectorIfNeeded(): ObjectDetector? {
+    private fun loadDetectorIfNeeded(): EfficientDetDetector? {
         objectDetector?.let { return it }
         if (modelLoadFailed) return null
         return try {
-            ObjectDetector.createFromFileAndOptions(
-                context,
-                MODEL_ASSET_NAME,
-                ObjectDetector.ObjectDetectorOptions.builder()
-                    .setBaseOptions(BaseOptions.builder().setNumThreads(NUM_THREADS).build())
-                    .setMaxResults(MAX_RESULTS)
-                    .setScoreThreshold(personScoreThreshold)
-                    .build(),
-            ).also { objectDetector = it }
+            EfficientDetDetector.create(context, NUM_THREADS).also { objectDetector = it }
         } catch (t: Throwable) {
             Log.e(TAG, "Obstacle detection model failed to load", t)
             modelLoadFailed = true
@@ -159,7 +148,7 @@ class CameraXObstacleDetector(
         }
     }
 
-    private fun bindCamera(lifecycleOwner: LifecycleOwner, preview: Preview?, executor: ExecutorService, detector: ObjectDetector, generation: Int) {
+    private fun bindCamera(lifecycleOwner: LifecycleOwner, preview: Preview?, executor: ExecutorService, detector: EfficientDetDetector, generation: Int) {
         val analysis = ImageAnalysis.Builder()
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
@@ -226,7 +215,7 @@ class CameraXObstacleDetector(
         latestFrame.set(null)
     }
 
-    private fun analyzeFrame(imageProxy: ImageProxy, detector: ObjectDetector) {
+    private fun analyzeFrame(imageProxy: ImageProxy, detector: EfficientDetDetector) {
         val sensingStartMs = System.currentTimeMillis()
         if (!frameThrottle.tryAcquire(sensingStartMs)) {
             imageProxy.close()
@@ -236,34 +225,36 @@ class CameraXObstacleDetector(
             val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             val uprightBitmap = imageProxy.toBitmap().rotated(rotationDegrees)
             latestFrame.set(uprightBitmap)
-            val tensorImage = TensorImage.fromBitmap(uprightBitmap)
 
-            val rawDetections = detector.detect(tensorImage)
+            val rawDetections = detector.detect(uprightBitmap, scoreThreshold)
                 .mapNotNull { detection ->
-                    val personCategory = detection.categories.firstOrNull { it.label.equals("person", ignoreCase = true) }
-                        ?: return@mapNotNull null
-                    val box = detection.boundingBox
+                    val obstacleClass = ObstacleClasses.byIndex[detection.classIndex] ?: return@mapNotNull null
+                    val centerX = (detection.left + detection.right) / 2
                     ObstacleTracker.RawDetection(
-                        centerXPx = box.centerX(),
-                        centerYPx = box.centerY(),
-                        distanceMeters = ObstacleGeometry.estimateDistanceMeters(box.height(), uprightBitmap.height),
-                        bearingDeg = ObstacleGeometry.estimateBearingDegrees(box.centerX(), uprightBitmap.width),
-                    ) to personCategory.score
+                        centerXPx = centerX,
+                        centerYPx = (detection.top + detection.bottom) / 2,
+                        distanceMeters = ObstacleClasses.distanceMeters(obstacleClass, detection.top, detection.bottom, uprightBitmap.height),
+                        bearingDeg = ObstacleGeometry.estimateBearingDegrees(centerX, uprightBitmap.width),
+                    ) to (obstacleClass to detection.score)
                 }
+                .sortedByDescending { it.second.second }
+                .take(MAX_RESULTS)
 
             val detectionDoneMs = System.currentTimeMillis()
 
             val tracked = tracker.update(rawDetections.map { it.first }, timestampMs = detectionDoneMs)
             val result = tracked.mapIndexed { index, t ->
+                val (obstacleClass, score) = rawDetections[index].second
                 DetectedObstacle(
                     id = t.id,
-                    type = ObstacleType.PERSON,
+                    type = obstacleClass.type,
                     distanceMeters = t.distanceMeters,
                     bearingDeg = t.bearingDeg,
                     relativeVelocityMps = t.relativeVelocityMps,
-                    confidence = rawDetections[index].second,
+                    confidence = score,
                     detectedAtMs = detectionDoneMs,
                     sensorSource = ObstacleSensorSource.CAMERA_ML,
+                    kind = obstacleClass.kind,
                 )
             }
 
@@ -284,9 +275,8 @@ class CameraXObstacleDetector(
 
     companion object {
         private const val TAG = "CameraXObstacleDetector"
-        const val MODEL_ASSET_NAME = "efficientdet_lite0.tflite"
         const val DEFAULT_SCORE_THRESHOLD = 0.5f
-        const val MAX_RESULTS = 5
+        const val MAX_RESULTS = 8
 
         // Two, not four: with frames already capped at MIN_FRAME_INTERVAL_MS, extra
         // interpreter threads mostly compete with the UI thread for cores. Both are

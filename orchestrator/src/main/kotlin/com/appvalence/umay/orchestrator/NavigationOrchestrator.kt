@@ -10,7 +10,6 @@ import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.isUnnamed
-import com.appvalence.umay.coremodel.ObstacleType
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.feedback.FeedbackController
 import com.appvalence.umay.perception.ObstacleDetector
@@ -384,7 +383,7 @@ class NavigationOrchestrator(
     }
 
     private fun obstacleMessage(priority: AlertPriority, obstacle: DetectedObstacle): String =
-        phrases.obstacle(priority, isPerson = obstacle.type == ObstacleType.PERSON, distanceMeters = obstacle.distanceMeters)
+        phrases.obstacle(priority, obstacle.kind, distanceMeters = obstacle.distanceMeters)
 
     companion object {
         private val HAZARD_TYPES = setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)

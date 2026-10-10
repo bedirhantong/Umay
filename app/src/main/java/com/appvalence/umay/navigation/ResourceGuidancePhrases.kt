@@ -4,6 +4,7 @@ import android.content.Context
 import com.appvalence.umay.R
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.ObstacleKind
 import com.appvalence.umay.orchestrator.FloorChangeMethod
 import com.appvalence.umay.orchestrator.GuidancePhrases
 import com.appvalence.umay.orchestrator.TurnDirection
@@ -69,11 +70,30 @@ class ResourceGuidancePhrases(context: Context) : GuidancePhrases {
 
     // A critical warning is kept as short as possible — it has to be over before the
     // person takes another step — so it says *stop*, not how many meters away.
-    override fun obstacle(priority: AlertPriority, isPerson: Boolean, distanceMeters: Double): String = when (priority) {
-        AlertPriority.CRITICAL -> resources.getString(if (isPerson) R.string.say_obstacle_critical_person else R.string.say_obstacle_critical_other)
-        AlertPriority.WARNING ->
-            resources.getString(if (isPerson) R.string.say_obstacle_warning_person else R.string.say_obstacle_warning_other, meters(distanceMeters))
-        AlertPriority.INFO ->
-            resources.getString(if (isPerson) R.string.say_obstacle_info_person else R.string.say_obstacle_info_other, meters(distanceMeters))
+    override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String {
+        val what = resources.getString(obstacleName(kind))
+        return when (priority) {
+            AlertPriority.CRITICAL -> resources.getString(R.string.say_obstacle_critical, what)
+            AlertPriority.WARNING -> resources.getString(R.string.say_obstacle_warning, meters(distanceMeters), what)
+            AlertPriority.INFO -> resources.getString(R.string.say_obstacle_info, meters(distanceMeters), what)
+        }
+    }
+
+    private fun obstacleName(kind: ObstacleKind): Int = when (kind) {
+        ObstacleKind.PERSON -> R.string.obstacle_person
+        ObstacleKind.BICYCLE -> R.string.obstacle_bicycle
+        ObstacleKind.MOTORCYCLE -> R.string.obstacle_motorcycle
+        ObstacleKind.FIRE_HYDRANT -> R.string.obstacle_fire_hydrant
+        ObstacleKind.BENCH -> R.string.obstacle_bench
+        ObstacleKind.DOG -> R.string.obstacle_dog
+        ObstacleKind.SUITCASE -> R.string.obstacle_suitcase
+        ObstacleKind.CHAIR -> R.string.obstacle_chair
+        ObstacleKind.COUCH -> R.string.obstacle_couch
+        ObstacleKind.POTTED_PLANT -> R.string.obstacle_potted_plant
+        ObstacleKind.BED -> R.string.obstacle_bed
+        ObstacleKind.TABLE -> R.string.obstacle_table
+        ObstacleKind.TOILET -> R.string.obstacle_toilet
+        ObstacleKind.REFRIGERATOR -> R.string.obstacle_refrigerator
+        ObstacleKind.UNKNOWN -> R.string.obstacle_unknown
     }
 }

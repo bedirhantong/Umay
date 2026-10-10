@@ -217,12 +217,25 @@
     <string name="say_arrived">Hedefe ulaştın.</string>
     <string name="say_no_route">Bu iki nokta arasında bir rota bulunamadı.</string>
     <string name="say_rerouted">Önündeki engel yüzünden rota değişti.</string>
-    <string name="say_obstacle_critical_person">Dur! Hemen önünde biri var.</string>
-    <string name="say_obstacle_critical_other">Dur! Hemen önünde bir engel var.</string>
-    <string name="say_obstacle_warning_person">Dikkat, yaklaşık %1$s önünde biri var.</string>
-    <string name="say_obstacle_warning_other">Dikkat, yaklaşık %1$s önünde bir engel var.</string>
-    <string name="say_obstacle_info_person">Yaklaşık %1$s önünde biri var.</string>
-    <string name="say_obstacle_info_other">Yaklaşık %1$s önünde bir engel var.</string>
+    <!-- %1$s / %2$s: what it is, as below ("biri", "bir sandalye"). -->
+    <string name="say_obstacle_critical">Dur! Hemen önünde %1$s var.</string>
+    <string name="say_obstacle_warning">Dikkat, yaklaşık %1$s önünde %2$s var.</string>
+    <string name="say_obstacle_info">Yaklaşık %1$s önünde %2$s var.</string>
+    <string name="obstacle_person">biri</string>
+    <string name="obstacle_bicycle">bir bisiklet</string>
+    <string name="obstacle_motorcycle">bir motosiklet</string>
+    <string name="obstacle_fire_hydrant">bir yangın musluğu</string>
+    <string name="obstacle_bench">bir bank</string>
+    <string name="obstacle_dog">bir köpek</string>
+    <string name="obstacle_suitcase">bir valiz</string>
+    <string name="obstacle_chair">bir sandalye</string>
+    <string name="obstacle_couch">bir kanepe</string>
+    <string name="obstacle_potted_plant">bir saksı</string>
+    <string name="obstacle_bed">bir yatak</string>
+    <string name="obstacle_table">bir masa</string>
+    <string name="obstacle_toilet">bir klozet</string>
+    <string name="obstacle_refrigerator">bir buzdolabı</string>
+    <string name="obstacle_unknown">bir engel</string>
 
     <!-- Survey (Beacon Tarayıcı) -->
     <string name="survey_permission_message">Binadaki beacon\'ları bulmak için konum ve Bluetooth\'a ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.</string>
@@ -540,7 +553,7 @@
     <string name="settings_about_version">Umay %1$s</string>
     <string name="settings_about_license">Umay açık kaynaklıdır ve GNU Genel Kamu Lisansı sürüm 3 (GPL-3.0) ile dağıtılır: kaynak kodunu inceleyebilir, değiştirip paylaşabilirsin; paylaşılan her türev de aynı lisansla ve kaynak koduyla birlikte yayınlanmalıdır.</string>
     <string name="settings_about_source">Kaynak kodunu aç</string>
-    <string name="settings_about_third_party">Kullanılan açık kaynak bileşenler (Apache 2.0 lisanslı): AndroidX ve Jetpack Compose, CameraX, Dagger ve Hilt, TensorFlow Lite ve EfficientDet-Lite0 modeli, kotlinx.coroutines, kotlinx.serialization.</string>
+    <string name="settings_about_third_party">Kullanılan açık kaynak bileşenler (Apache 2.0 lisanslı): AndroidX ve Jetpack Compose, CameraX, Dagger ve Hilt, LiteRT (TensorFlow Lite) ve EfficientDet-Lite0 modeli, kotlinx.coroutines, kotlinx.serialization.</string>
     <string name="settings_about_closed_components">Kapalı kaynak Google bileşenleri: tabela okuma için cihazda çalışan ML Kit metin tanıma ve kamerayla haritalama için ARCore.</string>
     <string name="source_code_url" translatable="false">https://github.com/bedirhantong/Umay</string>
     <string name="arcore_service_url" translatable="false">https://play.google.com/store/apps/details?id=com.google.ar.core</string>
