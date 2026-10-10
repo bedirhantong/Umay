@@ -350,6 +350,17 @@ private fun DrawScope.drawFloor(
     // Walls on top of the corridor fill: where they disagree, the measured wall is the truth.
     wallMap?.let { drawWallMapLayer(camera, it, it.walls) }
 
+    // Doorways: a bar across the gap in the wall, so a door reads as a door, not a hole.
+    floorMap.doors.forEach { door ->
+        val node = nodesById[door.nodeId] ?: return@forEach
+        val bearing = Math.toRadians(door.passageBearingDeg)
+        val half = door.widthMeters / 2
+        // The wall runs across the passage: (cos, -sin) of its bearing.
+        val a = camera.toScreen(node.x - half * cos(bearing), node.y + half * sin(bearing))
+        val b = camera.toScreen(node.x + half * cos(bearing), node.y - half * sin(bearing))
+        drawLine(colors.hazard, a, b, 4.dp.toPx(), StrokeCap.Butt)
+    }
+
     // Route, split at where the user is: walked part faded and thin, the rest bold.
     val walked = mutableListOf<Offset>()
     val ahead = mutableListOf<Offset>()

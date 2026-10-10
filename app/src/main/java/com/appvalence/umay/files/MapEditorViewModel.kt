@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
+import com.appvalence.umay.coremodel.MapDoors
 import com.appvalence.umay.coremodel.MapEdits
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NodeType
@@ -87,7 +88,8 @@ class MapEditorViewModel @Inject constructor(private val buildings: BuildingRepo
     fun save(onRenamed: (String) -> Unit = {}) {
         val current = _state.value
         val original = current.original ?: return
-        val map = current.map ?: return
+        // A place made (or unmade) a door gets (or loses) its gap in the walls.
+        val map = current.map?.let(MapDoors::apply) ?: return
         if (current.saving || !current.hasChanges) return
         _state.update { it.copy(saving = true, message = null) }
         viewModelScope.launch {

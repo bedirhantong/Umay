@@ -54,6 +54,8 @@ data class FloorMap(
     // at named places — what lets positioning use every scan, not only confident
     // matches. Empty for maps surveyed before this.
     val radioMap: List<RadioSample> = emptyList(),
+    // Doorways cut into [occupancy] (see MapDoors): one per DOOR node walked through.
+    val doors: List<DoorOpening> = emptyList(),
 )
 
 /** The beacons heard at one spot of a floor during the survey (see [FloorMap.radioMap]). */

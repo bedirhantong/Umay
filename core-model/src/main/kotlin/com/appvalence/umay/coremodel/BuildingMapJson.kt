@@ -33,8 +33,9 @@ object BuildingMapJson {
      * upgrade the previous version.
      *
      * 1: everything before versioning (no `formatVersion` key).
-     * 2: optional wall maps (`FloorMap.occupancy`), radio maps (`FloorMap.radioMap`)
-     *    and unnamed corridor-bend nodes.
+     * 2: optional wall maps (`FloorMap.occupancy`) with their doorways
+     *    (`FloorMap.doors`), radio maps (`FloorMap.radioMap`) and unnamed
+     *    corridor-bend nodes.
      */
     const val FORMAT_VERSION = 2
 

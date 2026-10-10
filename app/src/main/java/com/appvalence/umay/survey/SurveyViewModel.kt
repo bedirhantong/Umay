@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appvalence.umay.common.DeviceCapabilities
+import com.appvalence.umay.coremodel.MapDoors
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.di.DefaultDispatcher
 import com.appvalence.umay.feedback.Speaker
@@ -110,7 +111,8 @@ class SurveyViewModel @Inject constructor(
                 )
                 val wallMaps = WallMapBudget.fit(survey.wallMaps)
                 built.copy(
-                    floors = built.floors.map { it.copy(occupancy = wallMaps[it.floorIndex]) },
+                    // Doors cut into the walls after fitting, so a coarser map still gets them.
+                    floors = built.floors.map { MapDoors.apply(it.copy(occupancy = wallMaps[it.floorIndex])) },
                     // A camera-measured map isn't steps × stride, so there's no stride to rescale by.
                     surveyStepLengthMeters = if (cameraSurvey) null else survey.stepLengthMeters ?: settings.stepLengthMeters,
                 )
