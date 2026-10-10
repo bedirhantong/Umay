@@ -18,14 +18,16 @@
 </div></header>
 <main id="icerik" class="doc"><div class="wrap narrow">
 <h1>Gizlilik politikası</h1>
-<p class="meta">Umay (com.appvalence.umay) &middot; Son güncelleme: 20 Eylül 2026 &middot; <a href="en/privacy.html" hreflang="en" lang="en">English</a></p>
+<p class="meta">Umay (com.appvalence.umay) &middot; Son güncelleme: 10 Ekim 2026 &middot; <a href="en/privacy.html" hreflang="en" lang="en">English</a></p>
 
 <h2>Kısaca</h2>
 <ul>
 <li>Umay bir hesap istemez. Ad, e-posta ya da telefon numarası toplamaz.</li>
 <li>Kamera görüntüsü yalnızca o an, cihazda işlenir. Kaydedilmez, saklanmaz, gönderilmez.</li>
-<li>Reklam ve kullanım analizi yoktur.</li>
+<li>Umay reklam göstermez ve kullanım analizi yapmaz. Tabela okumada kullanılan Google ML Kit, kendi performans ölçümlerini Google'a gönderir (bkz. Üçüncü taraflar).</li>
 <li>Haritalar, ayarlar ve kayıtlar cihazınızda durur. Cihazdan yalnızca siz bir haritayı &ldquo;herkese aç&rdquo; dediğinizde ya da bir dosyayı kendiniz paylaştığınızda çıkar.</li>
+<li>Sesli sorular telefonun cihaz içi konuşma tanıyıcısıyla metne çevrilir; ses internete gönderilmez.</li>
+<li>Kurumlar için internete hiç bağlanmayan bir kurum sürümü vardır (bkz. aşağıda).</li>
 </ul>
 
 <h2>Kimiz</h2>
@@ -35,20 +37,22 @@
 <div class="tablewrap"><table>
 <thead><tr><th>İzin</th><th>Ne için</th><th>Veriye ne olur</th></tr></thead>
 <tbody>
-<tr><td>Kamera</td><td>Önünüzdeki insanları algılamak ve tabelalardaki yazıyı okumak.</td><td>Kare cihazda, bellekte işlenir ve atılır. Kaydedilmez, gönderilmez. İnsan algılama ve yazı okuma cihaz üzerinde çalışır.</td></tr>
+<tr><td>Kamera</td><td>Önünüzdeki insanları algılamak, tabelalardaki yazıyı okumak ve harita çıkaran kişi isterse binayı kamerayla haritalamak.</td><td>Kare cihazda, bellekte işlenir ve atılır. Kaydedilmez, gönderilmez. İnsan algılama ve yazı okuma cihaz üzerinde çalışır.</td></tr>
 <tr><td>Konum</td><td>Android, Bluetooth işaretçilerini taramak için konum iznini şart koşar. Yönlendirme sürerken ön plan hizmeti de bu izinle çalışır.</td><td>Umay GPS konumunuzu toplamaz, saklamaz, göndermez. Bina içindeki konum, adım sensörlerinden ve Bluetooth sinyallerinden cihazda hesaplanır.</td></tr>
 <tr><td>Bluetooth</td><td>Binadaki işaretçileri (beacon) tarayıp konumu düzeltmek.</td><td>Sinyal gücü cihazda kullanılır. Yalnızca harita çıkarırken haritaya yazılır.</td></tr>
-<tr><td>Mikrofon</td><td>&ldquo;Bir şey sor&rdquo; düğmesine bastığınızda sorunuzu dinlemek.</td><td>Yalnızca düğmeye bastığınızda dinler. Umay sesi kaydetmez, saklamaz. Sesi metne çeviren, telefonunuzdaki konuşma tanıma hizmetidir (bkz. aşağıda).</td></tr>
+<tr><td>Mikrofon</td><td>&ldquo;Bir şey sor&rdquo; düğmesine bastığınızda sorunuzu dinlemek.</td><td>Yalnızca düğmeye bastığınızda dinler. Umay sesi kaydetmez, saklamaz. Ses telefonun cihaz içi konuşma tanıyıcısıyla metne çevrilir (bkz. aşağıda).</td></tr>
 <tr><td>Bildirim</td><td>Yönlendirme sürerken ekran kapalıyken çalışabilmek için gösterilen bildirim.</td><td>Veri işlenmez.</td></tr>
 <tr><td>Titreşim</td><td>Yönergeleri titreşimle bildirmek.</td><td>Veri işlenmez.</td></tr>
 </tbody></table></div>
 
 <h2>Sesli sorular</h2>
-<p>&ldquo;Bir şey sor&rdquo; özelliği, Android'in konuşma tanıma servisini kullanır. Umay bu servise kendi bir sunucusundan bağlanmaz. Sesin cihazda mı yoksa sunucuda mı metne çevrildiği, telefonunuzda seçili konuşma tanıma hizmetine (çoğu cihazda Google) ve onun ayarlarına bağlıdır; bu, o hizmetin gizlilik politikasına tabidir. Metne dönüşen soru, yalnızca cihazdaki bina haritasında eşleştirilir ve hemen atılır. Umay ne sesi ne metni saklar.</p>
+<p>&ldquo;Bir şey sor&rdquo; özelliği, Android 12 ve sonrasında yalnızca telefonun <strong>cihaz içi</strong> konuşma tanıyıcısını kullanır. Telefonda böyle bir tanıyıcı ya da Türkçe paketi yoksa özellik çalışmaz ve bunu söyler; internet üzerinden tanımaya geçilmez. Android 13 ve sonrasında eksik Türkçe paketi tanıma hizmetinin kendi uygulamasınca indirilir; bu indirme sesinizi içermez. Android 11 ve öncesinde cihaz içi tanıyıcı arayüzü olmadığından istek, Android'in &ldquo;yalnızca çevrimdışı tanıma&rdquo; işaretiyle gönderilir; buna uymak telefondaki tanıma hizmetinin sorumluluğundadır. Metne dönüşen soru yalnızca cihazdaki bina haritasında eşleştirilir ve hemen atılır. Umay ne sesi ne metni saklar.</p>
+<p>Sesli yönergeler için yalnızca telefona yüklü, internet gerektirmeyen bir Türkçe ses seçilir. Telefonun konuşma motoru internet üzerinden okuyan bir sese düşerse Umay bunu söyler ve internetsiz sesin yüklenmesini ister.</p>
 
 <h2>Cihazınızda saklanan veriler</h2>
 <ul>
-<li><strong>Bina haritaları:</strong> çıkardığınız ya da içe aktardığınız haritalar (yer adları, kat bilgisi, Bluetooth sinyal parmak izleri).</li>
+<li><strong>Bina haritaları:</strong> çıkardığınız ya da içe aktardığınız haritalar (yer adları, kat bilgisi, isimli yerlerde ve yol boyunca kaydedilen Bluetooth sinyal güçleri, kamerayla çıkarıldıysa duvar haritası).</li>
+<li><strong>Bitmemiş harita kaydı:</strong> harita çıkarılırken uygulama kapanırsa yürüyüş kaybolmasın diye cihazda tutulan taslak. Kayıt temizlenince silinir, yedeğe girmez.</li>
 <li><strong>Ayarlar:</strong> konuşma hızı, adım uzunluğu ve benzeri tercihler.</li>
 <li><strong>Saha kaydı (varsayılan olarak kapalı):</strong> Dosyalar ekranından açarsanız, yönlendirme sırasında bina içi konum, adım, sinyal gücü, hava basıncı ve verilen yönergeler bir dosyaya yazılır. Görüntü ya da ses içermez. Dosya, siz paylaşana kadar cihazınızdan çıkmaz.</li>
 <li><strong>Çökme kayıtları:</strong> uygulama çökerse hata izi cihazda bir dosyaya yazılır. Kendiliğinden gönderilmez; isterseniz siz paylaşırsınız.</li>
@@ -69,10 +73,14 @@
 <h2>Üçüncü taraflar</h2>
 <ul>
 <li><strong>Google Firebase (Cloud Firestore ve Anonim Kimlik Doğrulama):</strong> yalnızca paylaşımlı harita havuzunu kullanırken. Google, hizmeti sunarken IP adresi gibi teknik verileri kendi politikası uyarınca işleyebilir.</li>
-<li><strong>Google ML Kit metin tanıma:</strong> tabela yazılarını cihaz üzerinde okur; görüntü cihazdan çıkmaz.</li>
-<li><strong>Telefonunuzun konuşma tanıma ve metin okuma hizmetleri:</strong> yukarıda anlatıldığı gibi, cihazınızdaki hizmetlerdir.</li>
+<li><strong>Google ML Kit metin tanıma:</strong> tabela yazılarını cihaz üzerinde okur; görüntü ve okunan yazı cihazdan çıkmaz. Google'a göre ML Kit, API'lerin performansı ve kullanım sıklığıyla ilgili ölçümleri Google'a gönderir ve model güncellemeleri için zaman zaman Google sunucularına bağlanır.</li>
+<li><strong>ARCore (yalnızca kamerayla harita çıkarırken):</strong> Kamerayla haritalama, Google tarafından sağlanan ve <a href="https://policies.google.com/privacy">Google Gizlilik Politikası</a>'na tabi olan <a href="https://play.google.com/store/apps/details?id=com.google.ar.core">Google Play Services for AR (ARCore)</a> üzerinde çalışır. Yönlendirilen kişinin telefonunda kullanılmaz.</li>
+<li><strong>Telefonunuzun konuşma tanıma ve metin okuma hizmetleri:</strong> yukarıda anlatıldığı gibi, cihaz içi kipte kullanılır.</li>
 </ul>
 <p>Umay reklam ağı, kullanım analizi ya da çökme raporlama hizmeti kullanmaz.</p>
+
+<h2>Kurum sürümü</h2>
+<p>Kurumlar kendi binaları için &ldquo;Umay Kurum&rdquo;u kullanabilir (com.appvalence.umay.kurum). Bu sürümün internet izni yoktur; Firebase ve paylaşımlı harita havuzu içermez; Android yedeklemesi ve cihazdan cihaza aktarım kapalıdır. Haritalar telefonlar arasında dosyayla taşınır. Bu güvenceler derleme sırasında otomatik olarak denetlenir. Ayrıntılar <a href="https://github.com/bedirhantong/Umay/blob/main/docs/GIZLILIK.md">GIZLILIK.md</a> belgesindedir.</p>
 
 <h2>Verilerinizi neden ve nasıl işliyoruz</h2>
 <p>Yukarıdaki verilerin çoğu yalnızca cihazınızda işlenir ve bize ulaşmaz. Bize ulaşan tek veri, sizin isteğinizle yayınladığınız harita bilgisidir; amacı, aynı binaya giden başkalarının binayı yeniden taramak zorunda kalmamasıdır. Yasal dayanak, bu paylaşıma verdiğiniz açık onaydır.</p>

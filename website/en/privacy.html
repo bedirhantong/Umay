@@ -18,14 +18,16 @@
 </div></header>
 <main id="icerik" class="doc"><div class="wrap narrow">
 <h1>Privacy policy</h1>
-<p class="meta">Umay (com.appvalence.umay) &middot; Last updated: 20 September 2026 &middot; <a href="../gizlilik.html" hreflang="tr" lang="tr">Türkçe</a> is the original text.</p>
+<p class="meta">Umay (com.appvalence.umay) &middot; Last updated: 10 October 2026 &middot; <a href="../gizlilik.html" hreflang="tr" lang="tr">Türkçe</a> is the original text.</p>
 
 <h2>In short</h2>
 <ul>
 <li>Umay asks for no account. It collects no name, e-mail address or phone number.</li>
 <li>Camera frames are processed on the device only, at the moment they are seen. They are not recorded, stored or sent.</li>
-<li>There are no ads and no usage analytics.</li>
+<li>Umay shows no ads and does no usage analytics. Google ML Kit, used to read signs, sends its own performance metrics to Google (see Third parties).</li>
 <li>Maps, settings and logs stay on your device. Data leaves it only when you choose to publish a map or share a file yourself.</li>
+<li>Spoken questions are transcribed by your phone's on-device speech recognizer; audio is not sent over the internet.</li>
+<li>For institutions there is a separate build that never connects to the internet (see below).</li>
 </ul>
 
 <h2>Who we are</h2>
@@ -35,20 +37,22 @@
 <div class="tablewrap"><table>
 <thead><tr><th>Permission</th><th>Purpose</th><th>What happens to the data</th></tr></thead>
 <tbody>
-<tr><td>Camera</td><td>Detect people in front of you and read text on signs.</td><td>Frames are processed in memory on the device and discarded. Not recorded, not sent. People detection and text reading run on the device.</td></tr>
+<tr><td>Camera</td><td>Detect people in front of you, read text on signs, and, if the person surveying a building chooses to, map it with the camera.</td><td>Frames are processed in memory on the device and discarded. Not recorded, not sent. People detection and text reading run on the device.</td></tr>
 <tr><td>Location</td><td>Android requires the location permission to scan for Bluetooth beacons. The foreground guidance service also runs under it.</td><td>Umay does not collect, store or send your GPS location. Indoor position is computed on the device from step sensors and Bluetooth signals.</td></tr>
 <tr><td>Bluetooth</td><td>Scan the beacons in a building to correct the position.</td><td>Signal strength is used on the device. It is written to a map only while a map is being surveyed.</td></tr>
-<tr><td>Microphone</td><td>Listen to your question when you tap &ldquo;Ask something&rdquo;.</td><td>Listens only after you tap the button. Umay does not record or store audio. Turning speech into text is done by the speech recognition service on your phone (see below).</td></tr>
+<tr><td>Microphone</td><td>Listen to your question when you tap &ldquo;Ask something&rdquo;.</td><td>Listens only after you tap the button. Umay does not record or store audio. Speech is turned into text by your phone's on-device recognizer (see below).</td></tr>
 <tr><td>Notifications</td><td>The notice shown while guidance runs, so it can continue with the screen off.</td><td>No data is processed.</td></tr>
 <tr><td>Vibration</td><td>Signal instructions by vibration.</td><td>No data is processed.</td></tr>
 </tbody></table></div>
 
 <h2>Spoken questions</h2>
-<p>&ldquo;Ask something&rdquo; uses Android's speech recognition service. Umay does not connect to a server of its own for this. Whether your speech is transcribed on the device or on a server depends on the recognition service selected on your phone (on most phones, Google's) and its settings, and is governed by that service's privacy policy. The transcript is matched only against the building map on the device and then discarded. Umay stores neither the audio nor the text.</p>
+<p>On Android 12 and later, &ldquo;Ask something&rdquo; uses only your phone's <strong>on-device</strong> speech recognizer. If the phone has none, or no Turkish language pack, the feature says so and does not work; it never falls back to recognition over the internet. On Android 13 and later a missing Turkish pack is downloaded by the recognition service's own app; the download contains none of your speech. Android 11 and earlier have no on-device recognizer interface, so the request carries Android's &ldquo;offline recognition only&rdquo; flag; honouring it is up to the recognition service on the phone. The transcript is matched only against the building map on the device and then discarded. Umay stores neither the audio nor the text.</p>
+<p>Spoken guidance uses only a Turkish voice installed on the phone that needs no internet. If the phone's speech engine falls back to a voice that reads over the internet, Umay says so and asks for the offline voice to be installed.</p>
 
 <h2>Data stored on your device</h2>
 <ul>
-<li><strong>Building maps:</strong> maps you surveyed or imported (place names, floor information, Bluetooth signal fingerprints).</li>
+<li><strong>Building maps:</strong> maps you surveyed or imported (place names, floor information, Bluetooth signal strengths recorded at named places and along the walked path, and a wall map if it was surveyed with the camera).</li>
+<li><strong>Unfinished survey:</strong> a draft kept on the device while a map is being surveyed, so the walk is not lost if the app is closed. It is deleted when the survey is cleared and is not backed up.</li>
 <li><strong>Settings:</strong> speech rate, step length and similar preferences.</li>
 <li><strong>Field log (off by default):</strong> if you turn it on in the Files screen, indoor position, steps, signal strength, air pressure and the instructions given are written to a file during guidance. It contains no images or audio. The file does not leave your device until you share it.</li>
 <li><strong>Crash reports:</strong> if the app crashes, the stack trace is written to a file on the device. It is never sent automatically; you can share it if you wish.</li>
@@ -69,10 +73,14 @@
 <h2>Third parties</h2>
 <ul>
 <li><strong>Google Firebase (Cloud Firestore and Anonymous Authentication):</strong> only when you use the shared map pool. Google may process technical data such as the IP address under its own policy.</li>
-<li><strong>Google ML Kit text recognition:</strong> reads sign text on the device; images do not leave the device.</li>
-<li><strong>Your phone's speech recognition and text-to-speech services:</strong> services on your device, as described above.</li>
+<li><strong>Google ML Kit text recognition:</strong> reads sign text on the device; images and the text read do not leave the device. According to Google, ML Kit sends metrics about the performance and use of its APIs to Google and occasionally contacts Google's servers for model updates.</li>
+<li><strong>ARCore (only when surveying with the camera):</strong> Camera mapping runs on <a href="https://play.google.com/store/apps/details?id=com.google.ar.core">Google Play Services for AR (ARCore)</a>, which is provided by Google and governed by the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. It is not used on the phone of the person being guided.</li>
+<li><strong>Your phone's speech recognition and text-to-speech services:</strong> used in their on-device mode, as described above.</li>
 </ul>
 <p>Umay uses no ad network, no usage analytics and no crash-reporting service.</p>
+
+<h2>Institution build</h2>
+<p>Institutions can use &ldquo;Umay Kurum&rdquo; for their own buildings (com.appvalence.umay.kurum). It has no internet permission; it contains no Firebase and no shared map pool; Android backup and device-to-device transfer are off. Maps move between phones as files. These guarantees are checked automatically at build time. Details are in <a href="https://github.com/bedirhantong/Umay/blob/main/docs/GIZLILIK.md">GIZLILIK.md</a>.</p>
 
 <h2>Your rights</h2>
 <p>You can ask whether data about you is processed, request information, and request correction or deletion. You can remove a map you published from within the app. If that is not possible, follow the steps on the <a href="../veri-silme.html">data deletion page</a>. If you are in Turkey, Article 11 of Law No. 6698 (KVKK) applies.</p>
