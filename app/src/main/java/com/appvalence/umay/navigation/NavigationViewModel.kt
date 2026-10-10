@@ -8,14 +8,21 @@ import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.isCorridorBend
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.feedback.Speaker
+import com.appvalence.umay.positioning.ble.BeaconScanTargets
+import com.appvalence.umay.positioning.ble.BeaconScanner
+import com.appvalence.umay.positioning.fingerprint.StartPlaceFinder
 import com.appvalence.umay.fieldlog.FieldLogFiles
 import com.appvalence.umay.settings.UserSettings
 import com.appvalence.umay.storage.BuildingRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -31,7 +38,16 @@ data class SelectedBuilding(
     /** Labels carry the floor ("Koridor (Kat 1)") only when there's more than one to tell apart. */
     val showFloorInLabels: Boolean get() = map.floors.size > 1
     val canBegin: Boolean get() = nodes.isNotEmpty() && startIndex != destinationIndex
+    val startNode: MapNode? get() = nodes.getOrNull(startIndex)
 }
+
+/** What the beacons heard on the route picker say about where the walk starts (see [StartPlaceFinder]). */
+data class StartHint(
+    /** Ids of the places to list first under "Bulunduğum yer", most likely first. */
+    val nearbyIds: List<String> = emptyList(),
+    /** A place confident enough to ask "are you here?" about; null once answered. */
+    val suggested: MapNode? = null,
+)
 
 data class NavigationUiState(
     /** Null while buildings are still being read from disk. */
@@ -55,6 +71,7 @@ class NavigationViewModel @Inject constructor(
     capabilities: DeviceCapabilities,
     private val speaker: Speaker,
     private val savedState: SavedStateHandle,
+    private val scanner: BeaconScanner,
 ) : ViewModel() {
     val activeSession: StateFlow<NavigationSession?> = sessions.active
 
@@ -77,6 +94,61 @@ class NavigationViewModel @Inject constructor(
         uiState(buildings.buildings.value, savedState[KEY_BUILDING], savedState[KEY_START] ?: 0, savedState[KEY_DESTINATION] ?: LAST_NODE),
     )
 
+    private val _startHint = MutableStateFlow(StartHint())
+    val startHint: StateFlow<StartHint> = _startHint.asStateFlow()
+
+    private var hintJob: Job? = null
+
+    // Places the person said they're not at: never suggested again for this building.
+    private val declinedIds = mutableSetOf<String>()
+
+    /**
+     * Listens for the selected building's beacons while the route picker is on screen,
+     * to put the likely start places first and, when sure, to ask about one. Does
+     * nothing for a map surveyed without beacons. [stopFindingStart] ends it.
+     */
+    fun findStart() {
+        if (hintJob != null) return
+        val selected = state.value.selected ?: return
+        val finder = StartPlaceFinder(selected.nodes)
+        if (!finder.canFind) return
+        val beaconIds = selected.nodes.flatMap { it.fingerprint }.map { it.beaconId }.toSet()
+        scanner.start(BeaconScanTargets.forBeaconIds(beaconIds))
+        hintJob = viewModelScope.launch {
+            scanner.beaconUpdates().collect { readings ->
+                val result = finder.update(readings)
+                val suggested = result.suggested?.takeIf { it.id !in declinedIds && it.id != state.value.selected?.startNode?.id }
+                _startHint.update { current ->
+                    // Once asked, keep asking about the same place until answered.
+                    StartHint(result.nearbyIds, current.suggested ?: suggested)
+                }
+            }
+        }
+    }
+
+    fun stopFindingStart() {
+        hintJob?.cancel()
+        hintJob = null
+        scanner.stop()
+    }
+
+    /** "Evet, buradayım". */
+    fun acceptSuggestedStart() {
+        val suggested = _startHint.value.suggested ?: return
+        val selected = state.value.selected ?: return
+        val index = selected.nodes.indexOfFirst { it.id == suggested.id }
+        if (index >= 0) setStart(index)
+        declinedIds += suggested.id // already the start: no need to ask again
+        _startHint.update { it.copy(suggested = null) }
+    }
+
+    /** "Hayır". */
+    fun declineSuggestedStart() {
+        val suggested = _startHint.value.suggested ?: return
+        declinedIds += suggested.id
+        _startHint.update { it.copy(suggested = null) }
+    }
+
     fun selectBuilding(id: String) {
         savedState[KEY_BUILDING] = id
         resetRoute()
@@ -98,6 +170,8 @@ class NavigationViewModel @Inject constructor(
     fun begin() {
         val selected = state.value.selected ?: return
         if (!selected.canBegin) return
+        // The walk runs its own scan; two at once would only compete for the radio.
+        stopFindingStart()
         sessions.start(selected.map, selected.nodes[selected.startIndex].id, selected.nodes[selected.destinationIndex])
     }
 
@@ -111,7 +185,14 @@ class NavigationViewModel @Inject constructor(
 
     fun stopSpeaking() = speaker.stop()
 
+    override fun onCleared() {
+        stopFindingStart()
+    }
+
     private fun resetRoute() {
+        stopFindingStart()
+        declinedIds.clear()
+        _startHint.value = StartHint()
         savedState[KEY_START] = 0
         savedState[KEY_DESTINATION] = LAST_NODE
     }

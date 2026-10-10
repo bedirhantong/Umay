@@ -98,6 +98,12 @@
     <string name="nav_pick_route_subtitle">Bulunduğun noktayı ve gitmek istediğin yeri seç.</string>
     <string name="nav_start_label">Bulunduğum yer</string>
     <string name="nav_destination_label">Gitmek istediğim yer</string>
+    <string name="nav_start_suggestion">%1$s yakınında gibi görünüyorsun. Yola buradan mı başlıyorsun?</string>
+    <string name="nav_start_suggestion_yes">Evet, buradan başla</string>
+    <string name="nav_start_suggestion_no">Hayır</string>
+    <string name="nav_start_nearby">%1$s, yakında</string>
+    <string name="nav_start_nearby_hint">Yakındaki yerler listenin başında.</string>
+    <string name="nav_start_confirmed">Başlangıç: %1$s</string>
     <string name="nav_begin">Yönlendirmeyi başlat</string>
 
     <!-- Navigation: active -->
