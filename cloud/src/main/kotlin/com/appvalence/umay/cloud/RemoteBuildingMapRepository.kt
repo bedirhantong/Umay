@@ -27,6 +27,9 @@ sealed interface RemoteMapFailure {
     data class TooLarge(val maxBytes: Long) : RemoteMapFailure
     data class InvalidMap(val problems: List<com.appvalence.umay.coremodel.MapProblem>) : RemoteMapFailure
 
+    /** Published from a newer Umay; this one would misread it. */
+    data object NewerFormat : RemoteMapFailure
+
     /** Trying to update or delete someone else's publication — only its original publisher may. */
     data object NotOwner : RemoteMapFailure
     data class Other(val message: String?) : RemoteMapFailure

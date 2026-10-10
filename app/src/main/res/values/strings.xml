@@ -382,7 +382,7 @@
     <string name="cloud_error_no_connection">İnternete ulaşılamadı. Bağlantını kontrol edip tekrar dene.</string>
     <string name="cloud_error_not_found">Bu harita artık orada değil, kaldırılmış olabilir.</string>
     <string name="cloud_error_too_large">Bu harita paylaşım için fazla büyük.</string>
-    <string name="cloud_error_invalid_map">Harita bozuk görünüyor, paylaşılamadı.</string>
+    <string name="cloud_error_invalid_map">Harita bozuk görünüyor, işlem yapılamadı.</string>
     <string name="cloud_error_not_owner">Bu haritayı sadece onu ilk yükleyen cihaz kaldırabilir.</string>
     <string name="cloud_error_other">Bir şeyler ters gitti: %1$s</string>
 
@@ -398,6 +398,7 @@
     <string name="import_unreadable">Dosya okunamadı.</string>
     <string name="import_too_large">Dosya okunamadı ya da bir harita dosyası için fazla büyük.</string>
     <string name="import_not_a_map">Bu dosya bir Umay haritası değil.</string>
+    <string name="map_newer_format">Bu harita Umay\'ın daha yeni bir sürümüyle oluşturulmuş. Açmak için uygulamayı güncelle.</string>
     <string name="import_corrupt">Harita bozuk görünüyor: %1$s.</string>
     <string name="import_problem_blank_name">binanın adı yok</string>
     <string name="import_problem_no_nodes">haritada hiç nokta yok</string>

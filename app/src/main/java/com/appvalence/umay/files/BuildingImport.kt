@@ -74,6 +74,7 @@ private fun rejectionText(reason: ImportRejection): String {
         ImportRejection.Unreadable -> stringResource(R.string.import_unreadable)
         ImportRejection.TooLarge -> stringResource(R.string.import_too_large)
         ImportRejection.NotAMap -> stringResource(R.string.import_not_a_map)
+        ImportRejection.NewerFormat -> stringResource(R.string.map_newer_format)
         is ImportRejection.Corrupt -> stringResource(
             R.string.import_corrupt,
             reason.problems.joinToString("; ") { problem ->

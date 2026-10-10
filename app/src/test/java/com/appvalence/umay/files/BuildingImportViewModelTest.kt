@@ -126,4 +126,11 @@ class BuildingImportViewModelTest {
         val map = building("Ofis")
         assertEquals(ImportRead.Parsed(map), parseBuildingMap(BuildingMapJson.encode(map).encodeToByteArray()))
     }
+
+    @Test
+    fun `a map from a newer Umay asks for an update instead of calling the file broken`() {
+        val newer = BuildingMapJson.encode(building("Ofis")).replaceFirst("\"formatVersion\": ${BuildingMapJson.FORMAT_VERSION}", "\"formatVersion\": 99")
+
+        assertEquals(ImportRead.Rejected(ImportRejection.NewerFormat), parseBuildingMap(newer.encodeToByteArray()))
+    }
 }

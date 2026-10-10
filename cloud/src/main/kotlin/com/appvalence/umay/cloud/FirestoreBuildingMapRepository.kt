@@ -2,6 +2,7 @@ package com.appvalence.umay.cloud
 
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
+import com.appvalence.umay.coremodel.NewerMapFormatException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -65,8 +66,13 @@ class FirestoreBuildingMapRepository(
     override suspend fun downloadBuildingMap(id: String): Result<BuildingMap> = runCatching {
         val json = mapsCollection.document(id).getSuspending().getString(FIELD_MAP_JSON)
             ?: return Result.remoteFailure(RemoteMapFailure.NotFound)
-        runCatching { BuildingMapJson.decode(json) }.getOrNull()
-            ?: return Result.remoteFailure(RemoteMapFailure.Other("Bozuk harita verisi"))
+        try {
+            BuildingMapJson.decode(json)
+        } catch (e: NewerMapFormatException) {
+            return Result.remoteFailure(RemoteMapFailure.NewerFormat)
+        } catch (e: Exception) {
+            return Result.remoteFailure(RemoteMapFailure.InvalidMap(emptyList()))
+        }
     }.recoverFirestoreFailure()
 
     override suspend fun publishBuildingMap(map: BuildingMap): Result<String> = runCatching {
