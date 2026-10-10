@@ -24,7 +24,7 @@ geri bildirimi, saha denemesi ya da çeviri: her katkı değerlidir.
 3. Testleri ve lint'i çalıştırın:
    ```sh
    ./gradlew :core-model:test :positioning:testDebugUnitTest :perception:testDebugUnitTest \
-             :orchestrator:testDebugUnitTest :feedback:testDebugUnitTest :cloud-firebase:testDebugUnitTest \
+             :orchestrator:testDebugUnitTest :feedback:testDebugUnitTest :cloud:testDebugUnitTest :cloud-firebase:testDebugUnitTest :server:test \
              :app:testStandardDebugUnitTest :app:verifyInstitutionReleasePrivacy \
              :app:lintStandardDebug :app:lintInstitutionDebug
    ```

@@ -18,10 +18,10 @@ Umay iki ayrı uygulama olarak derlenir:
 | | **Standart** (Play Store) | **Kurum sürümü** ("Umay Kurum") |
 |---|---|---|
 | Uygulama kimliği | `com.appvalence.umay` | `com.appvalence.umay.kurum` |
-| İnternet izni | Var (yalnızca paylaşımlı harita havuzu için) | **Yok** |
+| İnternet izni | Var (yalnızca paylaşımlı harita havuzu için) | **Yok**; kurum sunucusuyla derlenirse yalnızca o sunucu |
 | Firebase | Var (paylaşımlı harita havuzu) | **Yok**, APK'da bulunmaz |
 | Android yedeklemesi | Haritalar ve ayarlar yedeklenebilir | **Kapalı** (bulut ve cihazdan cihaza) |
-| Harita aktarımı | Dosya ya da paylaşımlı havuz | Yalnızca dosya |
+| Harita aktarımı | Dosya ya da paylaşımlı havuz | Dosya ya da kurumun kendi sunucusu |
 
 Kurum sürümünün güvenceleri derleme sırasında denetlenir: birleşik manifest
 internet izni isterse, yedeklemeye izin verirse ya da APK'ya bir Firebase
@@ -31,9 +31,12 @@ tarafından ağa hiç çıkarılmaz; buna ek olarak kurum sürümü hiçbir sert
 otoritesine güvenmez ve şifresiz bağlantıya izin vermez
 (`app/src/institution/`).
 
-Bir kurumun kendi ağında çalışan harita sunucusu henüz yoktur (bkz.
-`docs/YOL_HARITASI.md`, 1.5). Eklendiğinde kurum sürümü yalnızca o sunucunun
-adresine bağlanabilecek şekilde derlenecektir.
+Kurum isterse haritaları kendi ağında çalışan bir sunucudan dağıtabilir
+([SUNUCU.md](SUNUCU.md)). Kurum sürümü o sunucunun adresiyle derlenirse internet
+izni bulunur, ama ağ güvenlik yapılandırması yalnızca o sunucunun adına izin
+verir; başka hiçbir adrese bağlantı kurulamaz. Sunucuya yalnızca haritalar
+gider ve oradan haritalar gelir; sunucu erişim günlüğü tutmaz. Adres
+verilmezse yukarıdaki gibi internet izni hiç yoktur.
 
 ---
 
@@ -159,8 +162,10 @@ kullanmaz.
 - [ ] Kullanıcı telefonlarında Türkçe internetsiz konuşma sesinin ve
   (Bir şey sor için) cihaz içi Türkçe konuşma tanımanın yüklü olduğunu
   kontrol edin. Umay eksik olduğunda bunu kendisi söyler.
-- [ ] Haritaları kurum içinde dosya olarak dağıtın (e-posta, MDM, USB). Bina
-  ve yer adlarına kişisel bilgi yazmayın.
+- [ ] Haritaları kurum içinde dosya olarak (e-posta, MDM, USB) ya da kurumun
+  kendi sunucusundan dağıtın. Bina ve yer adlarına kişisel bilgi yazmayın.
+- [ ] Sunucu kullanıyorsanız yayın anahtarını yalnızca personel telefonlarının
+  derlemesine koyun; ziyaretçi derlemesi yalnızca okur.
 - [ ] Saha kaydını yalnızca test için açın; kayıt dosyaları konum geçmişi
   içerir.
 

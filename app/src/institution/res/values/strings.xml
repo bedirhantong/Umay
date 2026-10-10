@@ -1,4 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The institution build's own wording: its "shared pool" is the institution's map
+     server (when built with one), visible on its network only. -->
 <resources>
     <string name="app_name">Umay Kurum</string>
+    <string name="cloud_pool_title">Kurum harita sunucusu</string>
+    <string name="cloud_pool_body">Binanın haritaları kurumun kendi sunucusunda durur. Yetkili telefonlar haritayı sunucuya yükler, diğerleri buradan indirir. Hiçbir şey kurumun ağı dışına çıkmaz.</string>
+    <string name="cloud_offline">Kurumun ağına bağlı değilsin. Bağlanınca burada sunucudaki haritaları görebilirsin. Şimdilik yukarıdaki dışa/içe aktarma ile devam edebilirsin.</string>
+    <string name="cloud_no_local_buildings">Sunucuya yükleyebileceğin bir haritan yok. Önce Beacon Tarayıcı ile bir bina çıkar.</string>
+    <string name="cloud_status_published">Sunucuda</string>
+    <string name="cloud_publish_description">%1$s binasını sunucuya yükle</string>
+    <string name="cloud_unpublish_description">%1$s binasını sunucudan kaldır</string>
+    <string name="cloud_publish_confirm_title">\'%1$s\' kurum sunucusuna yüklensin mi?</string>
+    <string name="cloud_publish_confirm_body">Kurumun ağındaki herkes bu haritayı indirebilir. İçinde isimlendirdiğin yer adları ve Bluetooth sinyal bilgileri olur, kişisel bir bilgi olmaz.</string>
+    <string name="cloud_publish_confirm_action">Yükle</string>
+    <string name="cloud_publish_success">\'%1$s\' sunucuya yüklendi.</string>
+    <string name="cloud_unpublish_confirm_body">\'%1$s\' sunucudan kaldırılacak. Cihazındaki harita olduğu gibi kalır.</string>
+    <string name="cloud_pool_empty">Sunucuda henüz harita yok.</string>
+    <string name="cloud_error_no_connection">Kurum sunucusuna ulaşılamadı. Kurumun ağına bağlı olduğunu kontrol edip tekrar dene.</string>
+    <string name="cloud_error_not_owner">Bu telefonun sunucuya harita yükleme ya da kaldırma yetkisi yok.</string>
 </resources>

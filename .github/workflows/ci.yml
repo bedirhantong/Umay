@@ -44,7 +44,9 @@ jobs:
           :perception:testDebugUnitTest
           :orchestrator:testDebugUnitTest
           :feedback:testDebugUnitTest
+          :cloud:testDebugUnitTest
           :cloud-firebase:testDebugUnitTest
+          :server:test
           :app:testStandardDebugUnitTest
 
       # The institution build promises that nothing leaves the device; this fails the

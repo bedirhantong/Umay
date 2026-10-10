@@ -153,6 +153,15 @@ Haritayı kullanıcılara vermeden önce sahada deneyin:
 
 ## 7. Haritayı dağıtmak
 
+İki yol var:
+
+**Kurum sunucusuyla (önerilir, birden çok bina ya da sık güncellenen harita
+için):** Bilgi işlem ekibi sunucuyu kurar ve uygulamayı sunucu adresiyle derler
+([SUNUCU.md](SUNUCU.md)). Personel telefonu haritayı **Dosyalar → Kurum harita
+sunucusu** bölümünden sunucuya yükler; ziyaretçi telefonları oradan indirir.
+
+**Dosyayla:**
+
 - **Dosyalar → (bina) → Paylaş** haritayı bir `.umay.json` dosyası olarak
   verir. Dosyayı kurumun e-postası, MDM'si ya da USB ile kullanıcı
   telefonlarına aktarın; telefonda dosyaya dokunmak haritayı Umay'a yükler.

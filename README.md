@@ -67,7 +67,9 @@ adımlardan anlaşılır, asansörde bir düğmeyle onaylanır.
 | `perception` | CameraX ve TensorFlow Lite (EfficientDet-Lite0) ile insan algılama, mesafe ve yön tahmini |
 | `orchestrator` | Katlar arası A* rota bulma, adım adım yönergeler, engel uyarıları, rotayı yeniden hesaplama |
 | `feedback` | Metin okuma (ses seçimi, ses odağı yönetimi) ve titreşim desenleri |
-| `cloud` | Paylaşımlı harita havuzu (Firestore, anonim kimlik doğrulama) ve bağlantı durumu takibi — yalnızca Firebase'in ücretsiz Spark katmanı kullanılır, Cloud Storage kullanılmaz |
+| `cloud` | Uzaktaki harita kaynağının arayüzü, bağlantı durumu takibi ve kurum sunucusu istemcisi |
+| `cloud-firebase` | Play Store sürümünün paylaşımlı harita havuzu (Firestore, anonim kimlik doğrulama) — yalnızca Firebase'in ücretsiz Spark katmanı kullanılır, Cloud Storage kullanılmaz |
+| `server` | Kurum harita sunucusu: kurumun kendi ağında çalışır, haritaları dağıtır ([docs/SUNUCU.md](docs/SUNUCU.md)) |
 | `app` | Compose arayüzü (MVVM, Hilt), arka planda çalışan navigasyon oturumu, harita çıkarma, saha kaydı |
 
 ## Derleme
@@ -109,7 +111,8 @@ Testler, lint ve kurum sürümünün gizlilik denetimi:
 ```sh
 ./gradlew :core-model:test :positioning:testDebugUnitTest :perception:testDebugUnitTest \
           :feedback:testDebugUnitTest :orchestrator:testDebugUnitTest \
-          :cloud-firebase:testDebugUnitTest :app:testStandardDebugUnitTest \
+          :cloud:testDebugUnitTest :cloud-firebase:testDebugUnitTest :server:test \
+          :app:testStandardDebugUnitTest \
           :app:verifyInstitutionReleasePrivacy :app:lintStandardDebug :app:lintInstitutionDebug
 ```
 
