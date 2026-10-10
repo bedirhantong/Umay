@@ -105,6 +105,10 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   toleransı, parmak izi yayılımı ve adım ölçeği ayarlandı.
   *Bitti:* yeni motorun ortalama hatası eskisinden düşük. Değilse neden
   olduğu yazıldı ve plan buna göre değişti.
+  Saha kaydında ayrıca denenecek (0.8'in simülasyonundan): tarayıcıdaki
+  RSSI yumuşatması (`KalmanFilter1D`, Q = 0,5) yürürken sinyali birkaç metre
+  geriden getiriyor; simülasyonda Q = 2 hatayı belirgin düşürdü. Haritalar da
+  aynı yumuşatmayla çıkarıldığı için yalnızca saha kaydıyla değiştirilecek.
 - [x] **0.5 Bilinen hata: adım modunda kayda devam edince yol baştan
   başlıyor** (K). Durdurup "Kayda devam et" denince adım sayımı (0, 0)'dan
   yeniden başlıyor.
@@ -120,15 +124,51 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   *Bitti:* kayıt sırasında uygulama zorla kapatılıp açılınca yürüyüş, isimli
   yerler ve okunan sinyaller yerinde; testle korunuyor.
 
-- [ ] **0.8 Sanal saha testi** (O). Bir binayı ve içinde yürüyen kişiyi
+- [x] **0.8 Sanal saha testi** (O). Bir binayı ve içinde yürüyen kişiyi
   simüle eden test düzeneği: gürültülü adımlar, uzaklıkla zayıflayan ve
   dalgalanan beacon sinyalleri, yer işaretleri. Filtre ayarlarını gerçek
   kayıt gelmeden kabaca yapmaya ve konum doğruluğunu her değişiklikte
   otomatik denetlemeye yarar.
   *Bitti:* birkaç senaryoda hata eşikleri testle korunuyor.
+  `positioning/.../simulation/`: 40 m'lik ana koridor, döngü yapan iki yan
+  koridor, 9 beacon; telefonun kendi yumuşatması ve haritalamanın kendi
+  örneklemesi (`RadioSampler`). `VirtualFieldTest` 8 senaryoyu (yalnız adım,
+  uzun yürüyüş ve jiroskop kayması, kısa adım, beacon, kötü ve seyrek sinyal,
+  yanlış başlangıç) 10'ar farklı rastgelelikle çalıştırıyor.
+  `UMAY_SIM_REPORT=1` ile sayıları yazdırıyor.
 - [ ] **0.9 Telefonda saha kaydı özeti** (K). Dosyalar'da her kaydın
   "Buradayım" işaretlerinden ortalama ve en kötü hatası, en kötü yerin adıyla.
   *Bitti:* sahada kaydı göndermeden doğruluk görülebiliyor.
+- [ ] **0.10 Gerçek açık veriyle tekrar** (O). Microsoft'un Indoor Location
+  Competition 2.0 verisi (gerçek binalarda, elde tutulan Android telefonla:
+  ivmeölçer, jiroskop, iBeacon taramaları ve işaretli gerçek konumlar)
+  Umay'ın saha kaydı biçimine çevrilir ve `FieldLogReplay` ile oynatılır.
+  Kendi binamız olmadan gerçek adım ve sinyal gürültüsüyle ölçüm sağlar.
+  Lisansı önce okunur (araştırma amaçlı olabilir; yalnızca testte kullanılır,
+  uygulamaya girmez). Haritası koridor ağı değil, kat planı görseli; koridor
+  ağı işaretli noktalardan çıkarılır.
+  *Bitti:* en az 3 binada eski ve yeni motorun hatası ilerleme kaydında.
+- [ ] **0.11 Yürüyüşü izleme sayfası** (K). Simülasyonun, saha kaydının ve
+  0.10'un yürüyüşlerini harita üzerinde oynatan bir sayfa: gerçek yol,
+  tahmin, parçacık bulutu, o an söylenen yönerge, hata grafiği. Kod
+  değişikliğinin etkisini gözle görmeye yarar.
+  *Bitti:* bir test komutu, açılınca yürüyüşü oynatan tek bir HTML dosyası
+  üretiyor.
+- [ ] **0.12 Sanal ofis (görsel ikiz)** (B). Gerçek bir ofisin telefon
+  videosundan Gaussian splatting ile foto-gerçekçi 3B kopyası çıkarılır
+  (nerfstudio, tek seferlik GPU işi). Bu kopyada çizilen bir yürüyüş
+  boyunca kameranın göreceği kareler üretilir; engel algılama (4.1), QR yer
+  işaretleri (3.3) ve tutuş uyarısı (4.5) bu karelerle bilgisayarda
+  denenir. Sahneye sanal sandalye ve kişi konup uyarının zamanında gelip
+  gelmediği ölçülür.
+  *Bitti:* bir ofis sahnesinde engel ve yer işareti senaryoları
+  otomatik koşuyor, sonuçlar ilerleme kaydında.
+- [ ] **0.13 Emülatörde uçtan uca deneme** (O). Açık karar 3'e bağlı.
+  Sensörleri ve beacon'ları kayıttan ya da simülasyondan besleyen bir test
+  sürümü; emülatörün sanal kamerasına 0.12'nin kareleri verilir. Uygulamanın
+  kendisi (ekranlar, TalkBack, konuşma) cihazsız baştan sona denenir.
+  *Bitti:* kayıtlı bir yürüyüş emülatörde baştan sona oynuyor, söylenen
+  yönergeler kayıt altında.
 
 ### Faz 1: Gizlilik ve kurum içi çalışma
 
@@ -276,17 +316,24 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   Uygulama telefonun yanlış tutulduğunu (yere ya da tavana baktığını) sesle
   söylüyor.
 
-- [ ] **4.6 Rotadan çıkınca uyarı ve yeniden rota** (O). Konum birkaç adım
+- [ ] **4.6 Rotadan çıkınca uyarı ve yeniden rota** (O). **Kod hazır:**
+  `RouteMonitor`; sahada yanlış alarm olup olmadığı denenecek. Konum birkaç adım
   boyunca rotadan uzaklaşırsa ya da kullanıcı ters yöne yürürse "Rotadan
   çıktın" denir ve bulunduğu yerden yeni rota çıkarılır.
   *Bitti:* simülasyonda yanlış koridora sapan yürüyüşte uyarı ve yeni rota
   geliyor; doğru yürüyüşte yanlış alarm yok.
-- [ ] **4.7 "Neredeyim?"** (K). Sesli soruya en yakın yer, iki yer
+- [ ] **4.7 "Neredeyim?"** (K). **Kod hazır:** "Bir şey sor" ile. Sesli
+  soruya en yakın yer, iki yer
   arasındaysa ikisi, rotadaysa sıradaki hedef ve uzaklığıyla yanıt.
-- [ ] **4.8 Merdivensiz rota** (K). Ayarlardan "Merdiven kullanma":
-  rota merdiven geçişleri yerine asansör ve rampadan çıkar; yoksa söylenir.
-- [ ] **4.9 Saat yönüyle anlatım** (K). Ayarlardan seçilebilen "saat 2
-  yönünde" anlatımı; varsayılan "sağa dön" kalır.
+- [ ] **4.8 Merdivensiz rota** (K). **Kod hazır:** Ayarlar → Rota. Ayarlardan
+  "Merdiven kullanma": rota merdiven geçişleri yerine asansör ve rampadan
+  çıkar; yoksa yola çıkmadan söylenir. Engel ve rotadan çıkma yüzünden
+  yeniden çizilen rotalar da aynı kurala uyar.
+- [ ] **4.9 Saat yönüyle anlatım** (K). **Kod hazır:** Ayarlar → Rota →
+  "Yönleri saatle söyle". "Saat 2 yönünde" anlatımı; dönüşün açısına göre
+  saat (45° sağ = 2, 90° sağ = 3), duvar tarafı 9 ya da 3. Varsayılan
+  "sağa dön" kalır. Kör kullanıcılarla testte (5.3) hangisinin anlaşıldığı
+  sorulacak.
 
 ### Faz 5: Kurumda yayın
 
@@ -335,6 +382,9 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 2. **Hedef telefonlar.** Yönlendirme ARCore istemediği için Android 7+ her
    telefon; kamerayla haritalama için ARCore destekli bir telefon gerekir.
    Kurum hangi telefonlarla test edilecek?
+3. **Emülatör.** Şimdiye kadar uygulama emülatörde ya da telefonda
+   çalıştırılmadı (yalnızca derleme, birim testi, lint). 0.13 bu kuralın
+   test sürümü için gevşetilmesini gerektirir.
 
 ---
 
@@ -346,6 +396,10 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 - **Telefonun göğüste tutulması gerekir.** Elinde baston olan biri için
   askı şart. Önlem: cepteki mod (adım ve beacon) her zaman çalışır kalır.
 - **Pil.** Kamera ve derinlik sürekli açıkken pil hızlı biter. Önlem: 4.4.
+- **Yanlış başlangıç ve seyrek beacon.** Simülasyonda (0.8) kullanıcı yanlış
+  yeri seçer ve beacon'lar da seyrek duyulursa konum toparlanmıyor. Önlem:
+  başlangıç önerisi (3.2), "Kamerayla bul" ve yer işaretleri (3.3); kurulumda
+  beacon aralığı 100–300 ms (KURULUM.md).
 - **Sahada doğrulama eksikliği.** Bugüne kadar yazılan konum kodunun hiçbiri
   gerçek binada ölçülmedi. Önlem: kamerayla konum bulma (3.3, 3.4) ve
   kamerayla ilerleme (Faz 4) 0.2 ve 0.3 bitmeden başlamaz. 3.1 ve 3.2
@@ -357,6 +411,18 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Saha kaydı gelmeden yapılabilenler bitti: rotadan çıkma
+  ve ters yön uyarısı (4.6), "Neredeyim?" (4.7), merdivensiz rota (4.8),
+  saat yönüyle anlatım (4.9), sanal saha testi (0.8). Simülasyon parçacık
+  filtresinde üç hata buldu ve düzeltildi: birkaç beacon'a dayanan yanlış
+  yer eşleşmeleri yürüyeni metrelerce uzağa çekiyordu (seyrek sinyalde
+  ortalama 6 m; artık eşleşme yalnızca sinyal haritası da onaylarsa
+  uygulanıyor, 0,7 m); yer işareti yanlış başlangıcı düzeltince yön eski
+  kalıyordu (artık işaretin görüldüğü yönden kuruluyor; 16 m'den 1,6 m'ye);
+  kavşağı bir adım geçen sıkı bir bulut dönüşte yok oluyordu (artık 1 m
+  tolerans var). Cihazsız test için 0.10–0.13 eklendi; 0.13 açık karar 3'e
+  bağlı.
 
 - **11 Ekim 2026:** Faz 1–5'in kodla yapılabilen bütün işleri bitti: kurum
   sunucusu (1.5), kaynakların birleşmesi (3.4), açık alan bağlantıları (4.2),
