@@ -40,4 +40,9 @@ data class BleBeaconReading(
     val txPowerAtOneMeter: Int?,
     val estimatedDistanceMeters: Double,
     val timestampMs: Long,
+    /**
+     * Battery voltage from an Eddystone-TLM frame, when this advertisement was one
+     * (many beacons send TLM alongside iBeacon, from the same radio address).
+     */
+    val batteryMillivolts: Int? = null,
 )

@@ -8,6 +8,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.location.LocationManager
+import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.location.LocationManagerCompat
 import com.appvalence.umay.coremodel.BleBeaconReading
@@ -172,6 +173,7 @@ class BleBeaconScanner(private val context: Context) : BeaconScanner {
 
         val filter = rssiFilters.getOrPut(beaconId) { KalmanFilter1D() }
         val smoothedRssiInt = filter.update(rssi.toDouble()).roundToInt()
+        val battery = scanRecord?.getServiceData(EDDYSTONE_SERVICE_UUID)?.let(EddystoneTlm::batteryMillivolts)
 
         return BleBeaconReading(
             beaconId = beaconId,
@@ -184,6 +186,7 @@ class BleBeaconScanner(private val context: Context) : BeaconScanner {
             txPowerAtOneMeter = txPower,
             estimatedDistanceMeters = BleDistanceEstimator.estimateMeters(smoothedRssiInt, txPower),
             timestampMs = System.currentTimeMillis(),
+            batteryMillivolts = battery,
         )
     }
 
@@ -214,6 +217,7 @@ class BleBeaconScanner(private val context: Context) : BeaconScanner {
         private const val IBEACON_PAYLOAD_LENGTH = 23
         private const val IBEACON_TRAILER_LENGTH = 5
         private val UUID_DASH_POSITIONS = setOf(4, 6, 8, 10)
+        private val EDDYSTONE_SERVICE_UUID: ParcelUuid = ParcelUuid.fromString("0000FEAA-0000-1000-8000-00805F9B34FB")
 
         /** How long a beacon stays in [beaconUpdates] after its last sighting. Field-log replay mirrors it. */
         const val STALE_THRESHOLD_MS = 15_000L

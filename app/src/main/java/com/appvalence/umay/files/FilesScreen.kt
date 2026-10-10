@@ -89,14 +89,21 @@ fun FilesScreen(
 
     LaunchedEffect(Unit) { viewModel.refreshFiles() }
 
-    // The editor takes this tab's place while a building is being edited.
+    // The editor takes this tab's place while a building is being edited, and the
+    // beacon check-up the editor's place while that's open.
     var editingBuildingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var checkingBeacons by rememberSaveable { mutableStateOf(false) }
     val editing = editingBuildingId?.let { id -> state.buildings.firstOrNull { it.id == id } }
+    if (editing != null && checkingBeacons) {
+        BeaconHealthScreen(building = editing, onClose = { checkingBeacons = false }, modifier = modifier)
+        return
+    }
     if (editing != null) {
         MapEditorScreen(
             building = editing,
             onClose = { editingBuildingId = null },
             onRenamed = { editingBuildingId = it },
+            onCheckBeacons = { checkingBeacons = true },
             modifier = modifier,
         )
         return

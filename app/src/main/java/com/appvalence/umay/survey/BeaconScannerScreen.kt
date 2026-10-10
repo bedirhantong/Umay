@@ -90,7 +90,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
-private val REQUIRED_BLE_PERMISSIONS = buildList {
+internal val REQUIRED_BLE_PERMISSIONS = buildList {
     add(Manifest.permission.ACCESS_FINE_LOCATION)
     add(Manifest.permission.ACCESS_COARSE_LOCATION)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -832,7 +832,7 @@ private fun BleBeaconReading.toSurveyLine(): String {
 }
 
 @Composable
-private fun scanFailureText(failure: BleScanState.Failed): String = when (failure.reason) {
+internal fun scanFailureText(failure: BleScanState.Failed): String = when (failure.reason) {
     BleScanFailure.LOCATION_OFF -> stringResource(R.string.ble_failure_location_off)
     BleScanFailure.BLUETOOTH_OFF -> stringResource(R.string.ble_failure_bluetooth_off)
     BleScanFailure.UNSUPPORTED -> stringResource(R.string.ble_failure_unsupported)

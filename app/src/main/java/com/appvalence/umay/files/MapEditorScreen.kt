@@ -81,6 +81,7 @@ fun MapEditorScreen(
     building: BuildingMap,
     onClose: () -> Unit,
     onRenamed: (String) -> Unit,
+    onCheckBeacons: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: MapEditorViewModel = hiltViewModel(),
 ) {
@@ -118,6 +119,9 @@ fun MapEditorScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            OutlinedButton(onClick = onCheckBeacons, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(stringResource(R.string.beacons_open))
+            }
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(modifier = Modifier.weight(1f), enabled = state.undoCount > 0, onClick = viewModel::undo) {
                     Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null)

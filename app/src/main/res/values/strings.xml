@@ -380,6 +380,35 @@
     <string name="editor_save_failed">Harita kaydedilemedi.</string>
     <string name="editor_name_taken">Bu adda başka bir bina var. Başka bir ad seç.</string>
     <string name="editor_name_blank">Bina adı boş olamaz.</string>
+    <!-- Beacon check-up (Dosyalar → Düzenle → Beacon durumu) -->
+    <string name="beacons_open">Beacon durumu</string>
+    <string name="beacons_title">Beacon durumu</string>
+    <string name="beacons_body">Binada dolaşırken beacon\'lar yaklaştıkça sırayla duyulur. Bir süre dolaştıktan sonra hâlâ duyulmayan bir beacon yerinden çıkmış, bozulmuş ya da pili bitmiş olabilir. Pil bilgisi yalnızca Eddystone-TLM yayını yapan beacon\'larda görünür.</string>
+    <plurals name="beacons_scanning">
+        <item quantity="one">%1$d saniyedir dinleniyor.</item>
+        <item quantity="other">%1$d saniyedir dinleniyor.</item>
+    </plurals>
+    <string name="beacons_scan_failed">Tarama yapılamıyor: %1$s</string>
+    <string name="beacons_none">Bu haritada beacon kaydı yok: harita beacon\'sız çıkarılmış.</string>
+    <string name="beacons_unheard">Duyulmayanlar (%1$d)</string>
+    <string name="beacons_low_battery">Pili zayıf (%1$d)</string>
+    <string name="beacons_heard">Duyulanlar (%1$d)</string>
+    <string name="beacons_unknown">Haritada olmayanlar (%1$d)</string>
+    <string name="beacons_unknown_body">Bu beacon\'lar binanın beacon ailesinden ama haritada yoklar; harita çıkarıldıktan sonra takılmış olabilirler. Konumda kullanılmaları için haritayı yeniden çıkar.</string>
+    <string name="beacons_id">Beacon %1$s</string>
+    <string name="beacons_signal">sinyal %1$d dBm</string>
+    <string name="beacons_battery">pil %1$.2f V</string>
+    <string name="beacons_battery_low">pil %1$.2f V, değiştirilmeli</string>
+    <string name="beacons_not_heard_yet">henüz duyulmadı</string>
+    <string name="beacons_coverage">Kapsama</string>
+    <string name="beacons_coverage_ok">%1$s: her yerde en az üç beacon duyuluyor.</string>
+    <string name="beacons_coverage_unknown">%1$s: bu kat sinyaller yol boyunca kaydedilmeden önce haritalanmış, kapsama bilinmiyor.</string>
+    <string name="beacons_coverage_none_near">%1$s yakınında beacon duyulmuyor; buraya beacon ekle.</string>
+    <plurals name="beacons_coverage_weak_near">
+        <item quantity="one">%1$s yakınında yalnızca %2$d beacon duyuluyor; bir beacon daha eklemek konumu iyileştirir.</item>
+        <item quantity="other">%1$s yakınında yalnızca %2$d beacon duyuluyor; bir beacon daha eklemek konumu iyileştirir.</item>
+    </plurals>
+    <string name="beacons_coverage_place_unknown">Adsız bir noktanın</string>
     <string name="files_export_chooser">Haritayı paylaş</string>
     <string name="files_export_failed">Harita dışa aktarılamadı.</string>
     <string name="files_delete_building_body">Bu binanın haritası kalıcı olarak silinecek. Önce dışa aktarmadıysan geri alınamaz.</string>
