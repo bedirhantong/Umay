@@ -131,6 +131,7 @@ class FakeUserSettings(
     override var speechRate: Float = 1f,
     override var keepScreenOnDuringNavigation: Boolean = false,
     override var avoidStairs: Boolean = false,
+    override var clockDirections: Boolean = false,
     override var onboardingCompleted: Boolean = false,
 ) : UserSettings
 

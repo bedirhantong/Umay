@@ -240,7 +240,7 @@ class NavigationSession internal constructor(
             feedback = feedback,
             startNodeId = startNodeId,
             destinationNodeId = destinationNode.id,
-            phrases = ResourceGuidancePhrases(appContext),
+            phrases = ResourceGuidancePhrases(appContext, clockDirections = settings.clockDirections),
             avoidStairs = settings.avoidStairs,
         )
     }
@@ -703,6 +703,7 @@ class NavigationSession internal constructor(
                 "speechRate" to settings.speechRate.toDouble(),
                 "keepScreenOn" to if (settings.keepScreenOnDuringNavigation) 1.0 else 0.0,
                 "avoidStairs" to if (settings.avoidStairs) 1.0 else 0.0,
+                "clockDirections" to if (settings.clockDirections) 1.0 else 0.0,
                 "BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS" to BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS,
                 "BarometricFloorChangeDetector.CONFIRM_FRACTION" to BarometricFloorChangeDetector.CONFIRM_FRACTION,
                 "BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS" to BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS,

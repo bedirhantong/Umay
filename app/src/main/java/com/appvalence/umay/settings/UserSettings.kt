@@ -28,6 +28,9 @@ interface UserSettings {
     /** Routes keep off stairs (lifts and ramps only) whenever the building allows it. */
     var avoidStairs: Boolean
 
+    /** Turns and wall sides said as clock hours ("saat 2 yönüne") instead of left/right. */
+    var clockDirections: Boolean
+
     var onboardingCompleted: Boolean
 
     /** The stride dead reckoning should use: the calibrated one when there is one. */
@@ -61,6 +64,10 @@ class SharedPreferencesUserSettings @Inject constructor(@ApplicationContext cont
         get() = preferences.getBoolean(KEY_AVOID_STAIRS, false)
         set(value) = preferences.edit { putBoolean(KEY_AVOID_STAIRS, value) }
 
+    override var clockDirections: Boolean
+        get() = preferences.getBoolean(KEY_CLOCK_DIRECTIONS, false)
+        set(value) = preferences.edit { putBoolean(KEY_CLOCK_DIRECTIONS, value) }
+
     override var onboardingCompleted: Boolean
         get() = preferences.getBoolean(KEY_ONBOARDING_COMPLETED, false)
         set(value) = preferences.edit { putBoolean(KEY_ONBOARDING_COMPLETED, value) }
@@ -73,5 +80,6 @@ class SharedPreferencesUserSettings @Inject constructor(@ApplicationContext cont
         const val KEY_SPEECH_RATE = "speech_rate"
         const val KEY_KEEP_SCREEN_ON = "keep_screen_on_during_navigation"
         const val KEY_AVOID_STAIRS = "avoid_stairs"
+        const val KEY_CLOCK_DIRECTIONS = "clock_directions"
     }
 }

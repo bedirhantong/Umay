@@ -61,10 +61,10 @@ private fun personObstacle(id: String, distanceMeters: Double, bearingDeg: Doubl
  */
 private object TokenPhrases : GuidancePhrases {
     private fun meters(distance: Double) = "%.1f".format(java.util.Locale.ROOT, distance)
-    override fun walkToward(placeName: String, distanceMeters: Double, thenTurn: TurnDirection?) =
-        "WALK $placeName ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
-    override fun walkAhead(distanceMeters: Double, thenTurn: TurnDirection?) =
-        "AHEAD ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
+    override fun walkToward(placeName: String, distanceMeters: Double, thenTurn: Turn?) =
+        "WALK $placeName ${meters(distanceMeters)} ${thenTurn?.direction ?: "STRAIGHT"}"
+    override fun walkAhead(distanceMeters: Double, thenTurn: Turn?) =
+        "AHEAD ${meters(distanceMeters)} ${thenTurn?.direction ?: "STRAIGHT"}"
     override fun followWall(side: TurnDirection) = "WALL $side"
     override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =

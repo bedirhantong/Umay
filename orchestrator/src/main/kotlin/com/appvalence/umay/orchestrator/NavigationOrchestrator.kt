@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.onEach
 import java.util.UUID
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 
@@ -370,7 +371,7 @@ class NavigationOrchestrator(
         if (target.type in HAZARD_TYPES) return GuidanceCue.HAZARD_AHEAD
         val next = currentRoute.getOrNull(targetIndex + 1) ?: return GuidanceCue.CONTINUE
         if (nodeFloor[next.id] != nodeFloor[target.id]) return GuidanceCue.CONTINUE
-        return when (classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))) {
+        return when (classifyTurn(bearingDeg(previous, target), bearingDeg(target, next))?.direction) {
             TurnDirection.RIGHT -> GuidanceCue.TURN_RIGHT
             TurnDirection.LEFT -> GuidanceCue.TURN_LEFT
             null -> GuidanceCue.CONTINUE
@@ -430,13 +431,10 @@ class NavigationOrchestrator(
     private fun bearingDeg(from: MapNode, to: MapNode): Double =
         (Math.toDegrees(atan2(to.x - from.x, to.y - from.y)) + 360.0) % 360.0
 
-    private fun classifyTurn(incomingBearingDeg: Double, outgoingBearingDeg: Double): TurnDirection? {
+    // Null for "straight on": a bend smaller than TURN_ANGLE_THRESHOLD_DEG isn't worth saying.
+    private fun classifyTurn(incomingBearingDeg: Double, outgoingBearingDeg: Double): Turn? {
         val turnAngle = ((outgoingBearingDeg - incomingBearingDeg + 540.0) % 360.0) - 180.0
-        return when {
-            turnAngle > TURN_ANGLE_THRESHOLD_DEG -> TurnDirection.RIGHT
-            turnAngle < -TURN_ANGLE_THRESHOLD_DEG -> TurnDirection.LEFT
-            else -> null
-        }
+        return if (abs(turnAngle) > TURN_ANGLE_THRESHOLD_DEG) Turn(turnAngle) else null
     }
 
     private fun shouldAlert(obstacleId: String, priority: AlertPriority, nowMs: Long): Boolean {

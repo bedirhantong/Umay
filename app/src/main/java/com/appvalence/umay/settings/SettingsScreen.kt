@@ -125,6 +125,13 @@ fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier, view
                 checked = state.avoidStairs,
                 onCheckedChange = viewModel::setAvoidStairs,
             )
+            SettingsSwitch(
+                label = stringResource(R.string.settings_clock_directions),
+                body = stringResource(R.string.settings_clock_directions_body),
+                checked = state.clockDirections,
+                onCheckedChange = viewModel::setClockDirections,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
 
         SettingsCard(icon = Icons.Filled.LightMode, title = stringResource(R.string.settings_screen_title)) {
@@ -429,11 +436,17 @@ private fun centimeters(meters: Double): Int = (meters * 100).roundToInt()
 
 /** An on/off setting: the whole row toggles it, with what it does spelled out below. */
 @Composable
-private fun SettingsSwitch(label: String, body: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SettingsSwitch(
+    label: String,
+    body: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
     ) {
