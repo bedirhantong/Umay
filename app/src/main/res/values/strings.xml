@@ -211,6 +211,8 @@
     <string name="say_walk_straight">%1$s yönünde yaklaşık %2$s ilerle.</string>
     <string name="say_walk_then_right">%1$s yönünde yaklaşık %2$s ilerle, sonra sağa dön.</string>
     <string name="say_walk_then_left">%1$s yönünde yaklaşık %2$s ilerle, sonra sola dön.</string>
+    <string name="say_wall_left">Duvar solunda; onu takip edebilirsin.</string>
+    <string name="say_wall_right">Duvar sağında; onu takip edebilirsin.</string>
     <string name="say_walk_ahead">Yaklaşık %1$s düz ilerle.</string>
     <string name="say_walk_ahead_then_right">Yaklaşık %1$s ilerle, sonra sağa dön.</string>
     <string name="say_walk_ahead_then_left">Yaklaşık %1$s ilerle, sonra sola dön.</string>

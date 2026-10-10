@@ -28,6 +28,9 @@ interface GuidancePhrases {
     /** Toward a node nobody named — a bend in the corridor a camera survey added — optionally turning there. */
     fun walkAhead(distanceMeters: Double, thenTurn: TurnDirection?): String
 
+    /** A wall runs along this side of the leg: follow it ("shorelining"). Said after the leg's instruction. */
+    fun followWall(side: TurnDirection): String
+
     /** The final leg, to the destination itself. */
     fun approachDestination(distanceMeters: Double): String
 
