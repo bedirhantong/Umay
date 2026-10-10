@@ -254,7 +254,10 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   yerleştirme, harita çıkarma, sunucu, test.
 - [ ] **5.3 Kör kullanıcılarla test** (O). En az 5 kişiyle, gerçek bir
   binada, gözlemli. Sonuçlar ve düzeltmeler yazılı.
-- [ ] **5.4 Erişilebilirlik denetimi** (K). Bütün ekranlar TalkBack,
+- [ ] **5.4 Erişilebilirlik denetimi** (K). Kod üzerinden tarama yapıldı ve
+  bulunanlar düzeltildi (rolsüz tıklanabilir satırlar, TalkBack'e görünmeyen
+  harita önizlemesi). TalkBack, büyük yazı ve yüksek kontrastla telefonda
+  denetim bekliyor. Bütün ekranlar TalkBack,
   büyük yazı ve yüksek kontrastla denetlendi.
 - [ ] **5.5 Mağaza hazırlığı** (K). Veri güvenliği formu, ARCore açıklaması,
   güvenlik uyarıları, 16 KB sayfa boyutu (`libtask_vision_jni.so`, Şubat
