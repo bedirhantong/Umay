@@ -117,6 +117,11 @@ veri cihazdan çıkmaz.
 Her pull request'te aynı testler, lint ve debug derlemesi GitHub Actions'ta
 otomatik çalışır.
 
+## Yol haritası
+
+Umay'ın hedefi ve oraya hangi sırayla gidileceği [docs/YOL_HARITASI.md](docs/YOL_HARITASI.md)
+dosyasında. Hangi işin bittiği ve sıradakinin ne olduğu da orada takip edilir.
+
 ## Katkıda bulunmak
 
 Hata bildirimleri (issue) ve pull request'ler memnuniyetle karşılanır.
