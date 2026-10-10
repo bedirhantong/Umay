@@ -237,7 +237,7 @@
     <string name="survey_new_area_title">Yeni bir alan haritala</string>
     <string name="survey_new_area_body">Kaydı başlat, binada normal şekilde yürü, önemli yerlere isim ver, bitince durdur. Elle konum girmene gerek yok, telefon adım sayarak kendi hesaplar.</string>
     <string name="survey_calibrate_hint">Adım uzunluğun henüz ölçülmedi. Haritanın mesafeleri doğru olsun diye önce \"Ayarlar\" sekmesinden adımını kalibre etmeni öneririm.</string>
-    <string name="survey_unfinished">Bitmemiş bir kayıt var: %1$s, %2$s.</string>
+    <string name="survey_unfinished">Bitmemiş bir kayıt var: %1$s, %2$s. Devam etmeden önce kaydı durdurduğun yere dön ve o zamanki yöne bak.</string>
     <string name="survey_resume">Kayda devam et</string>
     <string name="survey_start">Haritalamayı başlat</string>
     <string name="survey_clear">Kaydı sil ve baştan başla</string>

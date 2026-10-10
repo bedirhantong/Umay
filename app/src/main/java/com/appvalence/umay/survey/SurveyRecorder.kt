@@ -223,18 +223,29 @@ class SurveyRecorder @Inject constructor(
 
     private suspend fun recordFootsteps(stepLength: Double) {
         var trackedFloor = _state.value.currentFloor
-        var pdr = PdrIntegrator(floor = trackedFloor)
+        var pdr = continueOnFloor(trackedFloor)
         motion.steps(stepLength).collect { step ->
             val floor = _state.value.currentFloor
             if (floor != trackedFloor) {
-                // PDR has no vertical axis: a floor change starts a fresh (x, y) origin
-                // instead of letting stairwell walking distort this floor's shape.
+                // PDR has no vertical axis: each floor keeps its own (x, y) frame instead of
+                // letting stairwell walking distort this floor's shape.
                 trackedFloor = floor
-                pdr = PdrIntegrator(floor = floor)
+                pdr = continueOnFloor(floor)
             }
             val pose = pdr.integrate(step)
             _state.update { it.copy(trajectory = it.trajectory + pose) }
         }
+    }
+
+    /**
+     * Dead reckoning for [floor], picking up where the walk last was on it — after
+     * "Kayda devam et", or back on a floor left earlier (most often by the same stairs,
+     * so its last point is where the walker is again). A floor never walked starts at
+     * its own origin.
+     */
+    private fun continueOnFloor(floor: Int): PdrIntegrator {
+        val last = _state.value.trajectory.lastOrNull { it.floor == floor } ?: return PdrIntegrator(floor = floor)
+        return PdrIntegrator(startX = last.x, startY = last.y, startHeadingDeg = last.headingDeg, floor = floor)
     }
 
     /**

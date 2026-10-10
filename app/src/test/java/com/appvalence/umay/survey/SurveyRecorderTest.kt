@@ -182,6 +182,41 @@ class SurveyRecorderTest {
         assertEquals(listOf("B"), recorder.state.value.taggedWaypoints.map { it.name })
     }
 
+    @Test
+    fun `a resumed footstep walk carries on from where it stopped`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start()
+        repeat(4) { step() }
+        advanceUntilIdle()
+        recorder.stop()
+        advanceUntilIdle()
+
+        recorder.start()
+        step()
+        advanceUntilIdle()
+
+        val trajectory = recorder.state.value.trajectory
+        assertEquals(5, trajectory.size)
+        assertEquals(5 * 0.7, trajectory.last().y, 1e-9)
+        recorder.stop()
+    }
+
+    @Test
+    fun `coming back to a floor carries on from its last point, not its origin`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start()
+        repeat(3) { step() }
+        recorder.changeFloor(+1)
+        repeat(2) { step() }
+        recorder.changeFloor(-1)
+        step()
+        advanceUntilIdle()
+
+        val groundFloor = recorder.state.value.trajectory.filter { it.floor == 0 }
+        assertEquals(4 * 0.7, groundFloor.last().y, 1e-9)
+        recorder.stop()
+    }
+
     // --- Camera survey ---
 
     private var frameTime = 10_000L
