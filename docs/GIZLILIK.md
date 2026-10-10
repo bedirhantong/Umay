@@ -194,9 +194,8 @@ listesine eklemek de önerilir.
 
 ## Açık noktalar
 
-- Web sitesindeki gizlilik politikası (`feat/website` dalı, `website/gizlilik.html`)
-  "Bir şey sor" için eski davranışı anlatıyor, ARCore'dan ve ML Kit
-  ölçümlerinden söz etmiyor; bu belgeyle uyumlu hâle getirilmeli
-  (`docs/YOL_HARITASI.md`, 1.6).
+- Web sitesindeki gizlilik politikası (`feat/website` dalı) bu belgeyle uyumlu
+  hâle getirildi; uygulamanın bu sürümüyle birlikte yayınlanmalıdır, daha önce
+  değil (anlattığı davranışlar bu sürümde geliyor).
 - Android 11 ve öncesinde "yalnızca çevrimdışı" isteğine uymak telefondaki
   konuşma tanıma hizmetinin sorumluluğundadır; Umay bunu denetleyemez.

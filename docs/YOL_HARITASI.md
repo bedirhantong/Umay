@@ -155,7 +155,8 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   hangi Google bileşeni ne yapar. Kurumlar için `docs/GIZLILIK.md`, ayrıca
   Play Store veri güvenliği formu için özet.
   *Bitti:* belge yazıldı, uygulamadaki davranışla birebir.
-- [ ] **1.7 Web sitesindeki gizlilik politikası** (K). `feat/website`
+- [x] **1.7 Web sitesindeki gizlilik politikası** (K). `feat/website`
+  dalında güncellendi; uygulamanın bu sürümüyle birlikte yayınlanacak. `feat/website`
   dalındaki `gizlilik.html` ve `en/privacy.html`, `docs/GIZLILIK.md` ile
   uyumlu hâle getirilir: cihaz içi konuşma tanıma, ARCore, ML Kit ölçümleri,
   kurum sürümü.
@@ -244,10 +245,12 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
 
 ### Faz 5: Kurumda yayın
 
-- [ ] **5.1 Beacon yönetimi** (O). Kurumdaki beacon'ların listesi, son
+- [ ] **5.1 Beacon yönetimi** (O). **Kod hazır:** Dosyalar → Düzenle →
+  Beacon durumu; duyulmayanlar, Eddystone-TLM pil voltajı, haritada
+  olmayanlar ve kapsama boşlukları. Gerçek beacon'larla denenecek. Kurumdaki beacon'ların listesi, son
   görülme zamanı, zayıf pil uyarısı, yerleştirme önerisi ("bu koridorda
   beacon yok").
-- [ ] **5.2 Kurulum kılavuzu** (K). Bir kurumun Umay'ı kurması: beacon
+- [x] **5.2 Kurulum kılavuzu** (K). `docs/KURULUM.md`. Bir kurumun Umay'ı kurması: beacon
   yerleştirme, harita çıkarma, sunucu, test.
 - [ ] **5.3 Kör kullanıcılarla test** (O). En az 5 kişiyle, gerçek bir
   binada, gözlemli. Sonuçlar ve düzeltmeler yazılı.
@@ -324,6 +327,14 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **10 Ekim 2026:** Beacon durumu ekranı (5.1) ve kurulum kılavuzu (5.2)
+  yazıldı; web sitesindeki gizlilik politikası güncellendi (1.7). Kılavuz
+  yazılırken harita oluşturmada iki hata bulunup düzeltildi: bir kavşağa
+  dönüp aynı adı vermek ikinci, bağlantısız bir nokta yaratıyordu (artık
+  aynı yer sayılıyor ve koridorlar birleşiyor); başka bir kata çıkıp başka
+  merdivenle dönülünce iki merdiven arasına duvarlardan geçen düz bir
+  bağlantı ekleniyordu.
 
 - **10 Ekim 2026:** Harita ve konum işleri yazıldı: harita kaydı ön plan
   hizmeti ve diskteki taslakla korunuyor (0.7); harita Dosyalar → Düzenle ile
