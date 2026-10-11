@@ -97,8 +97,8 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   *Bitti:* bir koridor ve bir oda kamerayla haritalandı. Ekrandaki duvarlar
   gerçekle 20 cm içinde örtüşüyor, kamera kapatılıp açılınca yol kopmuyor.
   Sorunlar `ArCoreSurveyCamera` logcat'iyle raporlandı ve düzeltildi.
-  İlk deneme yeri olarak bir kafe uygun: küçük, tek kat, beacon gerekmez.
-  Denenince harita dosyası ve ekran görüntüsü paylaşılır; 0.17 onunla
+  Kamerayla haritalamanın denenmesi için beacon gerekmez; küçük bir alan
+  yeter. Denenince harita dosyası ve ekran görüntüsü paylaşılır; 0.17 onunla
   yapılır.
 - [ ] **0.3 İlk saha kaydı** (K). Test binasında beacon'lı bir yürüyüş,
   en az 8 "Buradayım" işaretiyle.
@@ -207,7 +207,7 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   (`FloorChangeConfirmation`, `NavigationSession`'dan ayrıldı).
   *Bitti:* kat değiştiren yürüyüşler hata eşikleriyle testte.
 - [ ] **0.17 Gerçek haritayla sanal yürüyüş** (K). 0.2'de çıkarılan
-  gerçek bir haritayı (kafe ya da koridor) simülasyona yükleyip sanal kör
+  gerçek bir haritayı (bir koridor ya da oda) simülasyona yükleyip sanal kör
   kullanıcıyı onun üstünde yürütmek. Gerçek haritanın kusurlarının
   (eksik yol, yanlış birleşen yer, duvar lekesi) yönlendirmeyi nasıl
   etkilediği telefonla gidip gelmeden görülür.
@@ -289,7 +289,7 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   hatalı lekeyi silme. Erişilebilir olmalı (liste tabanlı düzenleme).
   *Bitti:* bir haritadaki hatalar yeniden haritalamadan düzeltiliyor.
 - [ ] **2.5 Haritanın bir kısmını yeniden çıkarmak** (O). Masalar ve
-  sandalyeler yer değiştirir (kafe, ofis); bütün binayı baştan haritalamak
+  sandalyeler yer değiştirir (ofis, bekleme salonu); bütün binayı baştan haritalamak
   yerine bir bölümü yeniden yürüyüp mevcut haritaya eklemek: bilinen bir
   yerde başlayıp bilinen bir yerde bitirmek, aradaki yol ve duvar haritası
   eskisinin yerine geçer.
@@ -453,6 +453,9 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   telefonunda Google AR bileşeni olmaz.
 - **10 Ekim 2026: Kurum sunucusu yazılır.** Dosyayla aktarım da kalır; kurum
   hangisini kullanacağını kurulumda seçer.
+- **11 Ekim 2026: Beacon'sız mekânlar kapsam dışı.** Umay beacon'lı binalar
+  içindir. Kafe, dükkân gibi beacon koyulmayacak yerler hedeflenmez; harita
+  çıkarmak oralarda da çalışsa bile konum doğruluğu için iş yapılmaz.
 - **10 Ekim 2026: Ev ikinci senaryo.** Faz 0–5 kurum binası (beacon'lı) içindir.
   Ev için gereken beacon'sız konum, kurum senaryosu bittikten sonra ayrıca
   planlanır.
@@ -469,13 +472,6 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 3. **Emülatör.** Şimdiye kadar uygulama emülatörde ya da telefonda
    çalıştırılmadı (yalnızca derleme, birim testi, lint). 0.13 bu kuralın
    test sürümü için gevşetilmesini gerektirir.
-4. **Beacon'sız küçük mekânlar.** Kafe, dükkân, küçük ofis gibi beacon
-   koyulmayacak yerler plan dışında (Faz 0–5 kurum binası, ev ikinci
-   senaryo). Bu yerler için harita çıkarmak bugün de mümkün, konum adım
-   sayma ve QR işaretlerine dayanır. Bunlar ayrı bir senaryo mu olacak,
-   kurum senaryosunun içinde mi kalacak? Karar verilirse beacon'sız konum
-   için iş eklenir (yer işaretlerinin daha uzaktan okunması 3.6, pusula
-   3.5 burada daha da önemli olur).
 
 ---
 
