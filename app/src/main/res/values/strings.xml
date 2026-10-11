@@ -221,6 +221,9 @@
     <string name="say_walk_then_clock" tools:ignore="PluralsCandidate">%1$s yönünde yaklaşık %2$s ilerle, sonra saat %3$d yönüne dön.</string>
     <string name="say_walk_ahead_then_clock" tools:ignore="PluralsCandidate">Yaklaşık %1$s ilerle, sonra saat %2$d yönüne dön.</string>
     <string name="say_wall_clock" tools:ignore="PluralsCandidate">Duvar saat %1$d yönünde; onu takip edebilirsin.</string>
+    <string name="say_turn_left_now">Sola dön.</string>
+    <string name="say_turn_right_now">Sağa dön.</string>
+    <string name="say_turn_clock_now" tools:ignore="PluralsCandidate">Saat %1$d yönüne dön.</string>
     <string name="say_off_route">Rotadan çıktın. Bulunduğun yerden yeni rota hesaplandı.</string>
     <string name="say_wrong_way">Ters yöne gidiyorsun gibi görünüyor, geri dön.</string>
     <string name="say_walk_ahead">Yaklaşık %1$s düz ilerle.</string>

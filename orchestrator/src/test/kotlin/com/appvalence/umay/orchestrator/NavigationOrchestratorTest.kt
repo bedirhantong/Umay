@@ -66,6 +66,7 @@ private object TokenPhrases : GuidancePhrases {
     override fun walkAhead(distanceMeters: Double, thenTurn: Turn?) =
         "AHEAD ${meters(distanceMeters)} ${thenTurn?.direction ?: "STRAIGHT"}"
     override fun followWall(side: TurnDirection) = "WALL $side"
+    override fun turnNow(turn: Turn) = "TURN_NOW ${turn.direction}"
     override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =
         "CHANGE_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor $arrivalPlaceName"
@@ -856,6 +857,54 @@ class NavigationOrchestratorTest {
 
         val guidance = feedback.emitted.filter { it.id.startsWith("route-guide-") }
         assertEquals(listOf(GuidanceCue.TURN_RIGHT, GuidanceCue.NONE), guidance.map { it.cue })
+    }
+
+    // North to B, right (east) to C, left (north) to D.
+    private val twoTurnMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(
+            FloorMap(
+                0,
+                listOf(
+                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),
+                    MapNode("B", 0.0, 10.0, NodeType.CORRIDOR, name = "Donus"),
+                    MapNode("C", 10.0, 10.0, NodeType.CORRIDOR, name = "Kose"),
+                    MapNode("D", 10.0, 20.0, NodeType.DESTINATION, name = "D"),
+                ),
+                listOf(
+                    MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+                    MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+                    MapEdge("C", "D", accessible = true, distanceMeters = 10.0),
+                ),
+            ),
+        ),
+    )
+
+    @Test
+    fun `a leg announced just before the corner it starts with says to turn there first`() = runTest {
+        // Simulated walks in a virtual office found that without this, the walker heard
+        // only "10 m, then left" two metres before the corner and walked straight past it.
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(position(0.0, 0.0, timestampMs = 0L), position(0.0, 8.5, timestampMs = 1L))
+        orchestratorFor(twoTurnMap, positions, feedback, "D").start().toList()
+
+        val legs = feedback.emitted.filter { it.id.startsWith("route-guide-") }
+        assertEquals("WALK Donus 10.0 RIGHT", legs.first().message)
+        assertEquals("TURN_NOW RIGHT WALK Kose 10.1 LEFT", legs.last().message)
+        assertEquals(GuidanceCue.TURN_RIGHT, legs.last().cue)
+    }
+
+    @Test
+    fun `a repeat further along the leg no longer says to turn`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, timestampMs = 0L),
+            position(0.0, 8.5, timestampMs = 1L),
+            position(6.0, 10.0, timestampMs = NavigationOrchestrator.ROUTE_GUIDANCE_REPEAT_INTERVAL_MS + 2),
+        )
+        orchestratorFor(twoTurnMap, positions, feedback, "D").start().toList()
+
+        assertEquals("WALK Kose 4.0 LEFT", feedback.emitted.last { it.id.startsWith("route-guide-") }.message)
     }
 
     @Test

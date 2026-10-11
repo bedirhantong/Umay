@@ -361,12 +361,33 @@ class NavigationOrchestrator(
         else -> legInstruction(routeTargetIndex, position)
     }
 
+    /**
+     * The turn at the place this leg starts from, which the walker is at or nearly at
+     * when the leg is announced: the leg begins there with a turn the instruction for
+     * the previous leg ended with. Null when it starts straight on, starts the route,
+     * or the three places aren't on one floor.
+     */
+    private fun turnAtStart(targetIndex: Int): Turn? {
+        val target = currentRoute.getOrNull(targetIndex) ?: return null
+        val previous = currentRoute.getOrNull(targetIndex - 1) ?: return null
+        val before = currentRoute.getOrNull(targetIndex - 2) ?: return null
+        val floor = nodeFloor[previous.id]
+        if (nodeFloor[before.id] != floor || nodeFloor[target.id] != floor) return null
+        return classifyTurn(bearingDeg(before, previous), bearingDeg(previous, target))
+    }
+
     /** What kind of moment the start of this leg is, mirroring [legInstruction]'s wording choices. */
     private fun legCue(targetIndex: Int): GuidanceCue {
         val target = currentRoute[targetIndex]
         // Index 0: back to the route's first place after leaving it (see checkDeviation).
         val previous = currentRoute.getOrNull(targetIndex - 1) ?: return GuidanceCue.CONTINUE
         if (nodeFloor[target.id] != nodeFloor[previous.id]) return GuidanceCue.FLOOR_CHANGE
+        // The turn to make right here comes before anything further along the leg.
+        when (turnAtStart(targetIndex)?.direction) {
+            TurnDirection.RIGHT -> return GuidanceCue.TURN_RIGHT
+            TurnDirection.LEFT -> return GuidanceCue.TURN_LEFT
+            null -> Unit
+        }
         // A tagged hazard right ahead outranks the turn after it: the stairs come first.
         if (target.type in HAZARD_TYPES) return GuidanceCue.HAZARD_AHEAD
         val next = currentRoute.getOrNull(targetIndex + 1) ?: return GuidanceCue.CONTINUE
@@ -398,6 +419,15 @@ class NavigationOrchestrator(
             return phrases.changeFloor(method, goingUp = targetFloor > previousFloor, targetFloor = targetFloor, arrivalPlaceName = target.name)
         }
 
+        // The next leg is announced a couple of metres before the place it starts from, so
+        // a leg that starts with a turn says so first: "Sola dön." — the instruction for
+        // the previous leg did end with it, but the walker has just heard a new one about
+        // the turn after. Only while still near that place: a repeat further along must
+        // not send them into another corner.
+        val turnNow = turnAtStart(targetIndex)
+            ?.takeIf { position.floor == previousFloor && hypot(previous.x - position.x, previous.y - position.y) <= TURN_NOW_RADIUS_METERS }
+            ?.let(phrases::turnNow)
+
         // The camera only ever detects people, never static structure — a tagged hazard
         // is the only source of "there's a door/stairs/ramp right here" awareness in the
         // app, and it only exists where the survey operator explicitly tagged one.
@@ -422,7 +452,7 @@ class NavigationOrchestrator(
             ?.takeIf { position.floor == targetFloor }
             ?.along(position.x, position.y, target.x, target.y)
             ?.let(phrases::followWall)
-        return listOfNotNull(hazard, instruction, wall).joinToString(" ")
+        return listOfNotNull(turnNow, hazard, instruction, wall).joinToString(" ")
     }
 
     // Compass bearing (0 = north/+y, 90 = east/+x, clockwise) — matches PdrIntegrator's
@@ -494,6 +524,10 @@ class NavigationOrchestrator(
         const val MIN_REALERT_INTERVAL_MS = 2_500L
 
         const val WAYPOINT_ARRIVAL_METERS = 2.0
+
+        // A leg is announced WAYPOINT_ARRIVAL_METERS before the place it starts from; this
+        // leaves room for the estimate lagging behind.
+        const val TURN_NOW_RADIUS_METERS = 3.0
         const val ARRIVAL_DISTANCE_METERS = 1.5
         const val TURN_ANGLE_THRESHOLD_DEG = 25.0
         const val ROUTE_GUIDANCE_REPEAT_INTERVAL_MS = 8_000L

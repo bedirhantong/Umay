@@ -59,6 +59,9 @@ interface GuidancePhrases {
     /** A wall runs along this side of the leg: follow it ("shorelining"). Said after the leg's instruction. */
     fun followWall(side: TurnDirection): String
 
+    /** Turn here, at the place the walker is reaching: said before the rest of the leg. */
+    fun turnNow(turn: Turn): String
+
     /** The final leg, to the destination itself. */
     fun approachDestination(distanceMeters: Double): String
 
