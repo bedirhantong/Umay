@@ -162,19 +162,23 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   saha kayıtları için `UMAY_FIELD_LOGS` ile `FieldLogRecordingTest` (README
   "Saha testi"). Saha kaydı bugünkü kodla yeniden oynatılır ve yürüyüş
   sırasındaki tahminle yan yana gösterilir. Sayfa internete istek yapmaz.
-- [ ] **0.12 Sanal ofis (görsel ikiz)** (B). **Kısmen:** sanal açık ofis ve
-  uygulamanın söylediklerine göre yürüyen sanal kör kullanıcı hazır
-  (`GuidedWalkTest`); bu, iki yönlendirme hatası buldu ve düzeltildi
-  (ilerleme kaydı, 11 Ekim). Kamera kareleri ve foto-gerçekçi kopya
-  bekliyor. Gerçek bir ofisin telefon
-  videosundan Gaussian splatting ile foto-gerçekçi 3B kopyası çıkarılır
-  (nerfstudio, tek seferlik GPU işi). Bu kopyada çizilen bir yürüyüş
-  boyunca kameranın göreceği kareler üretilir; engel algılama (4.1), QR yer
-  işaretleri (3.3) ve tutuş uyarısı (4.5) bu karelerle bilgisayarda
-  denenir. Sahneye sanal sandalye ve kişi konup uyarının zamanında gelip
-  gelmediği ölçülür.
+- [x] **0.12 Sanal ofis** (B). Sanal açık ofis (duvarlar, masalar, odalar,
+  beacon'lar, yer işaretleri) ve uygulamanın söylediklerine göre yürüyen,
+  binayı bilmeyen sanal kör kullanıcı (`GuidedWalkTest`). Kamera, telefonun
+  göreceği kareleri çiziyor ve işaretleri uygulamanın kendi okuyucusu okuyor
+  (`MarkerRangeTest`). Engeller, algılayıcının yerine geçen bir modelle
+  görülüyor, uzaklıkları uygulamanın kendi koduyla ölçülüyor
+  (`ObstacleWalkTest`).
   *Bitti:* bir ofis sahnesinde engel ve yer işareti senaryoları
   otomatik koşuyor, sonuçlar ilerleme kaydında.
+- [ ] **0.14 Foto-gerçekçi ofis kopyası** (B). Gerçek bir ofisin telefon
+  videosundan Gaussian splatting ile 3B kopya (nerfstudio ya da Mac'te
+  OpenSplat; tek seferlik GPU işi). Kareleri 0.12'nin sanal kamerası yerine
+  bu kopyadan alınır, engel algılayıcının kendisi (EfficientDet) bu karelerde
+  çalıştırılır. 0.12 engel algılamayı varsayıyor; bu onu ölçer. Bir ofisin
+  telefonla, yavaşça dolaşılarak çekilmiş 3–5 dakikalık videosunu gerektirir.
+  *Bitti:* gerçek bir ofisin kopyasında engel algılamanın isabeti ve uzaklık
+  hatası ölçüldü.
 - [ ] **0.13 Emülatörde uçtan uca deneme** (O). Açık karar 3'e bağlı.
   Sensörleri ve beacon'ları kayıttan ya da simülasyondan besleyen bir test
   sürümü; emülatörün sanal kamerasına 0.12'nin kareleri verilir. Uygulamanın
@@ -302,6 +306,13 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   *Bitti:* harita farkı saklıyor, yönlendirme ipucunu kullanıyor; sahada
   denenecek.
 
+- [ ] **3.6 İşaretleri daha uzaktan okumak** (O). Yönlendirmede işaretler
+  480 × 640 karelerden okunuyor: 15 cm'lik kod ancak ~1 m'den okunuyor,
+  960 × 1280'de 2 m'den (0.12'de ölçüldü). Kamerayı daha yüksek çözünürlükte
+  açıp işaretleri tam karede, engel algılamayı küçültülmüş karede çalıştırmak.
+  Pil ve ısıya etkisi telefonda ölçülmeli (4.4).
+  *Bitti:* işaret 2 m'den okunuyor, pil tüketimi kabul edilebilir.
+
 ### Faz 4: Kamerayla ilerleme
 
 - [ ] **4.1 Kamerayla engel uyarısı** (O). Karar 1 gereği derinlik
@@ -344,6 +355,11 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   çıktın" denir ve bulunduğu yerden yeni rota çıkarılır.
   *Bitti:* simülasyonda yanlış koridora sapan yürüyüşte uyarı ve yeni rota
   geliyor; doğru yürüyüşte yanlış alarm yok.
+- [ ] **4.10 Yanından geçilebilecek engel için rota değişmesin** (K).
+  Rotadaki her durağan engel (geniş bir koridordaki sandalye da) yeni rota
+  çizdiriyor; sanal ofiste bu yürüyüşü %55 uzattı. Duvar haritası varsa
+  engelin yanındaki boşluk hesaplanıp geçilebiliyorsa yalnızca uyarılmalı.
+  *Bitti:* sanal ofiste sandalyeli yürüyüşte yeni rota yok, uyarı var.
 - [ ] **4.7 "Neredeyim?"** (K). **Kod hazır:** "Bir şey sor" ile. Sesli
   soruya en yakın yer, iki yer
   arasındaysa ikisi, rotadaysa sıradaki hedef ve uzaklığıyla yanıt.
@@ -441,6 +457,27 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Sanal ofis tamamlandı (0.12). Bulunup düzeltilenler:
+  - Yönlendirmede işaretin ve engelin uzaklığını hesaplayan kamera
+    varsayımları birbirini tutmuyordu. Dik tutulan telefonun karesinde
+    işaretler gerçekte olduğundan %27 yakın, engeller ~%20 uzak
+    sanılıyordu (uyarı geç geliyordu). Tek bir varsayımda (`CameraOptics`)
+    birleşti.
+  - Yeni rota (engel ya da rotadan çıkma yüzünden) arkada başlıyorsa önce
+    "Geri dön.", rotanın başına varınca "Sola/Sağa dön." deniyor.
+    Kapalı koridorlu yürüyüşlerde varış 6'da 3'ten 6'ya çıktı.
+  - Ayakta duran bir kişi için artık yeni rota çizilmiyor; yalnız uyarı
+    var. Yürüyüş %84 uzuyordu.
+  - Yer işareti, konumu 5 m şaşmış bir bulutu da baştan kuruyor. Yanlış
+    yerden başlayan yürüyüşlerde varış 24'te 19'dan 23'e çıktı.
+
+  Ölçülenler: 15 cm'lik işaret ancak ~1 m'den ve 45°'den dik açıyla
+  okunuyor (yeni iş 3.6, KURULUM düzeltildi). Normal yürüyüşte işaret
+  neredeyse hiç okunmuyor (24 yürüyüşte 2); konum karıştığında okunan birkaç
+  işaret varışı 3'ten 14'e çıkarıyor. Engeller ulaşılmadan 2–8 m önce
+  uyarılıyor, hiçbir sanal yürüyüşte uyarısız çarpma yok. Yeni işler: 0.14
+  foto-gerçekçi kopya, 3.6, 4.10.
 
 - **11 Ekim 2026:** Cihazsız test (0.10, 0.11, 0.12'nin bir kısmı):
   - Yürüyüş izleyici (0.11) hazır: sanal ofis, saha kayıtları ve gerçek

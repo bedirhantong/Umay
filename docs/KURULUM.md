@@ -129,14 +129,19 @@ bir sayfa hazırlar: ortasında 15 cm'lik bir QR kod, altında yerin adı.
 
 - Sayfaları **gerçek boyutta** (%100, "sayfaya sığdır" kapalı) yazdırın; Umay
   uzaklığı QR kodun 15 cm olduğunu bilerek hesaplar. Bir sayfayı cetvelle ölçün.
-- Her sayfayı adı yazan yerin duvarına, **göz hizasında** (yerden 1,3–1,6 m),
-  yürüme yönünden görülecek şekilde yapıştırın. Parlak ve kırışık olmayan kâğıt
-  ya da laminasyon kullanın.
+- Her sayfayı adı yazan yerin duvarına, **göğüs–göz hizasında** (yerden
+  1,3–1,6 m), insanların **yakınından geçtiği** ve yüzünü döndüğü yere
+  yapıştırın: kapının yanı, kavşağın köşesi, asansör düğmesinin yanı.
+  Parlak ve kırışık olmayan kâğıt ya da laminasyon kullanın.
+- Telefon 15 cm'lik bir işareti ancak **yaklaşık 1 metreden** ve en çok 45°
+  yandan okuyabiliyor (simülasyonda ölçüldü). Koridorun karşı duvarındaki ya
+  da yandan bakılan bir işaret yürürken okunmaz.
 - Kritik yerlere öncelik verin: giriş, danışma, asansör ve merdiven önleri,
   kavşaklar, tuvaletler.
-- Kamerası açık bir telefon işareti birkaç metreden görünce kullanıcı nerede
-  olduğunu kesin olarak öğrenir; yola çıkmadan **Kamerayla bul** da işaretten
-  başlar. İşaretlerin içinde yalnızca yerin kimliği vardır, bina ya da kişi
+- Kamerası açık bir telefon işareti görünce kullanıcı nerede olduğunu kesin
+  olarak öğrenir. Bu en çok konum karıştığında işe yarar: simülasyonda yanlış
+  yerden yola çıkan yürüyüşlerin varışı 24'te 3'ten 14'e çıktı. Yola çıkmadan
+  **Kamerayla bul** da işaretten başlar: kullanıcı işaretin önünde durmalı. İşaretlerin içinde yalnızca yerin kimliği vardır, bina ya da kişi
   hakkında bilgi yoktur.
 - Harita yeniden çıkarılırsa yer kimlikleri değişir: işaretleri yeniden yazdırıp
   değiştirin. Haritayı düzenleyiciyle düzeltmek kimlikleri değiştirmez.
