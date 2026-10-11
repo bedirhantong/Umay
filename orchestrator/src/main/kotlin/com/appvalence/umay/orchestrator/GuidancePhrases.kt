@@ -62,6 +62,9 @@ interface GuidancePhrases {
     /** Turn here, at the place the walker is reaching: said before the rest of the leg. */
     fun turnNow(turn: Turn): String
 
+    /** Turn around: a new route starts behind the walker. Said before the leg. */
+    fun turnAround(): String
+
     /** The final leg, to the destination itself. */
     fun approachDestination(distanceMeters: Double): String
 

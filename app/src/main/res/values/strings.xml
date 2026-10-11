@@ -224,6 +224,7 @@
     <string name="say_turn_left_now">Sola dön.</string>
     <string name="say_turn_right_now">Sağa dön.</string>
     <string name="say_turn_clock_now" tools:ignore="PluralsCandidate">Saat %1$d yönüne dön.</string>
+    <string name="say_turn_around">Geri dön.</string>
     <string name="say_off_route">Rotadan çıktın. Bulunduğun yerden yeni rota hesaplandı.</string>
     <string name="say_wrong_way">Ters yöne gidiyorsun gibi görünüyor, geri dön.</string>
     <string name="say_walk_ahead">Yaklaşık %1$s düz ilerle.</string>

@@ -9,6 +9,7 @@ import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.ObstacleType
 import com.appvalence.umay.coremodel.isUnnamed
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.feedback.FeedbackController
@@ -102,6 +103,16 @@ class NavigationOrchestrator(
     private val routeMonitor = RouteMonitor()
     private var lastMonitoredTimestampMs = -1L
     private var lastDeviationAlertMs = Long.MIN_VALUE / 2
+
+    // A route planned from wherever the walker is (around an obstacle, after leaving the
+    // route) may start behind them or to one side, which its first leg's wording can't
+    // say. Simulated walks found that without it, "toward the lobby, 10 m" after a blocked
+    // corridor sent the walker straight on into the obstacle. So: first back to where the
+    // new route starts ("Geri dön."), then, there, which way it goes — both from the
+    // heading they're actually walking in, known by then.
+    private enum class Reorient { NONE, FIRST_LEG, TO_START }
+
+    private var reorient = Reorient.NONE
 
     fun start(): Flow<NavigationState> =
         combine(
@@ -282,6 +293,17 @@ class NavigationOrchestrator(
 
         checkDeviation(position, target, targetFloor)?.let { return it }
 
+        val routeStart = currentRoute.first()
+        // At the new route's start, or already somewhere along its first stretch: either
+        // way there's no going back to the start, only which way that stretch runs.
+        val firstStretch = currentRoute.getOrNull(1)?.takeIf { nodeFloor[it.id] == position.floor && nodeFloor[routeStart.id] == position.floor }
+        val atRouteStart = nodeFloor[routeStart.id] == position.floor && (
+            hypot(routeStart.x - position.x, routeStart.y - position.y) <= REJOIN_METERS ||
+                (firstStretch != null && RouteSegment(routeStart.x, routeStart.y, firstStretch.x, firstStretch.y).distanceTo(position.x, position.y) <= ON_FIRST_STRETCH_METERS)
+            )
+        // Back where the new route starts after being sent there: say where it goes now.
+        if (reorient == Reorient.TO_START && atRouteStart) lastAnnouncedLegIndex = -1
+
         val now = position.timestampMs
         val isNewLeg = routeTargetIndex != lastAnnouncedLegIndex
         val isDueForRepeat = now - lastLegAnnouncedAtMs >= ROUTE_GUIDANCE_REPEAT_INTERVAL_MS
@@ -289,17 +311,27 @@ class NavigationOrchestrator(
 
         lastAnnouncedLegIndex = routeTargetIndex
         lastLegAnnouncedAtMs = now
+        val reorientTurn = if (isNewLeg) reorientationTurn(position, target, routeStart, atRouteStart) else null
+        val turnAround = reorientTurn != null && abs(reorientTurn.angleDeg) >= TURN_AROUND_DEG
         return NavigationAlert(
             id = "route-guide-$routeTargetIndex-$now",
             // Stairs are a real fall risk underfoot, so that leg gets the same urgency
             // as a nearby obstacle instead of blending in with ordinary INFO guidance.
             priority = if (target.type == NodeType.STAIRS) AlertPriority.WARNING else AlertPriority.INFO,
-            message = legInstruction(routeTargetIndex, position),
+            message = listOfNotNull(
+                reorientTurn?.let { if (turnAround) phrases.turnAround() else phrases.turnNow(it) },
+                legInstruction(routeTargetIndex, position),
+            ).joinToString(" "),
             relatedObstacle = null,
             createdAtMs = now,
             // Only a new leg gets a cue; the periodic repeat of the same leg stays silent
             // to the touch (see GuidanceCue).
-            cue = if (isNewLeg) legCue(routeTargetIndex) else GuidanceCue.NONE,
+            cue = when {
+                !isNewLeg -> GuidanceCue.NONE
+                turnAround -> GuidanceCue.WRONG_WAY
+                reorientTurn != null -> if (reorientTurn.direction == TurnDirection.RIGHT) GuidanceCue.TURN_RIGHT else GuidanceCue.TURN_LEFT
+                else -> legCue(routeTargetIndex)
+            },
         )
     }
 
@@ -334,6 +366,7 @@ class NavigationOrchestrator(
         val replanned = planRoute(nearest.id)?.takeIf { it.size >= 2 } ?: return null
         currentRoute = replanned
         resetRouteProgress()
+        reorient = Reorient.FIRST_LEG
         // Not standing on the new route's first place: the first leg is getting back to it.
         if (hypot(nearest.x - position.x, nearest.y - position.y) > WAYPOINT_ARRIVAL_METERS) routeTargetIndex = 0
         return NavigationAlert(
@@ -359,6 +392,29 @@ class NavigationOrchestrator(
         arrivalAnnounced -> phrases.arrived()
         currentRoute.size < 2 -> null
         else -> legInstruction(routeTargetIndex, position)
+    }
+
+    /**
+     * The turn that opens a new leg of a route planned from wherever the walker was (see
+     * [Reorient]): toward where the route starts while they aren't there yet, toward the
+     * leg's [target] once they are. Null when no such route is pending, or they already
+     * roughly face the right way.
+     */
+    private fun reorientationTurn(position: Position, target: MapNode, routeStart: MapNode, atRouteStart: Boolean): Turn? {
+        val toward = when (reorient) {
+            Reorient.NONE -> return null
+            Reorient.FIRST_LEG, Reorient.TO_START -> if (routeTargetIndex == 0 || !atRouteStart) {
+                reorient = Reorient.TO_START
+                routeStart
+            } else {
+                reorient = Reorient.NONE
+                target
+            }
+        }
+        if (nodeFloor[toward.id] != position.floor) return null
+        val bearing = Math.toDegrees(atan2(toward.x - position.x, toward.y - position.y))
+        val delta = ((bearing - position.headingDeg + 540.0) % 360.0) - 180.0
+        return if (abs(delta) > REORIENT_DEG) Turn(delta) else null
     }
 
     /**
@@ -480,6 +536,9 @@ class NavigationOrchestrator(
         floorMap: FloorMap,
         nodesById: Map<String, MapNode>,
     ): NavigationAlert? {
+        // People move out of the way: a route around someone standing in the corridor sends
+        // the walker the long way for nothing (simulated walks: 84% longer). They're warned.
+        if (obstacle.type == ObstacleType.PERSON) return null
         val routeEdges = currentRouteEdges(floorMap)
         val blocked = ObstacleEdgeMapper.blockingEdge(obstacle, position, routeEdges, nodesById) ?: return null
         if (!blockedEdges.add(blocked.fromId to blocked.toId)) return null // already accounted for
@@ -490,6 +549,7 @@ class NavigationOrchestrator(
         val rerouted = planRoute(nearestNode.id) ?: return null
         currentRoute = rerouted
         resetRouteProgress()
+        reorient = Reorient.FIRST_LEG
 
         return NavigationAlert(
             id = "reroute-${blocked.fromId}-${blocked.toId}-${UUID.randomUUID()}",
@@ -528,6 +588,18 @@ class NavigationOrchestrator(
         // A leg is announced WAYPOINT_ARRIVAL_METERS before the place it starts from; this
         // leaves room for the estimate lagging behind.
         const val TURN_NOW_RADIUS_METERS = 3.0
+
+        /** Facing farther than this from a new route's first leg: say which way to turn. */
+        const val REORIENT_DEG = 45.0
+
+        /** ...and this far: turn around. */
+        const val TURN_AROUND_DEG = 135.0
+
+        /** Close enough to where a new route starts to set off along it from there. */
+        const val REJOIN_METERS = 1.0
+
+        /** Close enough to a new route's first stretch to be on it already. */
+        const val ON_FIRST_STRETCH_METERS = 1.5
         const val ARRIVAL_DISTANCE_METERS = 1.5
         const val TURN_ANGLE_THRESHOLD_DEG = 25.0
         const val ROUTE_GUIDANCE_REPEAT_INTERVAL_MS = 8_000L

@@ -63,6 +63,8 @@ class StringsXmlPhrases(
         else -> string("say_turn_left_now")
     }
 
+    override fun turnAround(): String = if (clockDirections) string("say_turn_clock_now", 6) else string("say_turn_around")
+
     override fun approachDestination(distanceMeters: Double): String = string("say_approach_destination", meters(distanceMeters))
 
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String): String {

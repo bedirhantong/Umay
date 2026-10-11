@@ -61,6 +61,9 @@ class ResourceGuidancePhrases(context: Context, private val clockDirections: Boo
         else -> resources.getString(R.string.say_turn_left_now)
     }
 
+    override fun turnAround(): String =
+        if (clockDirections) resources.getString(R.string.say_turn_clock_now, 6) else resources.getString(R.string.say_turn_around)
+
     override fun approachDestination(distanceMeters: Double): String =
         resources.getString(R.string.say_approach_destination, meters(distanceMeters))
 
