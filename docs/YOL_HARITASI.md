@@ -97,6 +97,9 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   *Bitti:* bir koridor ve bir oda kamerayla haritalandı. Ekrandaki duvarlar
   gerçekle 20 cm içinde örtüşüyor, kamera kapatılıp açılınca yol kopmuyor.
   Sorunlar `ArCoreSurveyCamera` logcat'iyle raporlandı ve düzeltildi.
+  İlk deneme yeri olarak bir kafe uygun: küçük, tek kat, beacon gerekmez.
+  Denenince harita dosyası ve ekran görüntüsü paylaşılır; 0.17 onunla
+  yapılır.
 - [ ] **0.3 İlk saha kaydı** (K). Test binasında beacon'lı bir yürüyüş,
   en az 8 "Buradayım" işaretiyle.
   *Bitti:* `FieldLogReplayTest` raporu eski ve yeni konum motorunu
@@ -194,6 +197,24 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   *Bitti:* kayıtlı bir yürüyüş emülatörde baştan sona oynuyor, söylenen
   yönergeler kayıt altında.
 
+- [ ] **0.16 Çok katlı sanal bina** (O). Simülasyon bugün tek katlı.
+  Merdiven ve asansörlü iki katlı bir bina; kat değişimi (basınç sensörü
+  olan ve olmayan telefon, adımla kendiliğinden onay), merdivensiz rota
+  (4.8) ve kat değiştiren rehberli yürüyüş senaryoları.
+  *Bitti:* kat değiştiren yürüyüşler hata eşikleriyle testte.
+- [ ] **0.17 Gerçek haritayla sanal yürüyüş** (K). 0.2'de çıkarılan
+  gerçek bir haritayı (kafe ya da koridor) simülasyona yükleyip sanal kör
+  kullanıcıyı onun üstünde yürütmek. Gerçek haritanın kusurlarının
+  (eksik yol, yanlış birleşen yer, duvar lekesi) yönlendirmeyi nasıl
+  etkilediği telefonla gidip gelmeden görülür.
+  *Bitti:* bir gerçek harita dosyası `WalkReportsTest` ile oynatılıyor.
+- [ ] **0.18 Kamerayla haritalamayı simüle etmek** (O). Sanal haritacı
+  (`VirtualSurveyor`) bugün yalnız adım sayıyor. Kameranın yol kayması,
+  izi kaybetmesi ve duvar haritasına giren lekeler de modellenmeli; kamera
+  modunun haritası da uygulamanın kendi koduyla (`OccupancyGrid`,
+  `OpenSpaceLinks`) çıkarılmalı.
+  *Bitti:* sanal ofis kamerayla da haritalanıp onunla yönlendiriliyor.
+
 ### Faz 1: Gizlilik ve kurum içi çalışma
 
 Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
@@ -263,6 +284,13 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   değiştirme, yer silme, yanlış bağlantıyı kaldırma, duvar haritasında
   hatalı lekeyi silme. Erişilebilir olmalı (liste tabanlı düzenleme).
   *Bitti:* bir haritadaki hatalar yeniden haritalamadan düzeltiliyor.
+- [ ] **2.5 Haritanın bir kısmını yeniden çıkarmak** (O). Masalar ve
+  sandalyeler yer değiştirir (kafe, ofis); bütün binayı baştan haritalamak
+  yerine bir bölümü yeniden yürüyüp mevcut haritaya eklemek: bilinen bir
+  yerde başlayıp bilinen bir yerde bitirmek, aradaki yol ve duvar haritası
+  eskisinin yerine geçer.
+  *Bitti:* bir odanın düzeni değişince yalnız o oda yeniden yürünüp harita
+  güncelleniyor.
 - [ ] **2.4 Sık beacon parmak izi** (O). **Kod hazır:** her iki haritalama
   modunda 3 metrede bir örnek; filtre her taramayı kullanıyor (simülasyonda
   %14 kısa adımla 25 m sonunda hata 3,7 m'den 1,4 m'ye indi). Saha kaydında
@@ -431,6 +459,13 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 3. **Emülatör.** Şimdiye kadar uygulama emülatörde ya da telefonda
    çalıştırılmadı (yalnızca derleme, birim testi, lint). 0.13 bu kuralın
    test sürümü için gevşetilmesini gerektirir.
+4. **Beacon'sız küçük mekânlar.** Kafe, dükkân, küçük ofis gibi beacon
+   koyulmayacak yerler plan dışında (Faz 0–5 kurum binası, ev ikinci
+   senaryo). Bu yerler için harita çıkarmak bugün de mümkün, konum adım
+   sayma ve QR işaretlerine dayanır. Bunlar ayrı bir senaryo mu olacak,
+   kurum senaryosunun içinde mi kalacak? Karar verilirse beacon'sız konum
+   için iş eklenir (yer işaretlerinin daha uzaktan okunması 3.6, pusula
+   3.5 burada daha da önemli olur).
 
 ---
 
@@ -465,6 +500,12 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Plana eklendi: 0.16 çok katlı sanal bina, 0.17 gerçek
+  haritayla sanal yürüyüş, 0.18 kamerayla haritalamanın simülasyonu, 2.5
+  haritanın bir kısmını yeniden çıkarmak, açık karar 4 (beacon'sız küçük
+  mekânlar). Kod tarafında yapılabileceklerin çoğu bitti; asıl darboğaz
+  telefonda ve sahada doğrulama (0.1, 0.2, 0.3).
 
 - **11 Ekim 2026:** Simülasyonun en iyimser varsayımı kaldırıldı: harita artık
   binanın kusursuz planı değil, adım sayarak haritalayan sanal bir kişinin
