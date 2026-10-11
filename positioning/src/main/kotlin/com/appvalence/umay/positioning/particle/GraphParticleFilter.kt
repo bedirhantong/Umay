@@ -266,6 +266,17 @@ class GraphParticleFilter(
         return estimate(timestampMs)
     }
 
+    /**
+     * Where the particles are, for offline tools (the walk viewer): at most [max] of
+     * them, spread evenly over the cloud. Weights are left out — after resampling
+     * they're nearly equal, and the density of points already shows the belief.
+     */
+    fun particlePositions(max: Int = particles.size): List<Pair<Double, Double>> {
+        if (max <= 0) return emptyList()
+        val stride = maxOf(1, particles.size / max)
+        return particles.filterIndexed { i, _ -> i % stride == 0 }.take(max).map { it.x to it.y }
+    }
+
     fun estimate(timestampMs: Long = lastTimestampMs): Position {
         val weights = normalizedWeights()
         var meanX = 0.0

@@ -1,11 +1,11 @@
-package com.appvalence.umay.positioning.simulation
+package com.appvalence.umay.simulation
 
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
-import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.RadioFingerprint
@@ -22,9 +22,37 @@ import kotlin.random.Random
 /** A beacon on the wall at ([x], [y]). */
 internal data class VirtualBeacon(val id: String, val x: Double, val y: Double)
 
+/** A straight piece of wall; door openings are simply gaps between pieces. */
+internal data class Wall(val x1: Double, val y1: Double, val x2: Double, val y2: Double) {
+    fun distanceTo(x: Double, y: Double): Double {
+        val dx = x2 - x1
+        val dy = y2 - y1
+        val lengthSquared = dx * dx + dy * dy
+        if (lengthSquared == 0.0) return hypot(x - x1, y - y1)
+        val t = (((x - x1) * dx + (y - y1) * dy) / lengthSquared).coerceIn(0.0, 1.0)
+        return hypot(x - (x1 + t * dx), y - (y1 + t * dy))
+    }
+
+    /** Whether the straight line from (ax, ay) to (bx, by) passes through this wall. */
+    fun blocks(ax: Double, ay: Double, bx: Double, by: Double): Boolean {
+        fun cross(ox: Double, oy: Double, px: Double, py: Double, qx: Double, qy: Double) = (px - ox) * (qy - oy) - (py - oy) * (qx - ox)
+        val d1 = cross(x1, y1, x2, y2, ax, ay)
+        val d2 = cross(x1, y1, x2, y2, bx, by)
+        val d3 = cross(ax, ay, bx, by, x1, y1)
+        val d4 = cross(ax, ay, bx, by, x2, y2)
+        return ((d1 > 0) != (d2 > 0)) && ((d3 > 0) != (d4 > 0)) && d1 != 0.0 && d2 != 0.0 && d3 != 0.0 && d4 != 0.0
+    }
+}
+
+/** Furniture that stands in the way (desks, a counter): the survey camera maps it as occupied. */
+internal data class Block(val minX: Double, val minY: Double, val maxX: Double, val maxY: Double) {
+    fun contains(x: Double, y: Double) = x in minX..maxX && y in minY..maxY
+}
+
 /**
- * How the radio behaves: log-distance path loss with Gaussian fading, and scans
- * that sometimes miss a beacon altogether. The defaults are typical indoor BLE.
+ * How the radio behaves: log-distance path loss with Gaussian fading, a loss
+ * for every wall in the way, and scans that sometimes miss a beacon
+ * altogether. The defaults are typical indoor BLE.
  */
 internal data class RadioModel(
     val rssiAtOneMeter: Double = -59.0,
@@ -32,28 +60,42 @@ internal data class RadioModel(
     val fadingSigmaDb: Double = 4.0,
     val dropoutProbability: Double = 0.1,
     val hearingFloorDbm: Double = -95.0,
+    val wallLossDb: Double = 4.0,
 ) {
-    fun meanRssi(distanceMeters: Double): Double = rssiAtOneMeter - 10.0 * pathLossExponent * log10(max(distanceMeters, 0.5))
+    fun meanRssi(distanceMeters: Double, wallsCrossed: Int = 0): Double =
+        rssiAtOneMeter - 10.0 * pathLossExponent * log10(max(distanceMeters, 0.5)) - wallLossDb * wallsCrossed
 }
 
 /**
  * One floor of a building as the simulation knows it: the true corridors (the
- * map's graph), the beacons on its walls and how they sound. [surveyedMap]
- * is what a surveyor would have recorded walking every corridor once.
+ * map's graph), its walls and furniture, the beacons on its walls and how they
+ * sound, and the places with a printed marker. [surveyedMap] is what a
+ * surveyor would have recorded walking every corridor once.
  */
 internal class VirtualBuilding(
+    val name: String,
     val nodes: List<MapNode>,
     val edges: List<Pair<String, String>>,
     val beacons: List<VirtualBeacon>,
     val radio: RadioModel = RadioModel(),
+    val walls: List<Wall> = emptyList(),
+    val blocks: List<Block> = emptyList(),
+    val markerNodeIds: Set<String> = emptySet(),
 ) {
     val nodesById: Map<String, MapNode> = nodes.associateBy { it.id }
+
+    /** Whether nothing but air lies between the two points (walls only; furniture is lower than a marker). */
+    fun lineOfSight(ax: Double, ay: Double, bx: Double, by: Double): Boolean = walls.none { it.blocks(ax, ay, bx, by) }
+
+    /** The beacons as the viewer marks them. */
+    fun beaconMarks(): List<BeaconMark> = beacons.map { BeaconMark(it.id, 0, it.x, it.y) }
 
     /** RSSI each beacon would read at ([x], [y]) in one scan; beacons not heard are left out. */
     fun scan(x: Double, y: Double, timestampMs: Long, random: Random, radio: RadioModel = this.radio): List<BleBeaconReading> =
         beacons.mapNotNull { beacon ->
             if (random.nextDouble() < radio.dropoutProbability) return@mapNotNull null
-            val rssi = radio.meanRssi(hypot(beacon.x - x, beacon.y - y)) + random.gaussian() * radio.fadingSigmaDb
+            val wallsCrossed = walls.count { it.blocks(beacon.x, beacon.y, x, y) }
+            val rssi = radio.meanRssi(hypot(beacon.x - x, beacon.y - y), wallsCrossed) + random.gaussian() * radio.fadingSigmaDb
             if (rssi < radio.hearingFloorDbm) return@mapNotNull null
             BleBeaconReading(beacon.id, "", null, "sim", 1, 1, rssi.toInt(), radio.rssiAtOneMeter.toInt(), 1.0, timestampMs)
         }
@@ -100,59 +142,44 @@ internal class VirtualBuilding(
                 }
             }
         }
-        return BuildingMap(id = "virtual", floors = listOf(FloorMap(floorIndex = 0, nodes = mapNodes, edges = mapEdges, radioMap = samples)))
+        val floor = FloorMap(floorIndex = 0, nodes = mapNodes, edges = mapEdges, occupancy = occupancy(), radioMap = samples)
+        return BuildingMap(id = name, floors = listOf(floor))
+    }
+
+    /**
+     * The wall map a camera survey would have made: walls and furniture occupied,
+     * the floor inside the outer walls free, outside unknown. Null without walls.
+     */
+    fun occupancy(cellSizeMeters: Double = 0.1): OccupancyRaster? {
+        if (walls.isEmpty()) return null
+        val insideMinX = walls.minOf { minOf(it.x1, it.x2) }
+        val insideMaxX = walls.maxOf { maxOf(it.x1, it.x2) }
+        val insideMinY = walls.minOf { minOf(it.y1, it.y2) }
+        val insideMaxY = walls.maxOf { maxOf(it.y1, it.y2) }
+        val originX = insideMinX - RASTER_MARGIN_METERS
+        val originY = insideMinY - RASTER_MARGIN_METERS
+        val width = ceil((insideMaxX - insideMinX + 2 * RASTER_MARGIN_METERS) / cellSizeMeters).toInt()
+        val height = ceil((insideMaxY - insideMinY + 2 * RASTER_MARGIN_METERS) / cellSizeMeters).toInt()
+        val cells = ByteArray(width * height)
+        for (row in 0 until height) {
+            val y = originY + (row + 0.5) * cellSizeMeters
+            for (column in 0 until width) {
+                val x = originX + (column + 0.5) * cellSizeMeters
+                cells[row * width + column] = when {
+                    walls.any { it.distanceTo(x, y) <= WALL_HALF_THICKNESS_METERS } || blocks.any { it.contains(x, y) } -> OccupancyRaster.OCCUPIED
+                    x > insideMinX && x < insideMaxX && y > insideMinY && y < insideMaxY -> OccupancyRaster.FREE
+                    else -> OccupancyRaster.UNKNOWN
+                }
+            }
+        }
+        return OccupancyRaster.of(cellSizeMeters, originX, originY, width, height, cells)
     }
 
     companion object {
         private const val STANDING_STEPS = 8
         private const val SURVEY_STRIDE_METERS = 0.7
-
-        private fun place(id: String, x: Double, y: Double) = MapNode(id = id, x = x, y = y, type = NodeType.WAYPOINT, name = id)
-
-        /**
-         * A typical institution floor: a 40 m main corridor, two side corridors
-         * up to a parallel one 15 m away (so there is a loop, and two corridors
-         * that look alike to the steps), and a dead end to the south. Beacons
-         * about every 10 m, as KURULUM.md recommends.
-         *
-         * ```
-         *  N10 ─── N20 ─── N30
-         *   │               │
-         *  M0 ─ M10 ─ M20 ─ M30 ─ M40
-         *              │
-         *             S20
-         * ```
-         */
-        fun institutionFloor(radio: RadioModel = RadioModel()) = VirtualBuilding(
-            nodes = listOf(
-                place("M0", 0.0, 0.0),
-                place("M10", 10.0, 0.0),
-                place("M20", 20.0, 0.0),
-                place("M30", 30.0, 0.0),
-                place("M40", 40.0, 0.0),
-                place("N10", 10.0, 15.0),
-                place("N20", 20.0, 15.0),
-                place("N30", 30.0, 15.0),
-                place("S20", 20.0, -8.0),
-            ),
-            edges = listOf(
-                "M0" to "M10", "M10" to "M20", "M20" to "M30", "M30" to "M40",
-                "M10" to "N10", "N10" to "N20", "N20" to "N30", "N30" to "M30",
-                "M20" to "S20",
-            ),
-            beacons = listOf(
-                VirtualBeacon("b1", 4.0, 1.5),
-                VirtualBeacon("b2", 16.0, -1.5),
-                VirtualBeacon("b3", 27.0, 1.5),
-                VirtualBeacon("b4", 38.0, -1.5),
-                VirtualBeacon("b5", 11.5, 8.0),
-                VirtualBeacon("b6", 28.5, 8.0),
-                VirtualBeacon("b7", 15.0, 16.5),
-                VirtualBeacon("b8", 25.0, 13.5),
-                VirtualBeacon("b9", 21.5, -6.0),
-            ),
-            radio = radio,
-        )
+        private const val RASTER_MARGIN_METERS = 0.3
+        private const val WALL_HALF_THICKNESS_METERS = 0.08
     }
 }
 

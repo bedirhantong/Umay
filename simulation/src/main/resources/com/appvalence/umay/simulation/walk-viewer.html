@@ -1,0 +1,1211 @@
+<title>Umay Yürüyüş İzleyici</title>
+<style>
+/* Layout: floor plan with its transport bar on the left, a reading column (now, what was said, error) on the right; one column on phones. */
+:root {
+  --paper: #eef2f1;
+  --panel: #f8faf9;
+  --ink: #18272b;
+  --muted: #56686d;
+  --rule: #cfd8d6;
+  --floor: #e1e8e6;
+  --wall: #2c3b40;
+  --grid: #d6dedc;
+  --accent: #0b6e8a;
+  --accent-ink: #ffffff;
+  --truth: #19804f;
+  --estimate: #c4410d;
+  --second: #7a6a9e;
+  --cloud: #2f6fd6;
+  --route: #8a3fd1;
+  --beacon: #0b7f95;
+  --marker: #9a6a00;
+  --warn: #b42318;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-data: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10181b;
+    --panel: #162125;
+    --ink: #e2ebe9;
+    --muted: #93a5a9;
+    --rule: #2a3a3f;
+    --floor: #1c2a2e;
+    --wall: #c3d2cf;
+    --grid: #22333a;
+    --accent: #4fb8d6;
+    --accent-ink: #062027;
+    --truth: #4cd08a;
+    --estimate: #ff8a4c;
+    --second: #b9a8e6;
+    --cloud: #6ea4ff;
+    --route: #c08cff;
+    --beacon: #3cc9df;
+    --marker: #f0b93a;
+    --warn: #ff7b6e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10181b;
+  --panel: #162125;
+  --ink: #e2ebe9;
+  --muted: #93a5a9;
+  --rule: #2a3a3f;
+  --floor: #1c2a2e;
+  --wall: #c3d2cf;
+  --grid: #22333a;
+  --accent: #4fb8d6;
+  --accent-ink: #062027;
+  --truth: #4cd08a;
+  --estimate: #ff8a4c;
+  --second: #b9a8e6;
+  --cloud: #6ea4ff;
+  --route: #c08cff;
+  --beacon: #3cc9df;
+  --marker: #f0b93a;
+  --warn: #ff7b6e;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.app {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 16px 28px;
+  display: grid;
+  gap: 14px;
+}
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+.titles { min-width: 0; }
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+h1 {
+  margin: 2px 0 0;
+  font-size: 24px;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+.subtitle { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.picker { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+select, button { font: inherit; color: inherit; }
+select {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  max-width: 100%;
+}
+.chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chips li {
+  display: grid;
+  gap: 1px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--panel);
+  min-width: 0;
+}
+.chips .k { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.chips .v { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 15px; }
+.chips li.bad .v { color: var(--warn); }
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .stage { grid-template-columns: minmax(0, 1fr); }
+}
+.map-pane { display: grid; gap: 10px; min-width: 0; }
+.map-wrap {
+  position: relative;
+  height: min(66vh, 660px);
+  min-height: 300px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+  touch-action: none;
+}
+@media (max-width: 600px) { .map-wrap { height: 56vh; } }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+#map.dragging { cursor: grabbing; }
+.map-tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+.map-floor {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  font-size: 13px;
+}
+.btn {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); min-width: 44px; }
+.btn svg { width: 16px; height: 16px; fill: currentColor; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.transport .buttons { display: flex; gap: 6px; }
+.scrub { flex: 1 1 220px; display: grid; gap: 2px; min-width: 0; }
+.scrub input { width: 100%; accent-color: var(--accent); }
+.time { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+.speed { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.layers {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+.layers legend { padding: 0; margin-right: 6px; color: var(--muted); float: left; }
+.layers label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
+.side { display: grid; gap: 14px; min-width: 0; }
+.card {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+.now dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+}
+.now dt { color: var(--muted); font-size: 13px; }
+.now dd { margin: 0; font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 14px; overflow-wrap: anywhere; }
+.now dd.big { font-size: 20px; }
+.now .notes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.now .notes li { padding-left: 10px; border-left: 2px solid var(--rule); }
+.said {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  min-height: 2.6em;
+}
+.said.fresh { border-color: var(--accent); }
+.speech ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  display: grid;
+  gap: 2px;
+  position: relative;
+}
+.speech li button {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+.speech li button:hover { background: var(--paper); }
+.speech li .t { font-family: var(--font-data); font-variant-numeric: tabular-nums; color: var(--muted); }
+.speech li.future button { opacity: 0.45; }
+.speech li.current button { background: var(--paper); box-shadow: inset 2px 0 0 var(--accent); }
+.empty { color: var(--muted); font-size: 13px; margin: 0; }
+.chart-wrap { position: relative; height: 150px; }
+#err-chart { width: 100%; height: 100%; display: block; cursor: pointer; }
+.chart-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 13px; }
+.legend li { display: flex; align-items: center; gap: 8px; }
+.keys { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+kbd { font-family: var(--font-data); font-size: 11px; border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+<!--BODY-->
+<div class="app">
+  <header class="top">
+    <div class="titles">
+      <p class="eyebrow">Umay · yürüyüş izleyici</p>
+      <h1 id="walk-title">Yürüyüş</h1>
+      <p class="subtitle" id="walk-subtitle"></p>
+    </div>
+    <label class="picker" id="picker-wrap" for="walk-select">Yürüyüş seç
+      <select id="walk-select"></select>
+    </label>
+  </header>
+
+  <ul class="chips" id="summary" aria-label="Özet"></ul>
+
+  <main class="stage">
+    <section class="map-pane" aria-label="Harita">
+      <div class="map-wrap" id="map-wrap">
+        <canvas id="map" role="img" aria-label="Kat planı üzerinde yürüyüş"></canvas>
+        <span class="map-floor" id="map-floor">Kat 0</span>
+        <div class="map-tools">
+          <button class="btn" id="fit-btn" type="button">Sığdır</button>
+        </div>
+      </div>
+
+      <div class="transport">
+        <div class="buttons">
+          <button class="btn" id="first-btn" type="button" aria-label="Başa dön"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
+          <button class="btn" id="back-btn" type="button" aria-label="Bir adım geri"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12 2v12L4 8z"/></svg></button>
+          <button class="btn primary" id="play-btn" type="button" aria-label="Oynat"><svg viewBox="0 0 16 16" aria-hidden="true" id="play-icon"><path d="M4 2l10 6-10 6z"/></svg></button>
+          <button class="btn" id="fwd-btn" type="button" aria-label="Bir adım ileri"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2v12l8-6z"/></svg></button>
+          <button class="btn" id="last-btn" type="button" aria-label="Sona git"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2v12l8-6zM11 2h2v12h-2z"/></svg></button>
+        </div>
+        <div class="scrub">
+          <input type="range" id="scrubber" min="0" max="0" value="0" step="1" aria-label="Yürüyüşte konum">
+          <span class="time" id="time-label">0,0 s</span>
+        </div>
+        <label class="speed" for="speed-select">Hız
+          <select id="speed-select">
+            <option value="0.5">0,5×</option>
+            <option value="1">1×</option>
+            <option value="2" selected>2×</option>
+            <option value="4">4×</option>
+            <option value="8">8×</option>
+            <option value="16">16×</option>
+          </select>
+        </label>
+      </div>
+
+      <fieldset class="layers" id="layers">
+        <legend>Göster</legend>
+        <label><input type="checkbox" id="layer-truth" checked> <span class="swatch" data-color="truth"></span>Gerçek yol</label>
+        <label><input type="checkbox" id="layer-estimate" checked> <span class="swatch" data-color="estimate"></span><span id="estimate-layer-label">Tahmin</span></label>
+        <label id="second-layer-wrap" hidden><input type="checkbox" id="layer-second" checked> <span class="swatch" data-color="second"></span><span id="second-layer-label"></span></label>
+        <label><input type="checkbox" id="layer-cloud" checked> <span class="swatch" data-color="cloud"></span>Parçacıklar</label>
+        <label><input type="checkbox" id="layer-route" checked> <span class="swatch" data-color="route"></span>Rota</label>
+        <label><input type="checkbox" id="layer-walls" checked> <span class="swatch" data-color="wall"></span>Duvarlar</label>
+        <label><input type="checkbox" id="layer-beacons" checked> <span class="swatch" data-color="beacon"></span>Beacon'lar</label>
+        <label><input type="checkbox" id="layer-labels" checked> Yer adları</label>
+      </fieldset>
+    </section>
+
+    <aside class="side">
+      <section class="card now" aria-labelledby="now-heading">
+        <h2 id="now-heading">Şu an</h2>
+        <p class="said" id="said" aria-label="Son söylenen"></p>
+        <dl>
+          <dt>Zaman</dt><dd id="now-time">0,0 s</dd>
+          <dt>Konum hatası</dt><dd class="big" id="now-error">–</dd>
+          <dt>Belirsizlik</dt><dd id="now-accuracy">–</dd>
+          <dt>Kat</dt><dd id="now-floor">0</dd>
+          <dt>Hedeflenen yer</dt><dd id="now-target">–</dd>
+        </dl>
+        <ul class="notes" id="now-notes"></ul>
+      </section>
+
+      <section class="card speech" aria-labelledby="speech-heading">
+        <h2 id="speech-heading">Söylenenler</h2>
+        <ol id="speech-list"></ol>
+        <p class="empty" id="speech-empty" hidden>Bu yürüyüşte bir şey söylenmedi.</p>
+      </section>
+
+      <section class="card" aria-labelledby="chart-heading">
+        <h2 id="chart-heading">Konum hatası</h2>
+        <div class="chart-wrap"><canvas id="err-chart" role="img" aria-label="Zamana göre konum hatası, metre"></canvas></div>
+        <p class="chart-note" id="chart-note"></p>
+      </section>
+
+      <section class="card legend" aria-labelledby="legend-heading">
+        <h2 id="legend-heading">Gösterim</h2>
+        <ul>
+          <li><span class="swatch" data-color="truth"></span>Yürüyenin gerçekte olduğu yer</li>
+          <li><span class="swatch" data-color="estimate"></span><span id="estimate-legend-label">Uygulamanın tahmini</span>, çevresinde belirsizliği</li>
+          <li id="second-legend" hidden><span class="swatch" data-color="second"></span><span id="second-legend-label"></span></li>
+          <li><span class="swatch" data-color="cloud"></span>Parçacık bulutu (olası konumlar)</li>
+          <li><span class="swatch" data-color="route"></span>Uygulamanın rotası, halkalı yer sıradaki hedef</li>
+          <li><span class="swatch" data-color="beacon"></span>Beacon</li>
+          <li><span class="swatch" data-color="marker"></span>Basılı yer işareti (QR)</li>
+        </ul>
+        <p class="keys"><kbd>Boşluk</kbd> oynat/durdur · <kbd>←</kbd> <kbd>→</kbd> adım · <kbd>Shift</kbd> ile 10 adım · fare tekeri yakınlaştırır</p>
+      </section>
+    </aside>
+  </main>
+  <div class="sr-only" aria-live="polite" id="live"></div>
+</div>
+
+<script type="application/json" id="walk-data">__UMAY_WALK_DATA__</script>
+<script>
+(function () {
+  'use strict';
+
+  var DATA = JSON.parse(document.getElementById('walk-data').textContent);
+  var walks = DATA.walks || [];
+  var $ = function (id) { return document.getElementById(id); };
+  var mapCanvas = $('map');
+  var chartCanvas = $('err-chart');
+  var colors = {};
+
+  var LAYERS = ['truth', 'estimate', 'second', 'cloud', 'route', 'walls', 'beacons', 'labels'];
+  var state = {
+    walk: null,
+    i: 0,
+    playing: false,
+    speed: 2,
+    clock: 0,
+    lastTs: 0,
+    view: null,
+    viewFloor: null,
+    layers: {}
+  };
+  LAYERS.forEach(function (name) { state.layers[name] = true; });
+
+  try {
+    var saved = JSON.parse(localStorage.getItem('umay-walk-viewer') || '{}');
+    if (saved.layers) LAYERS.forEach(function (name) { if (typeof saved.layers[name] === 'boolean') state.layers[name] = saved.layers[name]; });
+    if (saved.speed) state.speed = saved.speed;
+  } catch (e) { /* storage unavailable: defaults */ }
+
+  function remember() {
+    try { localStorage.setItem('umay-walk-viewer', JSON.stringify({ layers: state.layers, speed: state.speed })); } catch (e) { /* ignore */ }
+  }
+
+  // ---- numbers, Turkish style ----
+  function fmt(value, digits) {
+    return value.toFixed(digits).replace('.', ',');
+  }
+  function seconds(ms) { return fmt(ms / 1000, 1) + ' s'; }
+  function meters(value) { return value == null ? '–' : fmt(value, value < 10 ? 2 : 1) + ' m'; }
+
+  // ---- theme ----
+  function readColors() {
+    var css = getComputedStyle(document.documentElement);
+    ['paper', 'panel', 'ink', 'muted', 'rule', 'floor', 'wall', 'grid', 'accent', 'truth', 'estimate', 'second', 'cloud', 'route', 'beacon', 'marker', 'warn'].forEach(function (name) {
+      colors[name] = css.getPropertyValue('--' + name).trim();
+    });
+    document.querySelectorAll('.swatch').forEach(function (el) {
+      el.style.background = colors[el.getAttribute('data-color')] || colors.muted;
+    });
+  }
+
+  function withAlpha(color, alpha) {
+    var hex = color.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(function (c) { return c + c; }).join('');
+    var n = parseInt(hex, 16);
+    if (isNaN(n)) return color;
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
+  }
+
+  // ---- data preparation ----
+  function decodeWalls(walls) {
+    var binary = atob(walls.rle);
+    var bytes = new Uint8Array(binary.length);
+    for (var k = 0; k < binary.length; k++) bytes[k] = binary.charCodeAt(k);
+    var out = new Uint8Array(walls.w * walls.h);
+    var written = 0;
+    var i = 0;
+    while (i < bytes.length && written < out.length) {
+      var value = bytes[i++];
+      var run = 0;
+      var shift = 0;
+      var b;
+      do {
+        b = bytes[i++];
+        run += (b & 0x7f) * Math.pow(2, shift);
+        shift += 7;
+      } while (b & 0x80);
+      out.fill(value, written, Math.min(out.length, written + run));
+      written += run;
+    }
+    return out;
+  }
+
+  function wallImage(walls) {
+    var cells = walls.cells || (walls.cells = decodeWalls(walls));
+    var canvas = document.createElement('canvas');
+    canvas.width = walls.w;
+    canvas.height = walls.h;
+    var ctx = canvas.getContext('2d');
+    var image = ctx.createImageData(walls.w, walls.h);
+    var free = rgb(colors.floor);
+    var wall = rgb(colors.wall);
+    for (var row = 0; row < walls.h; row++) {
+      for (var column = 0; column < walls.w; column++) {
+        var value = cells[row * walls.w + column];
+        if (value === 0) continue;
+        var paint = value === 2 ? wall : free;
+        // Row 0 is the lowest y; image rows run top down.
+        var p = ((walls.h - 1 - row) * walls.w + column) * 4;
+        image.data[p] = paint[0];
+        image.data[p + 1] = paint[1];
+        image.data[p + 2] = paint[2];
+        image.data[p + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+    return canvas;
+  }
+
+  function rgb(color) {
+    var hex = color.replace('#', '');
+    var n = parseInt(hex, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function prepare(walk) {
+    if (walk.prepared) return walk;
+    walk.floorsByIndex = {};
+    walk.nodesById = {};
+    walk.floors.forEach(function (floor) {
+      walk.floorsByIndex[floor.index] = floor;
+      floor.nodes.forEach(function (node) { node.floor = floor.index; walk.nodesById[node.id] = node; });
+    });
+    walk.markerSet = {};
+    (walk.markers || []).forEach(function (id) { walk.markerSet[id] = true; });
+    var t0 = walk.frames.length ? walk.frames[0].t : 0;
+    walk.t0 = t0;
+    var route = null;
+    var target = null;
+    walk.speech = [];
+    walk.errors = [];
+    var maxError = 0;
+    walk.frames.forEach(function (frame, index) {
+      if (frame.r) route = frame.r;
+      if (frame.g) target = frame.g;
+      frame.routeNow = route;
+      frame.targetNow = target;
+      (frame.s || []).forEach(function (text) { walk.speech.push({ i: index, t: frame.t - t0, text: text }); });
+      var error = null;
+      if (frame.tr && frame.e) error = Math.hypot(frame.tr[0] - frame.e[0], frame.tr[1] - frame.e[1]);
+      walk.errors.push(error);
+      if (error != null && error > maxError) maxError = error;
+    });
+    walk.maxError = maxError;
+    walk.errorCount = walk.errors.filter(function (e) { return e != null; }).length;
+    walk.prepared = true;
+    return walk;
+  }
+
+  function floorBounds(walk, floorIndex) {
+    var b = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    function add(x, y) {
+      if (x < b.minX) b.minX = x;
+      if (x > b.maxX) b.maxX = x;
+      if (y < b.minY) b.minY = y;
+      if (y > b.maxY) b.maxY = y;
+    }
+    var floor = walk.floorsByIndex[floorIndex];
+    if (floor) {
+      floor.nodes.forEach(function (n) { add(n.x, n.y); });
+      if (floor.walls) {
+        add(floor.walls.ox, floor.walls.oy);
+        add(floor.walls.ox + floor.walls.w * floor.walls.cell, floor.walls.oy + floor.walls.h * floor.walls.cell);
+      }
+    }
+    walk.frames.forEach(function (frame) {
+      if (frame.f !== floorIndex) return;
+      if (frame.tr) add(frame.tr[0], frame.tr[1]);
+      if (frame.e) add(frame.e[0], frame.e[1]);
+    });
+    if (!isFinite(b.minX)) b = { minX: -5, minY: -5, maxX: 5, maxY: 5 };
+    return b;
+  }
+
+  // ---- view ----
+  function canvasSize(canvas) {
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(1, Math.round(rect.width * dpr));
+    var h = Math.max(1, Math.round(rect.height * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    return { w: rect.width, h: rect.height, dpr: dpr };
+  }
+
+  function fitView() {
+    var walk = state.walk;
+    var floorIndex = walk.frames.length ? walk.frames[state.i].f : (walk.floors[0] ? walk.floors[0].index : 0);
+    var size = canvasSize(mapCanvas);
+    var b = floorBounds(walk, floorIndex);
+    var pad = 1.5;
+    var spanX = Math.max(1, b.maxX - b.minX + 2 * pad);
+    var spanY = Math.max(1, b.maxY - b.minY + 2 * pad);
+    var scale = Math.min(size.w / spanX, size.h / spanY);
+    var cx = (b.minX + b.maxX) / 2;
+    var cy = (b.minY + b.maxY) / 2;
+    state.view = { s: scale, ox: size.w / 2 - cx * scale, oy: size.h / 2 + cy * scale };
+    state.viewFloor = floorIndex;
+  }
+
+  function sx(x) { return state.view.ox + x * state.view.s; }
+  function sy(y) { return state.view.oy - y * state.view.s; }
+
+  // ---- drawing ----
+  function drawMap() {
+    var walk = state.walk;
+    var size = canvasSize(mapCanvas);
+    var ctx = mapCanvas.getContext('2d');
+    ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+    ctx.fillStyle = colors.panel;
+    ctx.fillRect(0, 0, size.w, size.h);
+    if (!walk.frames.length) return;
+    var frame = walk.frames[state.i];
+    if (state.viewFloor !== frame.f || !state.view) fitView();
+    var floor = walk.floorsByIndex[frame.f];
+    var s = state.view.s;
+
+    if (floor && floor.walls && state.layers.walls) {
+      if (!floor.wallCanvas) floor.wallCanvas = wallImage(floor.walls);
+      var w = floor.walls;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(floor.wallCanvas, sx(w.ox), sy(w.oy + w.h * w.cell), w.w * w.cell * s, w.h * w.cell * s);
+      ctx.imageSmoothingEnabled = true;
+    }
+
+    if (floor) {
+      ctx.strokeStyle = colors.rule;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      floor.edges.forEach(function (edge) {
+        var a = walk.nodesById[edge[0]];
+        var b = walk.nodesById[edge[1]];
+        if (!a || !b || a.floor !== frame.f || b.floor !== frame.f) return;
+        ctx.beginPath();
+        ctx.moveTo(sx(a.x), sy(a.y));
+        ctx.lineTo(sx(b.x), sy(b.y));
+        ctx.stroke();
+      });
+    }
+
+    if (state.layers.route && frame.routeNow) {
+      ctx.strokeStyle = withAlpha(colors.route, 0.75);
+      ctx.lineWidth = 4;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      var started = false;
+      frame.routeNow.forEach(function (id) {
+        var n = walk.nodesById[id];
+        if (!n || n.floor !== frame.f) { started = false; return; }
+        if (!started) { ctx.moveTo(sx(n.x), sy(n.y)); started = true; } else ctx.lineTo(sx(n.x), sy(n.y));
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (floor) {
+      floor.nodes.forEach(function (n) {
+        var x = sx(n.x);
+        var y = sy(n.y);
+        var named = n.name !== n.id;
+        ctx.fillStyle = named ? colors.ink : colors.muted;
+        ctx.beginPath();
+        ctx.arc(x, y, named ? 3.5 : 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        if (walk.markerSet[n.id]) {
+          ctx.fillStyle = colors.marker;
+          ctx.fillRect(x + 4, y - 11, 7, 7);
+        }
+        if (state.layers.labels && (named || s > 14)) {
+          ctx.fillStyle = named ? colors.ink : colors.muted;
+          ctx.font = (named ? '600 ' : '') + '12px ' + getComputedStyle(document.body).fontFamily;
+          ctx.fillText(n.name, x + 6, y + 14);
+        }
+      });
+    }
+
+    if (state.layers.beacons) {
+      ctx.fillStyle = colors.beacon;
+      (walk.beacons || []).forEach(function (b) {
+        if (b.floor !== frame.f) return;
+        var x = sx(b.x);
+        var y = sy(b.y);
+        ctx.beginPath();
+        ctx.moveTo(x, y - 5);
+        ctx.lineTo(x + 5, y);
+        ctx.lineTo(x, y + 5);
+        ctx.lineTo(x - 5, y);
+        ctx.closePath();
+        ctx.fill();
+      });
+    }
+
+    if (frame.targetNow && state.layers.route) {
+      var target = walk.nodesById[frame.targetNow];
+      if (target && target.floor === frame.f) {
+        ctx.strokeStyle = colors.route;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(sx(target.x), sy(target.y), 10, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    function trail(key, color, width) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      var open = false;
+      for (var k = 0; k <= state.i; k++) {
+        var f = walk.frames[k];
+        var p = f[key];
+        if (!p || f.f !== frame.f) { open = false; continue; }
+        if (!open) { ctx.moveTo(sx(p[0]), sy(p[1])); open = true; } else ctx.lineTo(sx(p[0]), sy(p[1]));
+      }
+      ctx.stroke();
+    }
+
+    if (state.layers.cloud && frame.p) {
+      ctx.fillStyle = withAlpha(colors.cloud, 0.45);
+      for (var k = 0; k + 1 < frame.p.length; k += 2) {
+        ctx.fillRect(sx(frame.p[k]) - 1.5, sy(frame.p[k + 1]) - 1.5, 3, 3);
+      }
+    }
+    if (state.layers.truth) trail('tr', withAlpha(colors.truth, 0.85), 2.5);
+    if (state.layers.estimate) trail('e', withAlpha(colors.estimate, 0.8), 2);
+    if (state.layers.second) trail('e2', withAlpha(colors.second, 0.8), 2);
+
+    // Truth marks a field log only has now and then: draw every one so far, not just a line.
+    if (state.layers.truth && walk.sparseTruth) {
+      ctx.fillStyle = colors.truth;
+      for (var m = 0; m <= state.i; m++) {
+        var g = walk.frames[m];
+        if (g.tr && g.f === frame.f) {
+          ctx.beginPath();
+          ctx.arc(sx(g.tr[0]), sy(g.tr[1]), 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    var latest = function (key) {
+      for (var k = state.i; k >= 0; k--) {
+        var f = walk.frames[k];
+        if (f.f !== frame.f) return null;
+        if (f[key]) return { p: f[key], frame: f };
+      }
+      return null;
+    };
+
+    if (state.layers.second) {
+      var second = latest('e2');
+      if (second) dot(second.p, colors.second, 5);
+    }
+    if (state.layers.estimate) {
+      var est = latest('e');
+      if (est) {
+        if (est.frame.a) {
+          ctx.strokeStyle = withAlpha(colors.estimate, 0.55);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(sx(est.p[0]), sy(est.p[1]), Math.max(4, est.frame.a * s), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        if (est.frame.h != null) {
+          var rad = est.frame.h * Math.PI / 180;
+          ctx.strokeStyle = colors.estimate;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(sx(est.p[0]), sy(est.p[1]));
+          ctx.lineTo(sx(est.p[0]) + Math.sin(rad) * 16, sy(est.p[1]) - Math.cos(rad) * 16);
+          ctx.stroke();
+        }
+        dot(est.p, colors.estimate, 6);
+      }
+    }
+    if (state.layers.truth) {
+      var tr = frame.tr ? { p: frame.tr } : (walk.sparseTruth ? null : latest('tr'));
+      if (tr) dot(tr.p, colors.truth, 6);
+    }
+
+    scaleBar(ctx, size);
+    $('map-floor').textContent = 'Kat ' + frame.f;
+
+    function dot(p, color, radius) {
+      ctx.fillStyle = color;
+      ctx.strokeStyle = colors.panel;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx(p[0]), sy(p[1]), radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  function scaleBar(ctx, size) {
+    var s = state.view.s;
+    var options = [1, 2, 5, 10, 20, 50, 100];
+    var meters = options[0];
+    for (var k = 0; k < options.length; k++) { if (options[k] * s <= 140) meters = options[k]; }
+    var x = 12;
+    var y = size.h - 14;
+    ctx.strokeStyle = colors.ink;
+    ctx.fillStyle = colors.ink;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 5);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + meters * s, y);
+    ctx.lineTo(x + meters * s, y - 5);
+    ctx.stroke();
+    ctx.font = '12px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(meters + ' m', x + meters * s + 6, y);
+  }
+
+  function drawChart() {
+    var walk = state.walk;
+    var size = canvasSize(chartCanvas);
+    var ctx = chartCanvas.getContext('2d');
+    ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
+    ctx.clearRect(0, 0, size.w, size.h);
+    var frames = walk.frames;
+    if (!frames.length) return;
+    var left = 34;
+    var right = 8;
+    var top = 8;
+    var bottom = 22;
+    var plotW = size.w - left - right;
+    var plotH = size.h - top - bottom;
+    var duration = Math.max(1, frames[frames.length - 1].t - walk.t0);
+    var yMax = Math.max(2, Math.ceil(walk.maxError));
+    var stepY = yMax <= 4 ? 1 : yMax <= 10 ? 2 : yMax <= 25 ? 5 : 10;
+    yMax = Math.ceil(yMax / stepY) * stepY;
+    function px(t) { return left + (t / duration) * plotW; }
+    function py(v) { return top + plotH - (v / yMax) * plotH; }
+    var font = '11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.font = font;
+    ctx.lineWidth = 1;
+    for (var v = 0; v <= yMax + 1e-9; v += stepY) {
+      ctx.strokeStyle = colors.grid;
+      ctx.beginPath();
+      ctx.moveTo(left, py(v));
+      ctx.lineTo(left + plotW, py(v));
+      ctx.stroke();
+      ctx.fillStyle = colors.muted;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(v + ' m', left - 4, py(v));
+    }
+    var secondsTotal = duration / 1000;
+    var stepX = secondsTotal <= 20 ? 5 : secondsTotal <= 60 ? 10 : secondsTotal <= 180 ? 30 : secondsTotal <= 600 ? 60 : 120;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (var sec = 0; sec <= secondsTotal + 1e-9; sec += stepX) {
+      ctx.fillStyle = colors.muted;
+      ctx.fillText(sec + ' s', px(sec * 1000), top + plotH + 5);
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+
+    var dense = walk.errorCount > frames.length / 3;
+    if (dense) {
+      ctx.beginPath();
+      var open = false;
+      var firstX = null;
+      var lastX = null;
+      walk.errors.forEach(function (e, k) {
+        if (e == null) return;
+        var x = px(frames[k].t - walk.t0);
+        if (!open) { ctx.moveTo(x, py(0)); ctx.lineTo(x, py(e)); open = true; firstX = x; } else ctx.lineTo(x, py(e));
+        lastX = x;
+      });
+      if (open) {
+        ctx.lineTo(lastX, py(0));
+        ctx.closePath();
+        ctx.fillStyle = withAlpha(colors.estimate, 0.16);
+        ctx.fill();
+      }
+      ctx.beginPath();
+      open = false;
+      walk.errors.forEach(function (e, k) {
+        if (e == null) { open = false; return; }
+        var x = px(frames[k].t - walk.t0);
+        if (!open) { ctx.moveTo(x, py(e)); open = true; } else ctx.lineTo(x, py(e));
+      });
+      ctx.strokeStyle = colors.estimate;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = colors.estimate;
+      walk.errors.forEach(function (e, k) {
+        if (e == null) return;
+        ctx.beginPath();
+        ctx.arc(px(frames[k].t - walk.t0), py(e), 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // Spoken moments along the time axis.
+    ctx.fillStyle = withAlpha(colors.accent, 0.7);
+    walk.speech.forEach(function (item) {
+      ctx.fillRect(px(item.t) - 0.75, top + plotH - 5, 1.5, 5);
+    });
+
+    var cursorX = px(frames[state.i].t - walk.t0);
+    ctx.strokeStyle = colors.ink;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cursorX, top);
+    ctx.lineTo(cursorX, top + plotH);
+    ctx.stroke();
+    var current = walk.errors[state.i];
+    if (current != null) {
+      ctx.fillStyle = colors.estimate;
+      ctx.beginPath();
+      ctx.arc(cursorX, py(current), 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    chartCanvas.layout = { left: left, plotW: plotW, duration: duration };
+  }
+
+  // ---- panel ----
+  function renderSpeechList() {
+    var list = $('speech-list');
+    list.textContent = '';
+    var walk = state.walk;
+    $('speech-empty').hidden = walk.speech.length > 0;
+    walk.speech.forEach(function (item, k) {
+      var li = document.createElement('li');
+      var button = document.createElement('button');
+      button.type = 'button';
+      var time = document.createElement('span');
+      time.className = 't';
+      time.textContent = seconds(item.t);
+      var text = document.createElement('span');
+      text.textContent = item.text;
+      button.appendChild(time);
+      button.appendChild(text);
+      button.addEventListener('click', function () { seek(item.i); });
+      li.appendChild(button);
+      item.el = li;
+      list.appendChild(li);
+    });
+  }
+
+  function updatePanel(announce) {
+    var walk = state.walk;
+    var frame = walk.frames[state.i];
+    var elapsed = frame.t - walk.t0;
+    $('now-time').textContent = seconds(elapsed) + ' · adım ' + (state.i + 1) + '/' + walk.frames.length;
+    $('time-label').textContent = seconds(elapsed) + ' / ' + seconds(walk.frames[walk.frames.length - 1].t - walk.t0);
+    var error = walk.errors[state.i];
+    $('now-error').textContent = error == null ? '–' : meters(error);
+    $('now-accuracy').textContent = frame.a == null ? '–' : '± ' + meters(frame.a);
+    $('now-floor').textContent = String(frame.f);
+    var target = frame.targetNow ? walk.nodesById[frame.targetNow] : null;
+    $('now-target').textContent = target ? target.name : '–';
+    var notes = $('now-notes');
+    notes.textContent = '';
+    (frame.n || []).forEach(function (text) {
+      var li = document.createElement('li');
+      li.textContent = text;
+      notes.appendChild(li);
+    });
+
+    var currentIndex = -1;
+    walk.speech.forEach(function (item, k) {
+      if (item.i <= state.i) currentIndex = k;
+    });
+    walk.speech.forEach(function (item, k) {
+      item.el.className = k === currentIndex ? 'current' : item.i > state.i ? 'future' : 'past';
+    });
+    var said = $('said');
+    if (currentIndex >= 0) {
+      var item = walk.speech[currentIndex];
+      said.textContent = item.text;
+      said.classList.toggle('fresh', item.i === state.i);
+      var list = $('speech-list');
+      var el = item.el;
+      if (el.offsetTop < list.scrollTop || el.offsetTop + el.offsetHeight > list.scrollTop + list.clientHeight) {
+        list.scrollTop = el.offsetTop - list.clientHeight / 2;
+      }
+      if (announce && item.i === state.i) $('live').textContent = item.text;
+    } else {
+      said.textContent = 'Henüz bir şey söylenmedi.';
+      said.classList.remove('fresh');
+    }
+    $('scrubber').value = String(state.i);
+  }
+
+  function render(announce) {
+    drawMap();
+    drawChart();
+    updatePanel(announce);
+  }
+
+  // ---- playback ----
+  function seek(index) {
+    var walk = state.walk;
+    state.i = Math.max(0, Math.min(walk.frames.length - 1, index));
+    state.clock = walk.frames[state.i].t - walk.t0;
+    render(false);
+  }
+
+  function setPlaying(playing) {
+    var walk = state.walk;
+    if (playing && state.i >= walk.frames.length - 1) seek(0);
+    state.playing = playing;
+    $('play-btn').setAttribute('aria-label', playing ? 'Durdur' : 'Oynat');
+    $('play-icon').innerHTML = playing ? '<path d="M3 2h4v12H3zM9 2h4v12H9z"/>' : '<path d="M4 2l10 6-10 6z"/>';
+    if (playing) {
+      state.lastTs = 0;
+      requestAnimationFrame(tick);
+    }
+  }
+
+  function tick(ts) {
+    if (!state.playing) return;
+    var walk = state.walk;
+    if (state.lastTs) state.clock += (ts - state.lastTs) * state.speed;
+    state.lastTs = ts;
+    var moved = false;
+    while (state.i < walk.frames.length - 1 && walk.frames[state.i + 1].t - walk.t0 <= state.clock) {
+      state.i++;
+      moved = true;
+    }
+    if (moved) render(true);
+    if (state.i >= walk.frames.length - 1) { setPlaying(false); return; }
+    requestAnimationFrame(tick);
+  }
+
+  // ---- walk selection ----
+  function selectWalk(index) {
+    setPlaying(false);
+    var walk = prepare(walks[index]);
+    walk.sparseTruth = walk.frames.filter(function (f) { return f.tr; }).length < walk.frames.length / 3;
+    state.walk = walk;
+    state.i = 0;
+    state.clock = 0;
+    state.view = null;
+    $('walk-title').textContent = walk.title;
+    $('walk-subtitle').textContent = walk.subtitle || '';
+    $('walk-subtitle').hidden = !walk.subtitle;
+    document.title = walk.title + ' · Umay Yürüyüş İzleyici';
+    var summary = $('summary');
+    summary.textContent = '';
+    (walk.summary || []).forEach(function (pair) {
+      var li = document.createElement('li');
+      if (pair[2] === 'bad') li.className = 'bad';
+      var k = document.createElement('span');
+      k.className = 'k';
+      k.textContent = pair[0];
+      var v = document.createElement('span');
+      v.className = 'v';
+      v.textContent = pair[1];
+      li.appendChild(k);
+      li.appendChild(v);
+      summary.appendChild(li);
+    });
+    summary.hidden = !(walk.summary || []).length;
+    $('estimate-layer-label').textContent = walk.estimateLabel || 'Tahmin';
+    $('estimate-legend-label').textContent = walk.estimateLabel || 'Uygulamanın tahmini';
+    var hasSecond = !!walk.secondLabel;
+    $('second-layer-wrap').hidden = !hasSecond;
+    $('second-legend').hidden = !hasSecond;
+    $('second-layer-label').textContent = walk.secondLabel || '';
+    $('second-legend-label').textContent = walk.secondLabel || '';
+    $('scrubber').max = String(Math.max(0, walk.frames.length - 1));
+    var errors = walk.errors.filter(function (e) { return e != null; });
+    if (errors.length) {
+      var mean = errors.reduce(function (a, b) { return a + b; }, 0) / errors.length;
+      $('chart-note').textContent = 'Ortalama ' + meters(mean) + ', en kötü ' + meters(walk.maxError) + ' (' + errors.length + ' ölçüm). Tıklayınca o ana gider.';
+    } else {
+      $('chart-note').textContent = 'Bu yürüyüşte gerçek konum bilinmiyor; hata çizilemez.';
+    }
+    renderSpeechList();
+    fitView();
+    render(false);
+  }
+
+  // ---- controls ----
+  function bindControls() {
+    var select = $('walk-select');
+    walks.forEach(function (walk, k) {
+      var option = document.createElement('option');
+      option.value = String(k);
+      option.textContent = walk.title;
+      select.appendChild(option);
+    });
+    $('picker-wrap').hidden = walks.length < 2;
+    select.addEventListener('change', function () { selectWalk(Number(select.value)); });
+
+    $('play-btn').addEventListener('click', function () { setPlaying(!state.playing); });
+    $('back-btn').addEventListener('click', function () { setPlaying(false); seek(state.i - 1); });
+    $('fwd-btn').addEventListener('click', function () { setPlaying(false); seek(state.i + 1); });
+    $('first-btn').addEventListener('click', function () { setPlaying(false); seek(0); });
+    $('last-btn').addEventListener('click', function () { setPlaying(false); seek(state.walk.frames.length - 1); });
+    $('scrubber').addEventListener('input', function (event) { seek(Number(event.target.value)); });
+    var speed = $('speed-select');
+    speed.value = String(state.speed);
+    if (speed.value !== String(state.speed)) { state.speed = 2; speed.value = '2'; }
+    speed.addEventListener('change', function () { state.speed = Number(speed.value); remember(); });
+    $('fit-btn').addEventListener('click', function () { fitView(); drawMap(); });
+
+    LAYERS.forEach(function (name) {
+      var box = $('layer-' + name);
+      if (!box) return;
+      box.checked = state.layers[name];
+      box.addEventListener('change', function () { state.layers[name] = box.checked; remember(); drawMap(); });
+    });
+
+    document.addEventListener('keydown', function (event) {
+      var tag = (event.target && event.target.tagName) || '';
+      if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
+      var jump = event.shiftKey ? 10 : 1;
+      if (event.key === ' ') { event.preventDefault(); setPlaying(!state.playing); }
+      else if (event.key === 'ArrowRight') { event.preventDefault(); setPlaying(false); seek(state.i + jump); }
+      else if (event.key === 'ArrowLeft') { event.preventDefault(); setPlaying(false); seek(state.i - jump); }
+      else if (event.key === 'Home') { event.preventDefault(); setPlaying(false); seek(0); }
+      else if (event.key === 'End') { event.preventDefault(); setPlaying(false); seek(state.walk.frames.length - 1); }
+    });
+
+    chartCanvas.addEventListener('click', function (event) {
+      var layout = chartCanvas.layout;
+      if (!layout) return;
+      var rect = chartCanvas.getBoundingClientRect();
+      var t = (event.clientX - rect.left - layout.left) / layout.plotW * layout.duration;
+      var walk = state.walk;
+      var best = 0;
+      walk.frames.forEach(function (frame, k) {
+        if (Math.abs(frame.t - walk.t0 - t) < Math.abs(walk.frames[best].t - walk.t0 - t)) best = k;
+      });
+      setPlaying(false);
+      seek(best);
+    });
+
+    // Pan with a drag, zoom with the wheel or a pinch.
+    var pointers = {};
+    var pinch = null;
+    mapCanvas.addEventListener('pointerdown', function (event) {
+      mapCanvas.setPointerCapture(event.pointerId);
+      pointers[event.pointerId] = { x: event.clientX, y: event.clientY };
+      mapCanvas.classList.add('dragging');
+    });
+    mapCanvas.addEventListener('pointermove', function (event) {
+      var previous = pointers[event.pointerId];
+      if (!previous || !state.view) return;
+      var ids = Object.keys(pointers);
+      if (ids.length === 2) {
+        pointers[event.pointerId] = { x: event.clientX, y: event.clientY };
+        var a = pointers[ids[0]];
+        var b = pointers[ids[1]];
+        var distance = Math.hypot(a.x - b.x, a.y - b.y);
+        var rect = mapCanvas.getBoundingClientRect();
+        var mid = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
+        if (pinch) zoomAt(mid.x, mid.y, distance / pinch);
+        pinch = distance;
+        return;
+      }
+      state.view.ox += event.clientX - previous.x;
+      state.view.oy += event.clientY - previous.y;
+      pointers[event.pointerId] = { x: event.clientX, y: event.clientY };
+      drawMap();
+    });
+    function release(event) {
+      delete pointers[event.pointerId];
+      pinch = null;
+      if (!Object.keys(pointers).length) mapCanvas.classList.remove('dragging');
+    }
+    mapCanvas.addEventListener('pointerup', release);
+    mapCanvas.addEventListener('pointercancel', release);
+    mapCanvas.addEventListener('wheel', function (event) {
+      event.preventDefault();
+      var rect = mapCanvas.getBoundingClientRect();
+      zoomAt(event.clientX - rect.left, event.clientY - rect.top, Math.exp(-event.deltaY * 0.0015));
+    }, { passive: false });
+    mapCanvas.addEventListener('dblclick', function () { fitView(); drawMap(); });
+
+    function zoomAt(x, y, factor) {
+      var v = state.view;
+      var next = Math.max(2, Math.min(400, v.s * factor));
+      var wx = (x - v.ox) / v.s;
+      var wy = (v.oy - y) / v.s;
+      v.s = next;
+      v.ox = x - wx * next;
+      v.oy = y + wy * next;
+      drawMap();
+    }
+
+    window.addEventListener('resize', function () { fitView(); render(false); });
+    var dark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    function themeChanged() {
+      readColors();
+      state.walk.floors.forEach(function (floor) { floor.wallCanvas = null; });
+      render(false);
+    }
+    if (dark && dark.addEventListener) dark.addEventListener('change', themeChanged);
+    new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+
+  readColors();
+  if (!walks.length) {
+    $('walk-title').textContent = 'Gösterilecek yürüyüş yok';
+    return;
+  }
+  bindControls();
+  selectWalk(0);
+})();
+</script>

@@ -1,4 +1,4 @@
-package com.appvalence.umay.positioning.simulation
+package com.appvalence.umay.simulation
 
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
  * Run with UMAY_SIM_REPORT=1 to print every scenario's numbers.
  */
 class VirtualFieldTest {
-    private val building = VirtualBuilding.institutionFloor()
+    private val building = VirtualBuildings.institutionFloor()
     private val loop = listOf("M0", "M10", "N10", "N20", "N30", "M30", "M40")
     private val twiceRound = listOf("M0", "M10", "N10", "N20", "N30", "M30", "M20", "M10", "N10", "N20", "N30", "M30", "M40")
 
@@ -63,7 +63,7 @@ class VirtualFieldTest {
 
     @Test
     fun `noisy beacons that often go unheard don't throw the walker off`() {
-        val badRadio = VirtualBuilding.institutionFloor(RadioModel(fadingSigmaDb = 7.0, dropoutProbability = 0.3))
+        val badRadio = VirtualBuildings.institutionFloor(RadioModel(fadingSigmaDb = 7.0, dropoutProbability = 0.3))
         assertWithin(runs("bad radio") { simulateWalk(badRadio, loop, it, aids = Aids(beacons = true)) }, meanMeters = 0.7, maxMeters = 3.0)
     }
 
@@ -71,7 +71,7 @@ class VirtualFieldTest {
     fun `beacons heard only now and then mostly do no harm`() {
         // Four advertisements in five lost — a phone deep in a pocket. A wrong place match
         // still gets through now and then, so only the typical error is held here.
-        val sparse = VirtualBuilding.institutionFloor(RadioModel(dropoutProbability = 0.8))
+        val sparse = VirtualBuildings.institutionFloor(RadioModel(dropoutProbability = 0.8))
         val results = runs("sparse") { simulateWalk(sparse, loop, it, aids = Aids(beacons = true)) }
         val mean = results.map { it.mean }.average()
         assertTrue(mean < 1.5, "mean error %.2f m".format(mean))
