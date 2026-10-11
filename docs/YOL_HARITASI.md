@@ -206,6 +206,15 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   Kural: düzeltme ayar binalarında (ofis, kurum katı) seçilir, klinik
   yalnız sonucu ölçer. Klinikteki sayılar sabit seçmek için kullanılırsa
   doğrulama değeri kalmaz; o zaman yeni bir doğrulama binası gerekir.
+  İlk deneme: geride kalma kurum katının 40 m koridorunda da var (sonda
+  1,5–2,8 m, adım boyu farkının %5–6'sı kadar). Parçacıkların adım
+  ölçeğine adım adım küçük bir rastgele yürüyüş eklendi, etkisi olmadı
+  (0,1 m), geri alındı. Ölçek çeşitliliği eksik değil; 6–10 m arayla
+  duyulan beacon'lar koridor boyunca 1–2 m'yi ayırt etmiyor. Olası yollar:
+  adım boyu kalibrasyonunu yürüyüşe katmak, beacon'un yanından geçerken
+  sinyalin tepe yapmasını konum düzeltmesi olarak kullanmak. İkisi de
+  simülatörün radyo modeline göre değil, saha kayıtlarına (0.3) göre
+  ayarlanmalı.
   *Bitti:* klinikte yalnız beacon'la en az 30/36, ofiste kötüleşme yok.
 - [ ] **0.14 Foto-gerçekçi ofis kopyası** (B). Gerçek bir ofisin telefon
   videosundan Gaussian splatting ile 3B kopya (nerfstudio ya da Mac'te
