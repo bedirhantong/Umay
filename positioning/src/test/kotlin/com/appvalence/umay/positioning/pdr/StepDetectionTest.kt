@@ -89,4 +89,36 @@ class RotationVectorsTest {
         assertEquals(RotationVectors.azimuthDeg(floatArrayOf(0f, 0f, s, c)), RotationVectors.azimuthDeg(floatArrayOf(0f, 0f, s)), 1e-4)
         assertEquals(315.0, RotationVectors.azimuthDeg(floatArrayOf(0f, 0f, s, c)), 1e-4)
     }
+
+    /** The rotation vector (x, y, z, w) of a phone facing [headingDeg] clockwise, its top tilted back by [pitchDeg] (90: upright). */
+    private fun phone(headingDeg: Double, pitchDeg: Double): FloatArray {
+        val yaw = Math.toRadians(-headingDeg) / 2
+        val pitch = Math.toRadians(pitchDeg) / 2
+        // Turn about the vertical, after tilting about the phone's own x axis.
+        val w = kotlin.math.cos(yaw) * kotlin.math.cos(pitch)
+        val x = kotlin.math.cos(yaw) * sin(pitch)
+        val y = sin(yaw) * sin(pitch)
+        val z = sin(yaw) * kotlin.math.cos(pitch)
+        return floatArrayOf(x.toFloat(), y.toFloat(), z.toFloat(), w.toFloat())
+    }
+
+    @Test
+    fun `heading holds as a phone held at the chest passes upright`() {
+        for (pitch in listOf(0.0, 45.0, 85.0, 90.0, 95.0, 120.0)) {
+            assertEquals(30.0, RotationVectors.headingDeg(phone(30.0, pitch)), 0.01, "tilted $pitch°")
+        }
+    }
+
+    @Test
+    fun `the old azimuth flips round past upright, which is why heading replaced it`() {
+        assertEquals(30.0, RotationVectors.azimuthDeg(phone(30.0, 85.0)), 0.01)
+        assertEquals(210.0, RotationVectors.azimuthDeg(phone(30.0, 95.0)), 0.01)
+    }
+
+    @Test
+    fun `flat on a table, heading and azimuth agree`() {
+        for (heading in listOf(0.0, 45.0, 170.0, 300.0)) {
+            assertEquals(RotationVectors.azimuthDeg(phone(heading, 0.0)), RotationVectors.headingDeg(phone(heading, 0.0)), 0.01)
+        }
+    }
 }

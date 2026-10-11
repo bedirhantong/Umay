@@ -29,7 +29,7 @@ class StepDetection(private val stepLengthMeters: Double) {
     private var awaitingFall = false
     private var lastAccelTimestampNs = 0L
 
-    /** The phone's current heading, degrees clockwise (see [RotationVectors.azimuthDeg]). */
+    /** The phone's current heading, degrees clockwise (see [RotationVectors.headingDeg]). */
     fun onHeading(degrees: Double) {
         headingDeg = degrees
     }
@@ -76,8 +76,32 @@ class StepDetection(private val stepLengthMeters: Double) {
 /** Android's rotation-vector math, without Android, so recorded sensor data can be replayed on a computer. */
 object RotationVectors {
     /**
+     * Which way the phone faces, degrees clockwise in 0..360, however it's held: the
+     * turn of the rotation about the vertical (its "twist"). Flat, that's where its top
+     * points; upright at the chest, where the camera looks. Unlike [azimuthDeg] it
+     * doesn't break as the phone passes upright: Android's azimuth is undefined there
+     * and flips by 180° once the top tilts past vertical (the camera aimed a little at
+     * the floor), which a hand at chest height does all the time — every flip a fake
+     * U-turn. Undefined only for a phone upside down.
+     */
+    fun headingDeg(values: FloatArray): Double {
+        val z = values[2].toDouble()
+        val w = if (values.size >= 4) values[3].toDouble() else scalarPart(values)
+        val degrees = -Math.toDegrees(2 * atan2(z, w))
+        return ((degrees % 360.0) + 360.0) % 360.0
+    }
+
+    private fun scalarPart(values: FloatArray): Double {
+        val x = values[0].toDouble()
+        val y = values[1].toDouble()
+        val z = values[2].toDouble()
+        return (1 - x * x - y * y - z * z).let { if (it > 0) sqrt(it) else 0.0 }
+    }
+
+    /**
      * The azimuth of a rotation vector (x, y, z[, w]), degrees clockwise in 0..360:
      * what SensorManager.getRotationMatrixFromVector followed by getOrientation gives.
+     * Breaks for a phone held upright; see [headingDeg].
      */
     fun azimuthDeg(values: FloatArray): Double {
         val m = rotationMatrix(values)

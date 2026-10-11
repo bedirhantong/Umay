@@ -64,7 +64,7 @@ class StepDetector(context: Context, private val stepLengthMeters: Double = AVER
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 when (event.sensor.type) {
-                    Sensor.TYPE_GAME_ROTATION_VECTOR -> detection.onHeading(RotationVectors.azimuthDeg(event.values))
+                    Sensor.TYPE_GAME_ROTATION_VECTOR -> detection.onHeading(RotationVectors.headingDeg(event.values))
                     Sensor.TYPE_ACCELEROMETER -> detection
                         .onAcceleration(event.values[0], event.values[1], event.values[2], event.timestamp, System.currentTimeMillis())
                         ?.let { trySend(it) }
