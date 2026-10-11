@@ -120,6 +120,12 @@ class GraphParticleFilter(
         val markerBearingSigmaDeg: Double = 20.0,
         /** A marker is seen several times a second; one counts per this. */
         val minMarkerIntervalMs: Long = 700L,
+        /**
+         * How much farther than three spreads the cloud's best guess may be from where a
+         * marker says before the cloud starts over around the marker. Every particle
+         * being equally wrong, weighting can't move them; only starting over can.
+         */
+        val markerReseedSlackMeters: Double = 1.0,
         /** How far past (or short of) a junction a particle may still take the turn there. */
         val cornerSnapMeters: Double = 1.0,
     )
@@ -249,7 +255,7 @@ class GraphParticleFilter(
         if (markerFloor != floor) changeFloor(nodeId, timestampMs)
 
         val sigma = config.markerDistanceSigmaMeters + config.markerDistanceSigmaFraction * distanceMeters
-        if (particles.minOf { kotlin.math.abs(hypot(it.x - node.x, it.y - node.y) - distanceMeters) } > 3 * sigma + config.reseedDistanceMeters) {
+        if (particles.minOf { kotlin.math.abs(hypot(it.x - node.x, it.y - node.y) - distanceMeters) } > 3 * sigma + config.markerReseedSlackMeters) {
             // The cloud is nowhere near where the marker says: start over around it. Its
             // heading is no better than its position, so that comes from the marker too.
             particles = resampled(particles.size).map { seedFacingMarker(node, distanceMeters, bearingDeg, it.stepScale) }

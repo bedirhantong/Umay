@@ -695,6 +695,7 @@ class NavigationSession internal constructor(
                 "GraphParticleFilter.maxReadingAgeMs" to particleConfig.maxReadingAgeMs.toDouble(),
                 "GraphParticleFilter.fingerprintConsistencyMargin" to particleConfig.fingerprintConsistencyMargin,
                 "GraphParticleFilter.cornerSnapMeters" to particleConfig.cornerSnapMeters,
+                "GraphParticleFilter.markerReseedSlackMeters" to particleConfig.markerReseedSlackMeters,
                 "GraphParticleFilter.MAX_TURN_AT_NODE_DEG" to GraphParticleFilter.MAX_TURN_AT_NODE_DEG,
                 "NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS" to NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS,
                 "NavigationOrchestrator.ARRIVAL_DISTANCE_METERS" to NavigationOrchestrator.ARRIVAL_DISTANCE_METERS,
