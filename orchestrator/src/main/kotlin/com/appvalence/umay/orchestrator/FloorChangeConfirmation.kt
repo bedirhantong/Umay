@@ -30,7 +30,9 @@ class FloorChangeConfirmation(
     fun climbedMeters(): Double? = detector.climbedMeters()
 
     fun onState(state: NavigationState): Confirmed? {
-        val hint = state.pendingFloorChange
+        // The barometer listens for the crossing at the end of this leg already: someone
+        // waiting at a lift may be well ahead of where guidance places them.
+        val hint = state.pendingFloorChange ?: state.upcomingFloorChange
         pending = hint
         if (hint == null) {
             detector.disarm()
@@ -45,7 +47,7 @@ class FloorChangeConfirmation(
         // up (NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap needed, which
         // matters since a blind user's hands may well be full on a staircase. Elevators
         // never set autoConfirm; those wait for the button.
-        return if (hint.autoConfirm) Confirmed(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_AUTOMATICALLY) else null
+        return if (hint.autoConfirm && hint == state.pendingFloorChange) Confirmed(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_AUTOMATICALLY) else null
     }
 
     fun onPressure(hPa: Double, timestampMs: Long): Confirmed? {

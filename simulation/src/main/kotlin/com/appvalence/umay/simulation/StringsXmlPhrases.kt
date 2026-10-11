@@ -82,6 +82,15 @@ class StringsXmlPhrases(
         return string(name, string("common_floor", targetFloor), arrivalPlaceName)
     }
 
+    override fun thenChangeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int): String {
+        val name = when (method) {
+            FloorChangeMethod.STAIRS -> if (goingUp) "say_then_floor_stairs_up" else "say_then_floor_stairs_down"
+            FloorChangeMethod.ELEVATOR -> if (goingUp) "say_then_floor_elevator_up" else "say_then_floor_elevator_down"
+            FloorChangeMethod.UNKNOWN -> if (goingUp) "say_then_floor_either_up" else "say_then_floor_either_down"
+        }
+        return string(name, string("common_floor", targetFloor))
+    }
+
     override fun hazardAhead(type: NodeType): String? = when (type) {
         NodeType.STAIRS -> string("say_hazard_stairs")
         NodeType.DOOR -> string("say_hazard_door")

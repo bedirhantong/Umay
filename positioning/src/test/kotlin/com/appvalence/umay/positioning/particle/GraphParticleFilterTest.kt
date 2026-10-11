@@ -4,6 +4,9 @@ import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.FloorTransition
 import com.appvalence.umay.coremodel.MapEdge
+import com.appvalence.umay.coremodel.StepEvent
+import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
@@ -151,7 +154,7 @@ class GraphParticleFilterTest {
     }
 
     @Test
-    fun `a confirmed floor change restarts at the arrival node and keeps the learned heading`() {
+    fun `a confirmed floor change restarts at the arrival node, a few steps either way out, and keeps the learned heading`() {
         val stairsTop = node("S1", 50.0, 50.0)
         val landing = node("L", 50.0, 60.0)
         val map = BuildingMap(
@@ -164,13 +167,44 @@ class GraphParticleFilterTest {
 
         val arrived = filter.changeFloor("S1", timestampMs = 99_000L)
         assertEquals(1, arrived.floor)
-        assertTrue(hypot(arrived.x - stairsTop.x, arrived.y - stairsTop.y) < 0.01, "arrived at $arrived")
+        // On the way out of the landing (its only one runs north), at most arrivalSpreadMeters along it.
+        assertEquals(stairsTop.x, arrived.x, 0.01)
+        assertTrue(arrived.y in stairsTop.y..stairsTop.y + GraphParticleFilter.Config().arrivalSpreadMeters, "arrived at $arrived")
 
         // Still north in the map, in the same rotated gyro frame as downstairs.
         val upstairsSteps = stepsAlong(listOf(stairsTop, landing), gyroOffsetDeg = 40.0, startMs = 100_000L)
             .mapIndexed { i, step -> if (i == 0) step.copy(headingDeltaDeg = 0.0) else step }
         val end = upstairsSteps.map(filter::onStep).last()
         assertTrue(hypot(end.x - landing.x, end.y - landing.y) < 1.5, "ended at $end")
+    }
+
+    @Test
+    fun `climbing a staircase at the end of a corridor doesn't carry the estimate off`() {
+        // Setting off from a junction a few metres from the stairs, which way the walker
+        // faces isn't known yet: some of the cloud follows the corridor west instead. The
+        // twenty steps of the climb must not hand the estimate to that half.
+        val junction = node("J", 0.0, 0.0)
+        val stairs = MapNode("S", 0.0, 4.0, NodeType.STAIRS)
+        val west = node("W", -20.0, 0.0)
+        val south = node("D", 0.0, -20.0)
+        val map = BuildingMap(
+            id = "test",
+            floors = listOf(
+                floor(0, junction, stairs).let {
+                    it.copy(nodes = it.nodes + west + south, edges = it.edges + MapEdge("J", "W", true, 20.0) + MapEdge("J", "D", true, 20.0))
+                },
+            ),
+        )
+        val filter = GraphParticleFilter(map, "J", random = Random(4))
+        val walk = stepsAlong(listOf(junction, stairs), gyroOffsetDeg = 30.0)
+        walk.forEach(filter::onStep)
+        // Climbing: steps in place, facing on.
+        val t = walk.last().timestampMs
+        (1..20).forEach { filter.onStep(StepEvent(0.7, 0.0, t + 550L * it)) }
+
+        // The floor change confirmed next settles it; until then the stairs keep their share.
+        val atStairs = filter.particlePositions().count { (x, y) -> hypot(x - stairs.x, y - stairs.y) < 1.0 }.toDouble() / filter.particlePositions().size
+        assertTrue(atStairs > 0.3, "only %.0f%% of the cloud still at the stairs".format(atStairs * 100))
     }
 
     @Test

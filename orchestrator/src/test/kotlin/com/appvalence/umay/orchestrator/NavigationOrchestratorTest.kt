@@ -78,6 +78,8 @@ private object TokenPhrases : GuidancePhrases {
     override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =
         "CHANGE_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor $arrivalPlaceName"
+    override fun thenChangeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int) =
+        "THEN_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor"
     override fun hazardAhead(type: NodeType) = if (type in setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)) "HAZARD $type" else null
     override fun arrived() = "ARRIVED"
     override fun noRoute() = "NO_ROUTE"
@@ -874,6 +876,35 @@ class NavigationOrchestratorTest {
         orchestrator.start().toList()
 
         assertTrue(feedback.emitted.none { it.message == "NO_STEP_FREE_ROUTE" })
+    }
+
+    @Test
+    fun `the leg to a staircase says what's done there`() = runTest {
+        val feedback = RecordingFeedbackController()
+        orchestratorFor(stairsMap, listOf(position(0.0, 0.0)), feedback, "D").start().toList()
+
+        val leg = feedback.emitted.first { it.id.startsWith("route-guide-") }.message
+        assertTrue(leg.endsWith("THEN_FLOOR STAIRS UP 1"), leg)
+    }
+
+    @Test
+    fun `a barometer can hear the crossing at the end of this leg before it's pending`() = runTest {
+        val states = orchestratorFor(stairsMap, listOf(position(0.0, 0.0)), RecordingFeedbackController(), "D").start().toList()
+
+        assertEquals(null, states.last().pendingFloorChange)
+        assertEquals("C", states.last().upcomingFloorChange?.targetNodeId)
+    }
+
+    @Test
+    fun `confirmed onto the next floor before guidance got there, the route carries on up there`() = runTest {
+        // Still 6 m short of the stairs by the estimate when the barometer moved positioning upstairs.
+        val positions = listOf(position(0.0, 4.0, floor = 0, timestampMs = 0L), position(0.0, 3.0, floor = 1, timestampMs = 1_000L))
+        val feedback = RecordingFeedbackController()
+        val states = orchestratorFor(stairsMap, positions, feedback, "D").start().toList()
+
+        assertEquals(null, states.last().pendingFloorChange)
+        assertEquals("D", states.last().route[states.last().nextRouteIndex].id)
+        assertTrue(feedback.emitted.last { it.id.startsWith("route-guide-") }.message.startsWith("APPROACH"))
     }
 
     @Test

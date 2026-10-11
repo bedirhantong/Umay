@@ -240,6 +240,12 @@
     <string name="say_floor_elevator_down">Asansörle aşağı in: %1$s, %2$s.</string>
     <string name="say_floor_either_up">Merdiven ya da asansörle yukarı çık: %1$s, %2$s.</string>
     <string name="say_floor_either_down">Merdiven ya da asansörle aşağı in: %1$s, %2$s.</string>
+    <string name="say_then_floor_stairs_up">Oradan merdivenle yukarı çık, %1$s.</string>
+    <string name="say_then_floor_stairs_down">Oradan merdivenle aşağı in, %1$s.</string>
+    <string name="say_then_floor_elevator_up">Oradan asansörle yukarı çık, %1$s.</string>
+    <string name="say_then_floor_elevator_down">Oradan asansörle aşağı in, %1$s.</string>
+    <string name="say_then_floor_either_up">Oradan merdiven ya da asansörle yukarı çık, %1$s.</string>
+    <string name="say_then_floor_either_down">Oradan merdiven ya da asansörle aşağı in, %1$s.</string>
     <string name="say_hazard_stairs">Dikkat, merdiven var.</string>
     <string name="say_hazard_door">Önünde bir kapı var.</string>
     <string name="say_hazard_ramp">Önünde bir rampa var.</string>

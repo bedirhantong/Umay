@@ -82,6 +82,15 @@ class ResourceGuidancePhrases(context: Context, private val clockDirections: Boo
         return resources.getString(template, resources.getString(R.string.common_floor, targetFloor), arrivalPlaceName)
     }
 
+    override fun thenChangeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int): String {
+        val res = when (method) {
+            FloorChangeMethod.STAIRS -> if (goingUp) R.string.say_then_floor_stairs_up else R.string.say_then_floor_stairs_down
+            FloorChangeMethod.ELEVATOR -> if (goingUp) R.string.say_then_floor_elevator_up else R.string.say_then_floor_elevator_down
+            FloorChangeMethod.UNKNOWN -> if (goingUp) R.string.say_then_floor_either_up else R.string.say_then_floor_either_down
+        }
+        return resources.getString(res, resources.getString(R.string.common_floor, targetFloor))
+    }
+
     override fun hazardAhead(type: NodeType): String? = when (type) {
         NodeType.STAIRS -> resources.getString(R.string.say_hazard_stairs)
         NodeType.DOOR -> resources.getString(R.string.say_hazard_door)

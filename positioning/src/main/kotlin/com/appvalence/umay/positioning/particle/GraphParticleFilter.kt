@@ -3,6 +3,7 @@ package com.appvalence.umay.positioning.particle
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.MapNode
+import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.StepEvent
@@ -122,6 +123,8 @@ class GraphParticleFilter(
          * being equally wrong, weighting can't move them; only starting over can.
          */
         val markerReseedSlackMeters: Double = 1.0,
+        /** How far beyond a floor change's arrival place the walker may already be when it's confirmed. */
+        val arrivalSpreadMeters: Double = 4.0,
         /** How far past (or short of) a junction a particle may still take the turn there. */
         val cornerSnapMeters: Double = 1.0,
     )
@@ -290,10 +293,25 @@ class GraphParticleFilter(
         return estimate(timestampMs)
     }
 
+    // The landing the last floor change arrived at (see move: waiting at stairs).
+    private var arrivedAtNodeId: String? = null
+
+    /**
+     * A floor change confirmed: everyone restarts on the new floor at [arrivalNodeId],
+     * keeping what they know about heading — spread up to [Config.arrivalSpreadMeters]
+     * along the ways out of it, since a confirmation can come a few steps late (a
+     * barometer waits for the climb to settle, and the walker doesn't wait for it).
+     */
     fun changeFloor(arrivalNodeId: String, timestampMs: Long): Position {
+        arrivedAtNodeId = arrivalNodeId
         val arrival = nodesById.getValue(arrivalNodeId)
         floor = floorOfNode[arrivalNodeId] ?: floor
-        particles = resampled(particles.size).map { seedAt(arrival, it.headingOffsetDeg, it.stepScale) }
+        particles = resampled(particles.size).map { previous ->
+            seedAt(arrival, previous.headingOffsetDeg, previous.stepScale).also { p ->
+                val edge = p.edge ?: return@also
+                p.along = (random.nextDouble() * config.arrivalSpreadMeters).coerceAtMost(edge.length)
+            }
+        }
         lastTimestampMs = timestampMs
         return estimate(timestampMs)
     }
@@ -366,7 +384,12 @@ class GraphParticleFilter(
                 // this is mildly unlikely rather than impossible — scoring it by
                 // misalignment instead would kill exactly the particles that got here a
                 // little early, leaving the cloud to lag behind at every corner.
-                return ln(config.waitAtNodeLikelihood)
+                // At a staircase, steps that go nowhere are the stairs themselves: climbing,
+                // with the floor change still to be confirmed. Nothing unlikely about them —
+                // otherwise a flight of twenty steps hands the cloud to whatever hypothesis
+                // walked on along some corridor meanwhile.
+                // Not the landing just arrived at, though: off the stairs, steps go somewhere.
+                return if (atNode.type == NodeType.STAIRS && atNode.id != arrivedAtNodeId) 0.0 else ln(config.waitAtNodeLikelihood)
             }
             particle.edge = best
             particle.along = 0.0

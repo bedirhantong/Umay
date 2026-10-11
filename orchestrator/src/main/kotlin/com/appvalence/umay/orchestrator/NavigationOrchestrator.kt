@@ -137,6 +137,7 @@ class NavigationOrchestrator(
                 route = currentRoute,
                 pendingFloorChange = pendingFloorChange,
                 nextRouteIndex = routeTargetIndex,
+                upcomingFloorChange = upcomingFloorChange(),
             )
         }.onEach { state ->
             state.alerts.forEach(feedback::emit)
@@ -247,6 +248,22 @@ class NavigationOrchestrator(
         }
         if (currentRoute.size < 2 || arrivalAnnounced) return null
 
+        // Already on a floor the route only reaches further on: the floor change was
+        // confirmed (the barometer, the walker's button) before guidance caught up with the
+        // walker — the estimate lagging behind someone waiting at a lift, say. Pick the
+        // route up where it arrives on this floor rather than sending them back down.
+        if (nodeFloor[currentRoute[routeTargetIndex].id] != position.floor) {
+            // The route's next crossing from here on; already being made if it's the target.
+            val crossing = (maxOf(routeTargetIndex, 1)..currentRoute.lastIndex).firstOrNull { i ->
+                nodeFloor[currentRoute[i].id] != nodeFloor[currentRoute[i - 1].id]
+            }
+            if (crossing != null && crossing > routeTargetIndex && nodeFloor[currentRoute[crossing].id] == position.floor) {
+                routeTargetIndex = crossing
+                lastAnnouncedLegIndex = -1
+                routeMonitor.reset()
+            }
+        }
+
         // Advance toward the next route node each time the user gets close enough to
         // the one they were walking toward, so guidance always describes the leg
         // that's actually ahead of them, not the one they already finished. Proximity
@@ -256,7 +273,10 @@ class NavigationOrchestrator(
         while (routeTargetIndex < currentRoute.lastIndex) {
             val target = currentRoute[routeTargetIndex]
             if (nodeFloor[target.id] != position.floor) break
-            if (hypot(target.x - position.x, target.y - position.y) > WAYPOINT_ARRIVAL_METERS) break
+            // The landing a floor change arrives at is reached by being on its floor: the
+            // confirmation can come a few steps after the walker has moved off it.
+            val crossingArrival = routeTargetIndex > 0 && nodeFloor[currentRoute[routeTargetIndex - 1].id] != nodeFloor[target.id]
+            if (!crossingArrival && hypot(target.x - position.x, target.y - position.y) > WAYPOINT_ARRIVAL_METERS) break
             routeTargetIndex++
             lastAnnouncedLegIndex = -1 // force an immediate announcement of the new leg
             routeMonitor.reset()
@@ -421,6 +441,16 @@ class NavigationOrchestrator(
         return if (abs(delta) > REORIENT_DEG) Turn(delta) else null
     }
 
+    /** The crossing right after the leg being walked, as a hint for the barometer; null if that leg doesn't end in one. */
+    private fun upcomingFloorChange(): FloorChangeHint? {
+        if (pendingFloorChange != null || currentRoute.isEmpty()) return null
+        val target = currentRoute.getOrNull(routeTargetIndex) ?: return null
+        val arrival = currentRoute.getOrNull(routeTargetIndex + 1) ?: return null
+        val arrivalFloor = nodeFloor[arrival.id] ?: return null
+        if (arrivalFloor == nodeFloor[target.id]) return null
+        return FloorChangeHint(arrival.id, arrival.name, arrivalFloor)
+    }
+
     /**
      * The turn at the place this leg starts from, which the walker is at or nearly at
      * when the leg is announced: the leg begins there with a turn the instruction for
@@ -471,12 +501,7 @@ class NavigationOrchestrator(
         val previousFloor = nodeFloor[previous.id] ?: 0
 
         if (targetFloor != previousFloor) {
-            val method = when (target.type) {
-                NodeType.STAIRS -> FloorChangeMethod.STAIRS
-                NodeType.ELEVATOR -> FloorChangeMethod.ELEVATOR
-                else -> FloorChangeMethod.UNKNOWN
-            }
-            return phrases.changeFloor(method, goingUp = targetFloor > previousFloor, targetFloor = targetFloor, arrivalPlaceName = target.name)
+            return phrases.changeFloor(floorChangeMethod(target), goingUp = targetFloor > previousFloor, targetFloor = targetFloor, arrivalPlaceName = target.name)
         }
 
         // The next leg is announced a couple of metres before the place it starts from, so
@@ -493,6 +518,14 @@ class NavigationOrchestrator(
         // app, and it only exists where the survey operator explicitly tagged one.
         val hazard = phrases.hazardAhead(target.type)
         val distance = hypot(target.x - position.x, target.y - position.y)
+        // A leg ending at a staircase or lift says what's done there, so the walker knows on
+        // arriving, whether or not guidance has caught up with them by then.
+        val crossingAfter = currentRoute.getOrNull(targetIndex + 1)
+            ?.takeIf { nodeFloor[it.id] != targetFloor }
+            ?.let { next ->
+                val nextFloor = nodeFloor[next.id] ?: targetFloor
+                phrases.thenChangeFloor(floorChangeMethod(next), goingUp = nextFloor > targetFloor, targetFloor = nextFloor)
+            }
         val instruction = if (targetIndex == currentRoute.lastIndex) {
             phrases.approachDestination(distance)
         } else {
@@ -512,7 +545,14 @@ class NavigationOrchestrator(
             ?.takeIf { position.floor == targetFloor }
             ?.along(position.x, position.y, target.x, target.y)
             ?.let(phrases::followWall)
-        return listOfNotNull(turnNow, hazard, instruction, wall).joinToString(" ")
+        return listOfNotNull(turnNow, hazard, instruction, crossingAfter, wall).joinToString(" ")
+    }
+
+    /** How a crossing is made, from how its arrival node was tagged during the survey. */
+    private fun floorChangeMethod(arrival: MapNode): FloorChangeMethod = when (arrival.type) {
+        NodeType.STAIRS -> FloorChangeMethod.STAIRS
+        NodeType.ELEVATOR -> FloorChangeMethod.ELEVATOR
+        else -> FloorChangeMethod.UNKNOWN
     }
 
     // Compass bearing (0 = north/+y, 90 = east/+x, clockwise) — matches PdrIntegrator's

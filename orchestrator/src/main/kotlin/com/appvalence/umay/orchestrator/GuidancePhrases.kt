@@ -71,6 +71,9 @@ interface GuidancePhrases {
     /** The leg that crosses floors, ending at [arrivalPlaceName] on [targetFloor]. */
     fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String): String
 
+    /** Said after a leg that ends at a staircase or lift: what to do there ("Oradan asansörle yukarı çık, Kat 1."). */
+    fun thenChangeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int): String
+
     /** A warning about a tagged hazard at the place being approached; null when [type] isn't one. */
     fun hazardAhead(type: NodeType): String?
 
