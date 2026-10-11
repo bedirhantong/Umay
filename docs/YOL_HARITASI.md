@@ -148,12 +148,16 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   uygulamaya girmez). Haritası koridor ağı değil, kat planı görseli; koridor
   ağı işaretli noktalardan çıkarılır.
   *Bitti:* en az 3 binada eski ve yeni motorun hatası ilerleme kaydında.
-- [ ] **0.11 Yürüyüşü izleme sayfası** (K). Simülasyonun, saha kaydının ve
+- [x] **0.11 Yürüyüşü izleme sayfası** (K). Simülasyonun, saha kaydının ve
   0.10'un yürüyüşlerini harita üzerinde oynatan bir sayfa: gerçek yol,
   tahmin, parçacık bulutu, o an söylenen yönerge, hata grafiği. Kod
   değişikliğinin etkisini gözle görmeye yarar.
   *Bitti:* bir test komutu, açılınca yürüyüşü oynatan tek bir HTML dosyası
   üretiyor.
+  `simulation` modülü, `WalkViewerPage`. Sanal ofis için `WalkReportsTest`,
+  saha kayıtları için `UMAY_FIELD_LOGS` ile `FieldLogRecordingTest` (README
+  "Saha testi"). Saha kaydı bugünkü kodla yeniden oynatılır ve yürüyüş
+  sırasındaki tahminle yan yana gösterilir. Sayfa internete istek yapmaz.
 - [ ] **0.12 Sanal ofis (görsel ikiz)** (B). Gerçek bir ofisin telefon
   videosundan Gaussian splatting ile foto-gerçekçi 3B kopyası çıkarılır
   (nerfstudio, tek seferlik GPU işi). Bu kopyada çizilen bir yürüyüş

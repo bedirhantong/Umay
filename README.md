@@ -134,6 +134,21 @@ Tahmine dayanan ayar değerleri bu kayıtlarla gerçek yürüyüşlere göre
 ayarlanır. Çökme kayıtları da cihazda tutulur. Kullanıcı paylaşmadıkça hiçbir
 veri cihazdan çıkmaz.
 
+Telefonsuz test için `simulation` modülü var. Sanal bir ofiste, binayı
+bilmeyen ve yalnızca uygulamanın söylediklerine göre yürüyen bir kör
+kullanıcıyı canlandırır: konum ve yönlendirme kodu uygulamanınkinin aynısı,
+cümleler `strings.xml`'den. Yürüyüşler bir sayfada izlenir: gerçek yol,
+uygulamanın tahmini, parçacık bulutu, söylenenler, konum hatası. Sayfa
+internete hiçbir istek yapmaz.
+
+```sh
+# Sanal ofisteki yürüyüşler: simulation/build/reports/walks/sanal-ofis.html
+./gradlew :simulation:testDebugUnitTest --tests '*WalkReportsTest*'
+
+# Kendi saha kayıtların: simulation/build/reports/walks/saha-kayitlari.html
+UMAY_FIELD_LOGS=/kayitlarin/klasoru ./gradlew :simulation:testDebugUnitTest --tests '*FieldLogRecordingTest*'
+```
+
 Her pull request'te aynı testler, lint ve debug derlemesi GitHub Actions'ta
 otomatik çalışır.
 
