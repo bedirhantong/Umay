@@ -3,6 +3,7 @@ package com.appvalence.umay.positioning.particle
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.FloorTransition
+import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
@@ -39,6 +40,31 @@ class GraphParticleFilterTest {
         assertTrue(hypot(particleEnd.x - c.x, particleEnd.y - c.y) < 1.5, "particle filter ended at $particleEnd")
         assertTrue(hypot(pdrEnd.x - c.x, pdrEnd.y - c.y) > 5.0, "plain PDR unexpectedly ended near C: $pdrEnd")
         assertEquals(PositionSource.MAP_MATCHED, particleEnd.source)
+    }
+
+    @Test
+    fun `a hint about the starting direction settles a crossroads at once`() {
+        // A crossroads: from the centre every direction is a corridor, so the first steps
+        // alone can't tell which way the walker went. A compass-like hint can.
+        val centre = node("O", 0.0, 0.0)
+        val north = node("N", 0.0, 10.0)
+        val map = BuildingMap(
+            id = "test",
+            floors = listOf(
+                floor(0, centre, north).let { f ->
+                    val others = listOf(node("S", 0.0, -10.0), node("E", 10.0, 0.0), node("W", -10.0, 0.0))
+                    f.copy(nodes = f.nodes + others, edges = f.edges + others.map { MapEdge("O", it.id, accessible = true, distanceMeters = 10.0) })
+                },
+            ),
+        )
+        val steps = stepsAlong(listOf(centre, north), gyroOffsetDeg = 73.0).take(4)
+        val truthY = 4 * 0.7
+
+        val unaided = steps.map(GraphParticleFilter(map, "O", random = Random(3))::onStep).last()
+        val hinted = steps.map(GraphParticleFilter(map, "O", random = Random(3), startHeadingOffsetDeg = 73.0 + 20.0)::onStep).last()
+
+        assertTrue(hypot(hinted.x, hinted.y - truthY) < 0.8, "with the hint: $hinted")
+        assertTrue(hypot(unaided.x, unaided.y - truthY) > 1.5, "without it, still undecided: $unaided")
     }
 
     @Test

@@ -98,7 +98,11 @@ Haritayı gören bir kişi, binada bir kez yürüyerek çıkarır. Haritayı ç�
    işaretleyin ("Doğu merdiveni zemin", "Doğu merdiveni 1. kat"). Telefonda
    basınç sensörü varsa kat kendiliğinden değişir; yoksa +/− ile değiştirin.
 7. Binanın kullanıcıların gideceği her koridorunu yürüyün. Yürünmeyen bir
-   koridor haritada yoktur.
+   koridor haritada yoktur, ve bu yalnızca o koridora rota çizilemeyeceği
+   anlamına gelmez: biri oraya girerse Umay onun yerini kaybeder. Gerçek
+   yürüyüş kayıtlarıyla yapılan ölçümde haritanın yürüyüşün %63–71'ini
+   kapsaması, konum hatasını 2–3 metreden 11–13 metreye çıkardı. Holler ve
+   geniş alanlar için ortasından ve kenarlarından birer kez yürüyün.
 8. Bitince "Kaydı durdur"a basın, binaya bir ad verip kaydedin.
 
 Kayıt sırasında başka bir uygulamaya geçmek kaydı bozmaz. Uygulama kapansa

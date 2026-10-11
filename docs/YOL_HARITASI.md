@@ -139,15 +139,19 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
 - [ ] **0.9 Telefonda saha kaydı özeti** (K). Dosyalar'da her kaydın
   "Buradayım" işaretlerinden ortalama ve en kötü hatası, en kötü yerin adıyla.
   *Bitti:* sahada kaydı göndermeden doğruluk görülebiliyor.
-- [ ] **0.10 Gerçek açık veriyle tekrar** (O). Microsoft'un Indoor Location
+- [x] **0.10 Gerçek açık veriyle tekrar** (O). Microsoft'un Indoor Location
   Competition 2.0 verisi (gerçek binalarda, elde tutulan Android telefonla:
   ivmeölçer, jiroskop, iBeacon taramaları ve işaretli gerçek konumlar)
-  Umay'ın saha kaydı biçimine çevrilir ve `FieldLogReplay` ile oynatılır.
-  Kendi binamız olmadan gerçek adım ve sinyal gürültüsüyle ölçüm sağlar.
-  Lisansı önce okunur (araştırma amaçlı olabilir; yalnızca testte kullanılır,
-  uygulamaya girmez). Haritası koridor ağı değil, kat planı görseli; koridor
-  ağı işaretli noktalardan çıkarılır.
+  uygulamanın kendi adım bulma ve konum koduyla oynatılır. Kendi binamız
+  olmadan gerçek adım ve sinyal gürültüsüyle ölçüm sağlar. Örnek veri MIT
+  lisanslı; depoya girmez, `UMAY_ILC_DATA` ile gösterilir (`IlcReplayTest`).
+  Koridor ağı katın diğer yürüyüşlerinin işaretli noktalarından çıkarılır.
   *Bitti:* en az 3 binada eski ve yeni motorun hatası ilerleme kaydında.
+  Açık örnek veride yalnız 2 bina (alışveriş merkezi) var: 2 binanın 3
+  katında, 179 yürüyüşte ölçüldü. Karşılaştırılan "eski motor" yalnız adım
+  saymadır ve ona gerçek başlangıç yönü de verilmiştir. Sonuçlar
+  ilerleme kaydında (11 Ekim). Bunun için adım bulma Android'den ayrıldı
+  (`StepDetection`).
 - [x] **0.11 Yürüyüşü izleme sayfası** (K). Simülasyonun, saha kaydının ve
   0.10'un yürüyüşlerini harita üzerinde oynatan bir sayfa: gerçek yol,
   tahmin, parçacık bulutu, o an söylenen yönerge, hata grafiği. Kod
@@ -158,7 +162,11 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   saha kayıtları için `UMAY_FIELD_LOGS` ile `FieldLogRecordingTest` (README
   "Saha testi"). Saha kaydı bugünkü kodla yeniden oynatılır ve yürüyüş
   sırasındaki tahminle yan yana gösterilir. Sayfa internete istek yapmaz.
-- [ ] **0.12 Sanal ofis (görsel ikiz)** (B). Gerçek bir ofisin telefon
+- [ ] **0.12 Sanal ofis (görsel ikiz)** (B). **Kısmen:** sanal açık ofis ve
+  uygulamanın söylediklerine göre yürüyen sanal kör kullanıcı hazır
+  (`GuidedWalkTest`); bu, iki yönlendirme hatası buldu ve düzeltildi
+  (ilerleme kaydı, 11 Ekim). Kamera kareleri ve foto-gerçekçi kopya
+  bekliyor. Gerçek bir ofisin telefon
   videosundan Gaussian splatting ile foto-gerçekçi 3B kopyası çıkarılır
   (nerfstudio, tek seferlik GPU işi). Bu kopyada çizilen bir yürüyüş
   boyunca kameranın göreceği kareler üretilir; engel algılama (4.1), QR yer
@@ -284,6 +292,16 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   *Bitti:* bir yürüyüş boyunca telefon iki kez cebe girip çıkıyor, saha
   kaydında hata sınırın içinde kalıyor.
 
+- [ ] **3.5 Pusulayla başlangıç yönü** (O). Konum motoru yürüyenin hangi
+  yöne baktığını ilk adımlardan öğreniyor; kavşakta ve açık alanda bu uzun
+  sürüyor. Haritalama sırasında pusulanın harita koordinatlarına göre farkı
+  kaydedilir; yönlendirme başlarken telefonun pusulası bundan bir ipucu
+  çıkarır (±30°). Gerçek yürüyüşlerde (0.10) ortalama hatayı açık alanlı
+  katta 7,9 m'den 4,6 m'ye, koridorlu katlarda %10–20 düşürdü. Pusula ilk
+  metrelerde medyan 12–17° sapıyor.
+  *Bitti:* harita farkı saklıyor, yönlendirme ipucunu kullanıyor; sahada
+  denenecek.
+
 ### Faz 4: Kamerayla ilerleme
 
 - [ ] **4.1 Kamerayla engel uyarısı** (O). Karar 1 gereği derinlik
@@ -400,6 +418,14 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 - **Telefonun göğüste tutulması gerekir.** Elinde baston olan biri için
   askı şart. Önlem: cepteki mod (adım ve beacon) her zaman çalışır kalır.
 - **Pil.** Kamera ve derinlik sürekli açıkken pil hızlı biter. Önlem: 4.4.
+- **Haritada olmayan yere gitmek.** Gerçek yürüyüş kayıtlarında (0.10)
+  harita yürüyüşün %63–71'ini kapsayınca ortalama hata 2–3 m'den 11–13 m'ye
+  çıktı: konum motoru yürüyeni bildiği koridorlarda tutuyor. Denenen iki
+  çözüm işe yaramadı ve alınmadı: bulutun bir kısmını koridordan serbest
+  bırakmak hatayı tam haritada 2,8 m'den 6–10 m'ye çıkardı; adımların
+  haritaya uymamasından "kayboldum" demek, kaybolunan anların %70'ini
+  yakalarken iyi adımların %20–26'sında yanlış alarm verdi. Önlem: tam
+  haritalama (KURULUM.md 3. adım), yer işaretleri.
 - **Yanlış başlangıç ve seyrek beacon.** Simülasyonda (0.8) kullanıcı yanlış
   yeri seçer ve beacon'lar da seyrek duyulursa konum toparlanmıyor. Önlem:
   başlangıç önerisi (3.2), "Kamerayla bul" ve yer işaretleri (3.3); kurulumda
@@ -415,6 +441,28 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Cihazsız test (0.10, 0.11, 0.12'nin bir kısmı):
+  - Yürüyüş izleyici (0.11) hazır: sanal ofis, saha kayıtları ve gerçek
+    veri aynı sayfada oynuyor.
+  - Sanal ofiste, uygulamanın söylediklerine göre yürüyen sanal bir kör
+    kullanıcı iki yönlendirme hatası buldu. Bir sonraki bacak köşeden 2 m
+    önce söylendiğinde, o köşedeki dönüş cümleden düşüyordu. Son bacak da
+    hedef köşe ardındaysa yön söylemiyordu. "Sola dön." gibi bir açılışla
+    düzeltildi: varış 48 yürüyüşte 22'den 48'e çıktı.
+  - Gerçek veri (0.10; 2 alışveriş merkezi, 3 kat, 179 yürüyüş). Ortalama
+    hata; harita yürüyüşü tam kapsıyor:
+
+    | Kat | Adım sayma* | Uygulama | + pusula | + wifi ve pusula |
+    |---|---|---|---|---|
+    | site1/F1 (açık alan) | 4,25 m | 7,87 m | 4,56 m | 4,88 m |
+    | site2/F4 | 5,73 m | 2,77 m | 2,50 m | 1,95 m |
+    | site2/F7 | 3,48 m | 1,88 m | 1,50 m | 1,50 m |
+
+    \* Yalnız adım sayma, gerçek başlangıç yönü verilerek.
+
+    Harita yürüyüşün %63–96'sını kapsadığında uygulamanın hatası 11–15 m
+    (Riskler). Yeni iş: 3.5 Pusulayla başlangıç yönü.
 
 - **11 Ekim 2026:** Saha kaydı gelmeden yapılabilenler bitti: rotadan çıkma
   ve ters yön uyarısı (4.6), "Neredeyim?" (4.7), merdivensiz rota (4.8),

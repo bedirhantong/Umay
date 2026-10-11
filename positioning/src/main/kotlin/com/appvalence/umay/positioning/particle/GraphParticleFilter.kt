@@ -52,6 +52,13 @@ class GraphParticleFilter(
     startNodeId: String,
     private val config: Config = Config(),
     private val random: Random = Random.Default,
+    /**
+     * A rough idea of how the gyro's heading turns into the map's (map heading minus
+     * gyro heading), when something other than the walk can tell — a compass, say.
+     * Null: no idea, every direction equally likely at the start.
+     */
+    startHeadingOffsetDeg: Double? = null,
+    startHeadingSigmaDeg: Double = 30.0,
 ) {
     data class Config(
         val particleCount: Int = 400,
@@ -182,7 +189,12 @@ class GraphParticleFilter(
         // start keeps the old assumption instead: the walker faces where the survey began.
         val canLearnHeading = edgesFrom[startNodeId] != null
         List(config.particleCount) {
-            seedAt(nodesById.getValue(startNodeId), headingOffsetDeg = if (canLearnHeading) random.nextDouble(0.0, 360.0) else 0.0)
+            val offset = when {
+                startHeadingOffsetDeg != null -> startHeadingOffsetDeg + gaussian() * startHeadingSigmaDeg
+                canLearnHeading -> random.nextDouble(0.0, 360.0)
+                else -> 0.0
+            }
+            seedAt(nodesById.getValue(startNodeId), headingOffsetDeg = offset)
         }
     }
 
