@@ -24,6 +24,8 @@ internal data class VirtualObstacle(
     val y: Double,
     val heightMeters: Double,
     val blocking: Boolean = false,
+    /** Side to side, across the corridor. */
+    val widthMeters: Double = 0.5,
 )
 
 /**
@@ -56,6 +58,9 @@ internal class VirtualObstacleSensor(
         val top = (height / 2.0 + (cameraHeightMeters - obstacle.heightMeters) * focalPx / depth).coerceAtLeast(0.0)
         if (bottom - top < MIN_BOX_PX) return@mapNotNull null
         val centerX = width / 2.0 + focalPx * tan(Math.toRadians(relative))
+        // Its sides where the camera's true optics put them, cut off at the frame's edges.
+        val left = (centerX - obstacle.widthMeters / 2 * focalPx / depth).coerceAtLeast(0.0)
+        val right = (centerX + obstacle.widthMeters / 2 * focalPx / depth).coerceAtMost(width.toDouble())
         val obstacleClass = ObstacleClasses.byIndex.values.first { it.kind == obstacle.kind }
         DetectedObstacle(
             id = obstacle.id,
@@ -67,6 +72,7 @@ internal class VirtualObstacleSensor(
             detectedAtMs = timestampMs,
             sensorSource = ObstacleSensorSource.CAMERA_ML,
             kind = obstacle.kind,
+            widthMeters = ObstacleGeometry.widthIfWhollySeen(left.toFloat(), right.toFloat(), width, ObstacleClasses.distanceMeters(obstacleClass, top.toFloat(), bottom.toFloat(), height)),
         )
     }
 

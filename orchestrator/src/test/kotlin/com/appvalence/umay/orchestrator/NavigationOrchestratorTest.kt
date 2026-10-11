@@ -74,6 +74,7 @@ private object TokenPhrases : GuidancePhrases {
     override fun followWall(side: TurnDirection) = "WALL $side"
     override fun turnNow(turn: Turn) = "TURN_NOW ${turn.direction}"
     override fun turnAround() = "TURN_AROUND"
+    override fun passObstacle(side: TurnDirection) = "PASS $side"
     override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =
         "CHANGE_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor $arrivalPlaceName"
@@ -247,6 +248,51 @@ class NavigationOrchestratorTest {
         assertEquals(listOf("A", "B", "C"), states.last().route.map { it.id })
         assertTrue(feedback.emitted.any { it.message.startsWith("OBSTACLE WARNING PERSON") })
         assertTrue(feedback.emitted.none { it.id.startsWith("reroute-") })
+    }
+
+    private fun rerouteMapWithWalls(corridorHalfWidth: Double) = rerouteMap.copy(
+        floors = rerouteMap.floors.map { it.copy(occupancy = corridor(-corridorHalfWidth, corridorHalfWidth)) },
+    )
+
+    @Test
+    fun `room beside a chair keeps the route and says which side to pass`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 10.0, headingDeg = 0.0)),
+            perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 5.0, bearingDeg = 3.0).copy(widthMeters = 0.5)))),
+            map = rerouteMapWithWalls(1.5),
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+            phrases = TokenPhrases,
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(listOf("A", "B", "C"), states.last().route.map { it.id })
+        assertTrue(feedback.emitted.none { it.id.startsWith("reroute-") })
+        // A little right of centre: more room on the left.
+        assertEquals("PASS LEFT", feedback.emitted.single { it.id.startsWith("pass-") }.message)
+    }
+
+    @Test
+    fun `no room beside it, or no wall map to tell, still means a new route`() = runTest {
+        for (map in listOf(rerouteMapWithWalls(0.6), rerouteMap)) {
+            val feedback = RecordingFeedbackController()
+            val orchestrator = NavigationOrchestrator(
+                positioning = FakePositioningEngine(position(0.0, 10.0, headingDeg = 0.0)),
+                perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 5.0).copy(widthMeters = 0.5)))),
+                map = map,
+                feedback = feedback,
+                startNodeId = "A",
+                destinationNodeId = "C",
+                phrases = TokenPhrases,
+            )
+
+            val states = orchestrator.start().toList()
+
+            assertEquals(listOf("B", "D", "C"), states.last().route.map { it.id })
+        }
     }
 
     @Test

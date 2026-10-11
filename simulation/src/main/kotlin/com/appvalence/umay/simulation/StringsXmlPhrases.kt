@@ -65,6 +65,12 @@ class StringsXmlPhrases(
 
     override fun turnAround(): String = if (clockDirections) string("say_turn_clock_now", 6) else string("say_turn_around")
 
+    override fun passObstacle(side: TurnDirection): String = when {
+        clockDirections -> string("say_pass_clock", if (side == TurnDirection.LEFT) 11 else 1)
+        side == TurnDirection.LEFT -> string("say_pass_left")
+        else -> string("say_pass_right")
+    }
+
     override fun approachDestination(distanceMeters: Double): String = string("say_approach_destination", meters(distanceMeters))
 
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String): String {

@@ -19,4 +19,6 @@ data class DetectedObstacle(
     val detectedAtMs: Long,
     val sensorSource: ObstacleSensorSource,
     val kind: ObstacleKind = if (type == ObstacleType.PERSON) ObstacleKind.PERSON else ObstacleKind.UNKNOWN,
+    /** How wide it looks, side to side; null when not judged. Says whether there's room to pass it. */
+    val widthMeters: Double? = null,
 )

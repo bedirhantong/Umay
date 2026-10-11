@@ -67,8 +67,12 @@ class NavigationOrchestrator(
     // falling back to stairs — said out loud — when the building offers nothing else.
     private val avoidStairs: Boolean = false,
 ) {
-    // Decoded once per floor that has a wall map (see WallSide).
+    // Decoded once per floor that has a wall map (see WallSide, Passage).
     private val wallSides: Map<Int, WallSide> = map.floors.mapNotNull { floor -> floor.occupancy?.let { floor.floorIndex to WallSide(it) } }.toMap()
+    private val passages: Map<Int, Passage> = map.floors.mapNotNull { floor -> floor.occupancy?.let { floor.floorIndex to Passage(it) } }.toMap()
+
+    // Obstacles already said to have room beside them: once is enough.
+    private val passHinted = mutableSetOf<String>()
 
     private val nodeFloor: Map<String, Int> =
         map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap()
@@ -536,12 +540,27 @@ class NavigationOrchestrator(
         floorMap: FloorMap,
         nodesById: Map<String, MapNode>,
     ): NavigationAlert? {
+        val routeEdges = currentRouteEdges(floorMap)
+        val blocked = ObstacleEdgeMapper.blockingEdge(obstacle, position, routeEdges, nodesById) ?: return null
+        if ((blocked.fromId to blocked.toId) in blockedEdges) return null // already accounted for
+
+        // Room beside it: walk round it, the route stays (simulated walks: a chair in a wide
+        // aisle made the walk 55% longer). Said once, which side.
+        val gap = gapBeside(obstacle, position, blocked, nodesById, floorMap.floorIndex)
+        if (gap != null && gap.meters >= Passage.PASSABLE_METERS) {
+            if (!passHinted.add(obstacle.id)) return null
+            return NavigationAlert(
+                id = "pass-${obstacle.id}-${obstacle.detectedAtMs}",
+                priority = AlertPriority.INFO,
+                message = phrases.passObstacle(gap.side),
+                relatedObstacle = obstacle,
+                createdAtMs = obstacle.detectedAtMs,
+            )
+        }
         // People move out of the way: a route around someone standing in the corridor sends
         // the walker the long way for nothing (simulated walks: 84% longer). They're warned.
         if (obstacle.type == ObstacleType.PERSON) return null
-        val routeEdges = currentRouteEdges(floorMap)
-        val blocked = ObstacleEdgeMapper.blockingEdge(obstacle, position, routeEdges, nodesById) ?: return null
-        if (!blockedEdges.add(blocked.fromId to blocked.toId)) return null // already accounted for
+        blockedEdges.add(blocked.fromId to blocked.toId)
 
         val nearestNode = nodesById.values.minByOrNull { hypot(it.x - position.x, it.y - position.y) } ?: return null
         // The destination may be on a different floor than this obstacle, so replanning
@@ -559,6 +578,26 @@ class NavigationOrchestrator(
             createdAtMs = obstacle.detectedAtMs,
             cue = GuidanceCue.REROUTED,
         )
+    }
+
+    /**
+     * Room beside [obstacle] standing on route edge [edge], on the side the walker would
+     * pass it; null when unknown (no wall map, or its width wasn't judged).
+     */
+    private fun gapBeside(obstacle: DetectedObstacle, position: Position, edge: MapEdge, nodesById: Map<String, MapNode>, floorIndex: Int): Passage.Gap? {
+        val width = obstacle.widthMeters ?: return null
+        val passage = passages[floorIndex] ?: return null
+        val from = nodesById[edge.fromId] ?: return null
+        val to = nodesById[edge.toId] ?: return null
+        val (x, y) = ObstacleEdgeMapper.pointOf(obstacle, position)
+        // Along the edge, the way the walker is going (toward the obstacle).
+        var dx = to.x - from.x
+        var dy = to.y - from.y
+        if (dx * (x - position.x) + dy * (y - position.y) < 0) {
+            dx = -dx
+            dy = -dy
+        }
+        return passage.widestGap(x, y, dx, dy, width)
     }
 
     private fun currentRouteEdges(floorMap: FloorMap): List<MapEdge> {

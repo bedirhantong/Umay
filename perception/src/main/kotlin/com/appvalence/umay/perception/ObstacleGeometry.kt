@@ -28,6 +28,34 @@ object ObstacleGeometry {
         return (realHeightMeters * focalLengthPx) / boundingBoxHeightPx
     }
 
+    /**
+     * How wide something [distanceMeters] away looks when its box is [boundingBoxWidthPx]
+     * of a frame [imageWidthPx] wide: the same pinhole model, sideways.
+     */
+    fun estimateWidthMeters(
+        boundingBoxWidthPx: Float,
+        imageWidthPx: Int,
+        distanceMeters: Double,
+        horizontalFovDegrees: Double = ASSUMED_HORIZONTAL_FOV_DEGREES,
+    ): Double {
+        if (imageWidthPx <= 0 || boundingBoxWidthPx <= 0f || !distanceMeters.isFinite()) return 0.0
+        val focalLengthPx = imageWidthPx / (2.0 * tan(Math.toRadians(horizontalFovDegrees / 2.0)))
+        return boundingBoxWidthPx * distanceMeters / focalLengthPx
+    }
+
+    /**
+     * [estimateWidthMeters] for a box from [leftPx] to [rightPx], or null when it runs
+     * off either side of the frame: then it's wider than it looks, by how much nobody
+     * knows, and "there's room beside it" mustn't be concluded from it.
+     */
+    fun widthIfWhollySeen(leftPx: Float, rightPx: Float, imageWidthPx: Int, distanceMeters: Double): Double? {
+        val margin = imageWidthPx * FRAME_EDGE_FRACTION
+        if (leftPx <= margin || rightPx >= imageWidthPx - margin) return null
+        return estimateWidthMeters(rightPx - leftPx, imageWidthPx, distanceMeters)
+    }
+
+    private const val FRAME_EDGE_FRACTION = 0.01
+
     fun estimateBearingDegrees(
         boundingBoxCenterXPx: Float,
         imageWidthPx: Int,

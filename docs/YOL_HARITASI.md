@@ -394,6 +394,12 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   *Bitti:* simülasyonda yanlış koridora sapan yürüyüşte uyarı ve yeni rota
   geliyor; doğru yürüyüşte yanlış alarm yok.
 - [ ] **4.10 Yanından geçilebilecek engel için rota değişmesin** (K).
+  **Kod hazır:** engelin genişliği kameradaki kutudan ölçülüyor (kutu kareden
+  taşıyorsa bilinmiyor sayılıyor), yanındaki boşluk duvar haritasından
+  (`Passage`); en az 80 cm varsa rota kalıyor ve "Engelin solundan
+  geçebilirsin." deniyor. Sanal ofiste sandalyeli yürüyüşte yeni rota 11'den
+  0'a indi. Duvar haritası olmayan katta eskisi gibi yeni rota. Gerçek
+  engellerle telefonda denenecek.
   Rotadaki her durağan engel (geniş bir koridordaki sandalye da) yeni rota
   çizdiriyor; sanal ofiste bu yürüyüşü %55 uzattı. Duvar haritası varsa
   engelin yanındaki boşluk hesaplanıp geçilebiliyorsa yalnızca uyarılmalı.

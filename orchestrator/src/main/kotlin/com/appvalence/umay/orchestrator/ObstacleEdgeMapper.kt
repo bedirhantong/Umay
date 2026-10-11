@@ -23,9 +23,7 @@ object ObstacleEdgeMapper {
         nodesById: Map<String, MapNode>,
         corridorWidthMeters: Double = DEFAULT_CORRIDOR_WIDTH_METERS,
     ): MapEdge? {
-        val absoluteBearingRad = Math.toRadians(userPosition.headingDeg + obstacle.bearingDeg)
-        val obstacleX = userPosition.x + obstacle.distanceMeters * sin(absoluteBearingRad)
-        val obstacleY = userPosition.y + obstacle.distanceMeters * cos(absoluteBearingRad)
+        val (obstacleX, obstacleY) = pointOf(obstacle, userPosition)
 
         return candidateEdges
             .mapNotNull { edge ->
@@ -37,6 +35,12 @@ object ObstacleEdgeMapper {
             .minByOrNull { (_, distance) -> distance }
             ?.takeIf { (_, distance) -> distance <= corridorWidthMeters }
             ?.first
+    }
+
+    /** Where [obstacle] stands on the map, seen from [userPosition]. */
+    fun pointOf(obstacle: DetectedObstacle, userPosition: Position): Pair<Double, Double> {
+        val absoluteBearingRad = Math.toRadians(userPosition.headingDeg + obstacle.bearingDeg)
+        return (userPosition.x + obstacle.distanceMeters * sin(absoluteBearingRad)) to (userPosition.y + obstacle.distanceMeters * cos(absoluteBearingRad))
     }
 
     private fun distanceToSegment(px: Double, py: Double, ax: Double, ay: Double, bx: Double, by: Double): Double {

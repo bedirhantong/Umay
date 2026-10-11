@@ -89,6 +89,9 @@ interface GuidancePhrases {
     /** Heading back the way they came. */
     fun wrongWay(): String
 
+    /** There's room to walk past what's ahead on this [side]. */
+    fun passObstacle(side: TurnDirection): String
+
     /** Something the camera saw ahead, by what it is ([ObstacleKind.UNKNOWN]: just "an obstacle"). */
     fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String
 }

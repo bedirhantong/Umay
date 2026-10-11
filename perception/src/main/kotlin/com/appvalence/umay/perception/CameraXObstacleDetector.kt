@@ -249,7 +249,7 @@ class CameraXObstacleDetector(
                         centerYPx = (detection.top + detection.bottom) / 2,
                         distanceMeters = ObstacleClasses.distanceMeters(obstacleClass, detection.top, detection.bottom, uprightBitmap.height),
                         bearingDeg = ObstacleGeometry.estimateBearingDegrees(centerX, uprightBitmap.width),
-                    ) to (obstacleClass to detection.score)
+                    ) to Triple(obstacleClass, detection.score, detection.left to detection.right)
                 }
                 .sortedByDescending { it.second.second }
                 .take(MAX_RESULTS)
@@ -258,7 +258,7 @@ class CameraXObstacleDetector(
 
             val tracked = tracker.update(rawDetections.map { it.first }, timestampMs = detectionDoneMs)
             val result = tracked.mapIndexed { index, t ->
-                val (obstacleClass, score) = rawDetections[index].second
+                val (obstacleClass, score, box) = rawDetections[index].second
                 DetectedObstacle(
                     id = t.id,
                     type = obstacleClass.type,
@@ -269,6 +269,7 @@ class CameraXObstacleDetector(
                     detectedAtMs = detectionDoneMs,
                     sensorSource = ObstacleSensorSource.CAMERA_ML,
                     kind = obstacleClass.kind,
+                    widthMeters = ObstacleGeometry.widthIfWhollySeen(box.first, box.second, uprightBitmap.width, t.distanceMeters),
                 )
             }
 
