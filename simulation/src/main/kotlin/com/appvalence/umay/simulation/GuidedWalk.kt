@@ -81,7 +81,9 @@ internal data class GuidedWalkResult(
  *
  * [appStartNodeId] is where the walker told the app they are; give a wrong one
  * to see a mistaken start play out. [obstacles] stand in the way, seen by a
- * stand-in for the camera's detector ([VirtualObstacleSensor]).
+ * stand-in for the camera's detector ([VirtualObstacleSensor]). [survey] is
+ * the map the app guides by; by default the building's plan itself, or one
+ * a [VirtualSurveyor] made, drifts and all.
  */
 internal fun simulateGuidedWalk(
     building: VirtualBuilding,
@@ -98,13 +100,18 @@ internal fun simulateGuidedWalk(
     record: Boolean = false,
     title: String = "",
     obstacles: List<VirtualObstacle> = emptyList(),
+    survey: SurveyedMap? = null,
 ): GuidedWalkResult = runBlocking {
     val random = Random(seed)
-    val map = building.surveyedMap(Random(seed + 1_000), withRadio = aids.beacons, phone = phone, placeFingerprints = aids.beacons && aids.placeFingerprints)
-    val device = VirtualPhone(building, map, appStartNodeId, walker, aids, config, random, Random(seed + 2_000), phone)
+    val surveyed = survey ?: SurveyedMap.ideal(
+        building.surveyedMap(Random(seed + 1_000), withRadio = aids.beacons, phone = phone, placeFingerprints = aids.beacons && aids.placeFingerprints),
+    )
+    val map = surveyed.map
+    fun mapIdOf(id: String) = surveyed.mapId(id) ?: error("the map has no place for $id")
+    val device = VirtualPhone(building, surveyed, mapIdOf(appStartNodeId), walker, aids, config, random, Random(seed + 2_000), phone)
     val destination = building.nodesById.getValue(destinationNodeId)
     val follower = InstructionFollower(building, building.nodesById.getValue(startNodeId), random)
-    val shortest = AStarPathfinder.findPathAcrossFloors(map, startNodeId, destinationNodeId)
+    val shortest = AStarPathfinder.findPathAcrossFloors(building.surveyedMap(Random(0), withRadio = false), startNodeId, destinationNodeId)
         ?.zipWithNext { a, b -> hypot(b.x - a.x, b.y - a.y) }?.sum()
         ?: error("no way from $startNodeId to $destinationNodeId in ${building.name}")
     val stepBudget = (shortest / walker.trueStrideMeters * 3).toInt() + 60
@@ -125,8 +132,8 @@ internal fun simulateGuidedWalk(
         feedback = object : FeedbackController {
             override fun emit(alert: NavigationAlert) = Unit
         },
-        startNodeId = appStartNodeId,
-        destinationNodeId = destinationNodeId,
+        startNodeId = mapIdOf(appStartNodeId),
+        destinationNodeId = mapIdOf(destinationNodeId),
         phrases = phrases,
         avoidStairs = avoidStairs,
     )
@@ -197,17 +204,19 @@ internal fun simulateGuidedWalk(
             follower.hear(alert.message)?.let(notes::add)
         }
         if (follower.arrived) arrivalError = hypot(follower.x - destination.x, follower.y - destination.y)
-        route = state.route.map { it.id }
-        errors += hypot(device.estimate.x - follower.x, device.estimate.y - follower.y)
+        val mapRoute = state.route.map { it.id }
+        // The walker knows real places; a map node the survey left unnamed is no place of theirs.
+        route = mapRoute.map { surveyed.buildingId(it) ?: it }
+        errors += device.errorTo(Point(follower.x, follower.y))
         if (record) {
             frames += device.frame(
                 truth = Point(follower.x, follower.y),
                 notes = notes,
                 speech = speech,
-                route = route.takeIf { it != recordedRoute },
+                route = mapRoute.takeIf { it != recordedRoute },
                 targetNodeId = state.route.getOrNull(state.nextRouteIndex)?.id,
             )
-            recordedRoute = route
+            recordedRoute = mapRoute
         }
     }
     collector.cancel()
@@ -238,8 +247,8 @@ internal fun simulateGuidedWalk(
             map = map,
             frames = frames,
             summary = guidedSummary(result),
-            beacons = building.beaconMarks(),
-            markerNodeIds = aids.markerNodeIds,
+            beacons = building.beaconMarks().map { mark -> surveyed.toMap(Point(mark.x, mark.y)).let { mark.copy(x = it.x, y = it.y) } },
+            markerNodeIds = aids.markerNodeIds.mapNotNull(surveyed::mapId).toSet(),
         ),
     )
 }

@@ -83,7 +83,9 @@ internal data class WalkResult(
  */
 internal class VirtualPhone(
     private val building: VirtualBuilding,
-    val map: BuildingMap,
+    /** The map the app has, and how it lies over the building ([SurveyedMap.ideal] for a perfect one). */
+    val surveyed: SurveyedMap,
+    /** Where the app is told the walk starts, as a map node id. */
     startNodeId: String,
     private val walker: WalkerModel,
     private val aids: Aids,
@@ -92,7 +94,8 @@ internal class VirtualPhone(
     filterRandom: Random,
     phone: PhoneRadio,
 ) {
-    val filter = GraphParticleFilter(map, startNodeId, config, filterRandom)
+    val map: BuildingMap get() = surveyed.map
+    val filter = GraphParticleFilter(surveyed.map, startNodeId, config, filterRandom)
     private val scanner = VirtualScanner(building, random, phone)
     private val camera = if (aids.camera) VirtualCamera(building, VirtualCamera.placeMarkers(building), random = Random(random.nextLong())) else null
     private val markerReader = QrMarkerReader()
@@ -111,7 +114,13 @@ internal class VirtualPhone(
     var estimate: Position = filter.estimate(timeMs)
         private set
 
-    /** One footstep that left the walker at ([x], [y]) facing [headingDeg] (map frame); returns what happened. */
+    /** How far the app's estimate is from the walker's true position ([truth], on the building's plan). */
+    fun errorTo(truth: Point): Double {
+        val laid = surveyed.toMap(truth)
+        return hypot(estimate.x - laid.x, estimate.y - laid.y)
+    }
+
+    /** One footstep that left the walker at ([x], [y]) facing [headingDeg] (the building's frame); returns what happened. */
     fun step(x: Double, y: Double, headingDeg: Double): List<String> {
         val notes = mutableListOf<String>()
         // The gyro sees the true heading change, in its own frame, plus noise and drift.
@@ -136,7 +145,9 @@ internal class VirtualPhone(
                 framesRendered++
                 for (sighting in markerReader.read(camera.render(x, y, headingDeg), camera.width, camera.height, timeMs)) {
                     markersRead++
-                    val seen = filter.onMarker(sighting.nodeId, sighting.distanceMeters, sighting.bearingDeg, timeMs) ?: continue
+                    // A printed marker carries the id its map gave the place.
+                    val mapId = surveyed.mapId(sighting.nodeId) ?: continue
+                    val seen = filter.onMarker(mapId, sighting.distanceMeters, sighting.bearingDeg, timeMs) ?: continue
                     estimate = seen
                     notes += "Kamera yer işaretini okudu: ${building.nodesById[sighting.nodeId]?.name}, %.1f m".format(sighting.distanceMeters)
                 }
@@ -151,7 +162,7 @@ internal class VirtualPhone(
             val relative = ((toMarker - headingDeg + 540.0) % 360.0) - 180.0
             if (abs(relative) > CAMERA_HALF_FOV_DEG || !building.lineOfSight(x, y, marker.x, marker.y)) continue
             val seen = filter.onMarker(
-                nodeId = markerId,
+                nodeId = surveyed.mapId(markerId) ?: continue,
                 distanceMeters = distance * (1.0 + random.gaussian() * MARKER_DISTANCE_NOISE_FRACTION),
                 bearingDeg = relative + random.gaussian() * MARKER_BEARING_NOISE_DEG,
                 timestampMs = timeMs,
@@ -174,7 +185,7 @@ internal class VirtualPhone(
     ) = WalkFrame(
         tMs = timeMs,
         floor = estimate.floor,
-        truth = truth,
+        truth = surveyed.toMap(truth),
         estimate = Point(estimate.x, estimate.y),
         accuracyMeters = estimate.accuracyMeters,
         headingDeg = estimate.headingDeg,
@@ -208,7 +219,7 @@ internal fun simulateWalk(
 ): WalkResult {
     val random = Random(seed)
     val map = building.surveyedMap(Random(seed + 1_000), withRadio = aids.beacons, phone = phone, placeFingerprints = aids.beacons && aids.placeFingerprints)
-    val device = VirtualPhone(building, map, filterStartNodeId, walker, aids, config, random, Random(seed + 2_000), phone)
+    val device = VirtualPhone(building, SurveyedMap.ideal(map), filterStartNodeId, walker, aids, config, random, Random(seed + 2_000), phone)
 
     val errors = mutableListOf<Double>()
     val frames = mutableListOf<WalkFrame>()
@@ -225,7 +236,7 @@ internal fun simulateWalk(
             val x = from.x + (to.x - from.x) * along / legLength
             val y = from.y + (to.y - from.y) * along / legLength
             val notes = device.step(x, y, bearing)
-            errors += hypot(device.estimate.x - x, device.estimate.y - y)
+            errors += device.errorTo(Point(x, y))
             if (record) frames += device.frame(Point(x, y), notes)
         }
     }

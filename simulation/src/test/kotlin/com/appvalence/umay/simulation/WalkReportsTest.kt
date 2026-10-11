@@ -31,6 +31,11 @@ class WalkReportsTest {
                 title = "Girişten mutfağa, yalnız adımla"),
             simulateGuidedWalk(office, "giris", "mutfak", seed = 5, phrases = phrases, aids = everything, appStartNodeId = "lobi", record = true,
                 title = "Yanlış başlangıç: lobide sanıyor"),
+            simulateGuidedWalk(
+                office, "yazici", "toplanti1", seed = 6, phrases = phrases, aids = Aids(beacons = true), record = true,
+                survey = VirtualSurveyor.survey(office, "giris", 2, walker = WalkerModel(trueStrideMeters = 0.78, gyroDriftPerStepDeg = 0.15)).surveyed,
+                title = "Adım sayarak, özensizce çıkarılmış haritayla",
+            ),
         ).map { it.recording!! } + listOf(
             institutionWalk(institution, "Kurum katı, beacon'larla", seed = 1, aids = Aids(beacons = true)),
             institutionWalk(institution, "Kurum katı, yanlış başlangıç ve yer işareti", seed = 1, aids = Aids(markerNodeIds = setOf("M10")), filterStart = "M40"),
