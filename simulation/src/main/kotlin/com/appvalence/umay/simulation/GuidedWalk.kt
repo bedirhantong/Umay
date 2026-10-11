@@ -46,6 +46,12 @@ internal data class GuidedWalkResult(
     /** Camera frames rendered and markers read from them, with [Aids.camera]. */
     val framesRendered: Int = 0,
     val markersRead: Int = 0,
+    /** For each obstacle the app warned about: how far the walker really was from it at the first warning. */
+    val firstWarningMeters: Map<String, Double> = emptyMap(),
+    /** Obstacles the walker reached (within [CONTACT_METERS]) without having been warned. */
+    val unwarnedContacts: Int = 0,
+    /** New routes around an obstacle. */
+    val reroutes: Int = 0,
 ) {
     /** The app said "arrived" with the walker really there. */
     val reached: Boolean get() = arrived && (arrivalErrorMeters ?: Double.MAX_VALUE) <= REACHED_METERS
@@ -58,6 +64,9 @@ internal data class GuidedWalkResult(
     companion object {
         /** Close enough to find the door by hand or cane. */
         const val REACHED_METERS = 3.0
+
+        /** Close enough to walk into. */
+        const val CONTACT_METERS = 0.5
     }
 }
 
@@ -71,7 +80,8 @@ internal data class GuidedWalkResult(
  * a blind user would meet it, in a building that exists only here.
  *
  * [appStartNodeId] is where the walker told the app they are; give a wrong one
- * to see a mistaken start play out.
+ * to see a mistaken start play out. [obstacles] stand in the way, seen by a
+ * stand-in for the camera's detector ([VirtualObstacleSensor]).
  */
 internal fun simulateGuidedWalk(
     building: VirtualBuilding,
@@ -87,6 +97,7 @@ internal fun simulateGuidedWalk(
     avoidStairs: Boolean = false,
     record: Boolean = false,
     title: String = "",
+    obstacles: List<VirtualObstacle> = emptyList(),
 ): GuidedWalkResult = runBlocking {
     val random = Random(seed)
     val map = building.surveyedMap(Random(seed + 1_000), withRadio = aids.beacons, phone = phone, placeFingerprints = aids.beacons && aids.placeFingerprints)
@@ -98,14 +109,17 @@ internal fun simulateGuidedWalk(
         ?: error("no way from $startNodeId to $destinationNodeId in ${building.name}")
     val stepBudget = (shortest / walker.trueStrideMeters * 3).toInt() + 60
 
-    // The app's navigation, fed one position per footstep, exactly as NavigationSession feeds it.
+    // The app's navigation, fed one position per footstep, exactly as NavigationSession feeds it,
+    // and the camera's obstacles whenever it sees any (or stops seeing them).
     val positions = Channel<Position>(Channel.UNLIMITED)
+    val detections = Channel<List<DetectedObstacle>>(Channel.UNLIMITED)
+    val sensor = VirtualObstacleSensor(building, obstacles, Random(seed + 3_000))
     val orchestrator = NavigationOrchestrator(
         positioning = object : PositioningEngine {
             override fun positionUpdates(): Flow<Position> = positions.receiveAsFlow()
         },
         perception = object : ObstacleDetector {
-            override fun obstacleUpdates(): Flow<List<DetectedObstacle>> = flowOf(emptyList())
+            override fun obstacleUpdates(): Flow<List<DetectedObstacle>> = if (obstacles.isEmpty()) flowOf(emptyList()) else detections.receiveAsFlow()
         },
         map = map,
         feedback = object : FeedbackController {
@@ -118,6 +132,7 @@ internal fun simulateGuidedWalk(
     )
     val states = Channel<NavigationState>(Channel.UNLIMITED)
     val collector = launch { orchestrator.start().collect { states.send(it) } }
+    if (obstacles.isNotEmpty()) detections.send(emptyList())
 
     val errors = mutableListOf<Double>()
     val frames = mutableListOf<WalkFrame>()
@@ -129,21 +144,51 @@ internal fun simulateGuidedWalk(
     var arrivalError: Double? = null
     var route: List<String>? = null
     var recordedRoute: List<String>? = null
+    val firstWarning = LinkedHashMap<String, Double>()
+    val contacted = HashSet<String>()
+    var unwarnedContacts = 0
+    var reroutes = 0
+    var obstaclesInView = false
     if (record) frames += device.frame(Point(follower.x, follower.y), listOf("Yola çıkıyor: ${follower.startNote}"))
 
     while (!follower.arrived && steps < stepBudget) {
         val stride = walker.trueStrideMeters * (1.0 + random.gaussian() * walker.strideNoiseFraction)
-        val move = follower.step(stride, route)
+        val move = follower.step(stride, route, obstacles.filter { it.blocking })
         if (move.wrongTurn) wrongTurns++
         val notes = move.notes.toMutableList()
         notes += device.step(follower.x, follower.y, follower.headingDeg)
         steps++
 
         positions.send(device.estimate)
-        val state = withTimeoutOrNull(STATE_TIMEOUT_MS) { states.receive() }
+        var state = withTimeoutOrNull(STATE_TIMEOUT_MS) { states.receive() }
             ?: error("the app gave no answer to a footstep (step $steps)")
-        val speech = state.alerts.map { it.message }
-        for (alert in state.alerts) {
+        val alerts = state.alerts.toMutableList()
+        if (obstacles.isNotEmpty()) {
+            val seen = sensor.detect(follower.x, follower.y, follower.headingDeg, device.timeMs)
+            // "Still nothing in view" after nothing is no news to the app (see NavigationOrchestrator.start).
+            if (seen.isNotEmpty() || obstaclesInView) {
+                detections.send(seen)
+                state = withTimeoutOrNull(STATE_TIMEOUT_MS) { states.receive() } ?: error("the app gave no answer to the camera (step $steps)")
+                alerts += state.alerts
+            }
+            obstaclesInView = seen.isNotEmpty()
+            for (alert in alerts) {
+                val obstacle = alert.relatedObstacle ?: continue
+                val real = obstacles.first { it.id == obstacle.id }
+                firstWarning.getOrPut(obstacle.id) { hypot(real.x - follower.x, real.y - follower.y) }
+                if (alert.id.startsWith("reroute-")) reroutes++
+            }
+            for (obstacle in obstacles) {
+                if (obstacle.id in contacted || hypot(obstacle.x - follower.x, obstacle.y - follower.y) > GuidedWalkResult.CONTACT_METERS) continue
+                contacted += obstacle.id
+                if (obstacle.id !in firstWarning) {
+                    unwarnedContacts++
+                    notes += "Uyarı gelmeden ${obstacle.kind.name.lowercase()} engeline çarptı."
+                }
+            }
+        }
+        val speech = alerts.map { it.message }
+        for (alert in alerts) {
             when {
                 alert.id.startsWith("wrong-way-") -> wrongWay++
                 alert.id.startsWith("off-route-") -> offRoute++
@@ -181,6 +226,9 @@ internal fun simulateGuidedWalk(
         recording = null,
         framesRendered = device.framesRendered,
         markersRead = device.markersRead,
+        firstWarningMeters = firstWarning,
+        unwarnedContacts = unwarnedContacts,
+        reroutes = reroutes,
     )
     if (!record) return@runBlocking result
     result.copy(
@@ -265,10 +313,20 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
 
     class Move(val notes: List<String>, val wrongTurn: Boolean)
 
-    /** One stride along the corridors; [route] is the app's current route, to tell a wrong turn. */
-    fun step(stride: Double, route: List<String>?): Move {
+    /**
+     * One stride along the corridors; [route] is the app's current route, to tell a wrong
+     * turn. A [blockers] obstacle filling the corridor just ahead is felt with the cane,
+     * and the walker turns back.
+     */
+    fun step(stride: Double, route: List<String>?, blockers: List<VirtualObstacle> = emptyList()): Move {
         val notes = mutableListOf<String>()
         var wrongTurn = false
+        if (!turnAround && blockers.any { blocksAhead(it, stride) }) {
+            turnAround = true
+            plannedTurnDeg = null
+            turnNowDeg = null
+            notes += "Önü kapalı; bastonla engeli buldu, geri döndü."
+        }
         if (turnAround) {
             val back = from
             from = to
@@ -300,6 +358,14 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
             remaining = leftover
         }
         return Move(notes, wrongTurn)
+    }
+
+    private fun blocksAhead(obstacle: VirtualObstacle, stride: Double): Boolean {
+        val ex = (to.x - from.x) / length
+        val ey = (to.y - from.y) / length
+        val ahead = (obstacle.x - from.x) * ex + (obstacle.y - from.y) * ey - along
+        val aside = abs((obstacle.x - from.x) * -ey + (obstacle.y - from.y) * ex)
+        return aside < BLOCKING_HALF_WIDTH_METERS && ahead > 0 && ahead < stride + CANE_REACH_METERS
     }
 
     private fun chooseAt(node: MapNode, cameFrom: MapNode): Pair<MapNode, String?> {
@@ -336,18 +402,22 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
             arrived = true
             return "Vardığını duydu, durdu."
         }
-        if (GO_BACK in text) {
+        var understood: String? = null
+        if (text.contains(GO_BACK, ignoreCase = true)) {
             turnAround = true
             plannedTurnDeg = null
             turnNowDeg = null
-            return "Geri dönmesi söylendi."
+            // "Ters yöne gidiyorsun..., geri dön." is all there is; "Geri dön. Lobi yönünde
+            // ... ilerle" goes on to the new route's first leg.
+            if (WALK !in text) return "Geri dönmesi söylendi."
+            understood = "Geri dönmesi söylendi."
         }
         if (OFF_ROUTE in text) {
             plannedTurnDeg = null
             turnNowDeg = null
             return null
         }
-        if (WALK !in text && APPROACH !in text) return null
+        if (WALK !in text && APPROACH !in text) return understood
         turnNowDeg = when {
             text.startsWith(TURN_LEFT_NOW) -> -90.0
             text.startsWith(TURN_RIGHT_NOW) -> 90.0
@@ -366,7 +436,7 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
         } else {
             plannedTurnAfterMeters = 0.0
         }
-        return null
+        return understood
     }
 
     private fun side(relativeDeg: Double) = when {
@@ -390,6 +460,8 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
         private const val TURN_RIGHT_NOW = "Sağa dön."
         private val DISTANCE = Regex("""[Yy]aklaşık (\d+) metre""")
         private const val HALF = 0.5
+        private const val BLOCKING_HALF_WIDTH_METERS = 0.6
+        private const val CANE_REACH_METERS = 0.8
         private const val TURN_MATCH_DEG = 50.0
         private const val STRAIGHT_DEG = 35.0
     }
