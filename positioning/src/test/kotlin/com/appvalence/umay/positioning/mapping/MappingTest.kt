@@ -2,6 +2,8 @@ package com.appvalence.umay.positioning.mapping
 
 import com.appvalence.umay.coremodel.OccupancyRaster
 import kotlin.math.hypot
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -215,6 +217,56 @@ class ArPoseAlignerTest {
 
         assertEquals(3.0, resumed.x, 1e-9)
         assertEquals(0.0, resumed.y, 1e-9)
+    }
+
+    @Test
+    fun `tracking that comes back turned is turned back by the gyro's word`() {
+        val aligner = ArPoseAligner()
+        aligner.onTracked(pose(0.0, 0.0, 0), gyroHeadingDeg = 200.0) // facing plan north
+        aligner.onTrackingLost()
+        // Walked 3 m on, turned right, walked 2 m: the gyro saw the turn.
+        repeat(3) { aligner.onStep(1.0, gyroHeadingDeg = 200.0) }
+        repeat(2) { aligner.onStep(1.0, gyroHeadingDeg = 290.0) }
+
+        // ARCore comes back in a frame turned 40°: it says the walker faces 130°, at a point far off.
+        val resumed = aligner.onTracked(pose(20.0, -20.0, 9_000, heading = 130.0), gyroHeadingDeg = 290.0)
+        // Walking on east one metre, in ARCore's turned frame (heading 130° there).
+        val r = Math.toRadians(130.0)
+        val next = aligner.onTracked(pose(20.0 + sin(r), -20.0 - cos(r), 9_500, heading = 130.0), gyroHeadingDeg = 290.0)
+
+        assertEquals(90.0, resumed.headingDeg, 1e-6)
+        assertEquals(2.0, resumed.x, 1e-6)
+        assertEquals(3.0, resumed.y, 1e-6)
+        assertEquals(3.0, next.x, 1e-6)
+        assertEquals(3.0, next.y, 1e-6)
+    }
+
+    @Test
+    fun `small turns while lost are ARCore's to correct, not turned back`() {
+        val aligner = ArPoseAligner()
+        aligner.onTracked(pose(0.0, 0.0, 0), gyroHeadingDeg = 10.0)
+        aligner.onTrackingLost()
+        repeat(2) { aligner.onStep(0.7, gyroHeadingDeg = 12.0) }
+
+        val resumed = aligner.onTracked(pose(0.0, -1.4, 3_000, heading = 5.0), gyroHeadingDeg = 12.0)
+
+        assertEquals(5.0, resumed.headingDeg, 1e-6)
+    }
+
+    @Test
+    fun `a turn just before tracking is lost is no reason to turn the plan`() {
+        val aligner = ArPoseAligner()
+        aligner.onTracked(pose(0.0, 0.0, 0), gyroHeadingDeg = 50.0) // facing plan north, at a dead end
+        // Turned back, and the camera lost track on the very step that turned.
+        aligner.onTrackingLost()
+        repeat(3) { aligner.onStep(1.0, gyroHeadingDeg = 230.0) }
+
+        // ARCore resumes in the same frame, rightly facing south, 3 m back.
+        val resumed = aligner.onTracked(pose(0.0, 3.0, 3_000, heading = 180.0), gyroHeadingDeg = 230.0)
+
+        assertEquals(180.0, resumed.headingDeg, 1e-6)
+        assertEquals(0.0, resumed.x, 1e-6)
+        assertEquals(-3.0, resumed.y, 1e-6)
     }
 }
 

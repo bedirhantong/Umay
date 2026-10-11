@@ -225,7 +225,20 @@ class SurveyRecorder @Inject constructor(
                 SurveyMode.CAMERA -> {
                     launch { recordCamera() }
                     launch { watchCamera() }
-                    launch { motion.steps(stepLength).collect { step -> withContext(mapping) { aligner.onStep(step.stepLengthMeters) } } }
+                    launch {
+                        motion.steps(stepLength).collect { step ->
+                            val gyro = latestHeading?.gameHeadingDeg
+                            val reckoned = withContext(mapping) { aligner.onStep(step.stepLengthMeters, gyro) } ?: return@collect
+                            // Tracking is lost: the footsteps carry the live position, for a place named meanwhile.
+                            val floor = _state.value.currentFloor
+                            val position = Position(reckoned.x, reckoned.y, floor, reckoned.headingDeg, STEP_ACCURACY_METERS, PositionSource.PEDESTRIAN_DEAD_RECKONING, step.timestampMs)
+                            _state.update { current ->
+                                val last = current.trajectory.lastOrNull()
+                                val moved = last == null || last.floor != floor || hypot(last.x - position.x, last.y - position.y) >= TRAJECTORY_SPACING_METERS
+                                current.copy(livePosition = position, trajectory = if (moved) current.trajectory + position else current.trajectory)
+                            }
+                        }
+                    }
                     if (screenVisible) camera.resume()
                 }
             }
@@ -317,7 +330,7 @@ class SurveyRecorder @Inject constructor(
         var lastSnapshotMs = 0L
         camera.frames.collect { sample ->
             val floor = _state.value.currentFloor
-            val pose = aligner.onTracked(sample.pose)
+            val pose = aligner.onTracked(sample.pose, latestHeading?.gameHeadingDeg)
             val position = Position(pose.x, pose.y, floor, pose.headingDeg, CAMERA_ACCURACY_METERS, PositionSource.MAP_MATCHED, pose.timestampMs)
             _state.update { current ->
                 val last = current.trajectory.lastOrNull()
@@ -527,6 +540,9 @@ class SurveyRecorder @Inject constructor(
         // enough that corners survive (see BeaconMapBuilder.CORNER_TOLERANCE_METERS).
         const val TRAJECTORY_SPACING_METERS = 0.25
         const val CAMERA_ACCURACY_METERS = 0.1
+
+        // Footsteps bridging a tracking loss: a few seconds of them, a metre or so out at most.
+        const val STEP_ACCURACY_METERS = 1.0
         const val WALL_MAP_REFRESH_MS = 1_000L
         const val LOSS_ANNOUNCE_DELAY_MS = 2_000L
 

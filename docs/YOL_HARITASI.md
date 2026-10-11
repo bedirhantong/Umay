@@ -212,12 +212,20 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   (eksik yol, yanlış birleşen yer, duvar lekesi) yönlendirmeyi nasıl
   etkilediği telefonla gidip gelmeden görülür.
   *Bitti:* bir gerçek harita dosyası `WalkReportsTest` ile oynatılıyor.
-- [ ] **0.18 Kamerayla haritalamayı simüle etmek** (O). Sanal haritacı
-  (`VirtualSurveyor`) bugün yalnız adım sayıyor. Kameranın yol kayması,
-  izi kaybetmesi ve duvar haritasına giren lekeler de modellenmeli; kamera
-  modunun haritası da uygulamanın kendi koduyla (`OccupancyGrid`,
-  `OpenSpaceLinks`) çıkarılmalı.
-  *Bitti:* sanal ofis kamerayla da haritalanıp onunla yönlendiriliyor.
+- [x] **0.18 Kamerayla haritalamayı simüle etmek** (O). Sanal haritacı
+  kamerayla da haritalıyor (`VirtualCameraSurveyor`). ARCore'un yön ve ölçek
+  kayması, izi kaybetmesi ve izi yanlış yerde geri bulması modellendi.
+  Derinlik görüntüleri binanın duvarlarından ve eşyalarından ışın atılarak
+  üretiliyor. Harita uygulamanın kendi koduyla çıkarılıyor
+  (`ArPoseAligner`, `DepthProjector`, `OccupancyGrid`, `WallMapBudget`,
+  `MapDoors`, `OpenSpaceLinks`). `CameraSurveyTest`: iz yerinde geri
+  geliyorsa yerler ortalama 0,1–0,15 m, duvar hücrelerinin %80–100'ü
+  gerçek; rehberli yürüyüşlerin 11–12/12'si varıyor. Zayıf izlemede (sık
+  kayıp, yarısı yanlış yerde geri gelen) yerler ortalama 0,3–0,7 m,
+  varış 33/36.
+  *Bilinen sınır:* iz yanlış yerde geri gelince sonrası birkaç desimetre
+  kayık çiziliyor; yerler doğru kalsa da duvar haritasının isabeti %35–75'e
+  düşüyor.
 
 ### Faz 1: Gizlilik ve kurum içi çalışma
 
@@ -514,6 +522,18 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Kamerayla haritalama simüle edildi (0.18), iki gerçek
+  hata buldu, düzeltildi:
+  - ARCore izi kaybedip başka bir yönle geri bulursa (yanlış yeniden
+    konumlanma) sonraki her şey o açıyla çiziliyordu; tek bir 9°'lik dönüş
+    yerleri 5 m'ye kadar kaydırıyordu. Artık
+    jiroskop iz kaybındaki dönüşü izliyor. Geri gelen yön ondan 5°'den fazla
+    sapıyorsa harita geri döndürülüyor ve konum, adımların jiroskop
+    yönünde vardığı yere bağlanıyor.
+  - İz kayıpken adı verilen yer, izin kaybolduğu noktaya kaydediliyordu
+    (sanal ofiste 3 m'yi aşan hata). Kayıp sürdükçe canlı konumu artık adımlar
+    taşıyor.
 
 - **11 Ekim 2026:** Çok katlı sanal bina (0.16) kat değişiminde dört gerçek
   hata buldu, düzeltildi; kat değiştiren 54 sanal yürüyüşün 53'ü varıyor:

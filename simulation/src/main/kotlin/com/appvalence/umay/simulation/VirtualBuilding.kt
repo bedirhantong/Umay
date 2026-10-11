@@ -47,7 +47,7 @@ internal data class Wall(val x1: Double, val y1: Double, val x2: Double, val y2:
 }
 
 /** Furniture that stands in the way (desks, a counter): the survey camera maps it as occupied. */
-internal data class Block(val minX: Double, val minY: Double, val maxX: Double, val maxY: Double, val floor: Int = 0) {
+internal data class Block(val minX: Double, val minY: Double, val maxX: Double, val maxY: Double, val floor: Int = 0, val heightMeters: Double = 0.75) {
     fun contains(x: Double, y: Double) = x in minX..maxX && y in minY..maxY
 }
 

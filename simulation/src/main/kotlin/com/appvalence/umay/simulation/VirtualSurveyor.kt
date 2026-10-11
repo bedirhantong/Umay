@@ -36,6 +36,13 @@ internal class SurveyedMap(
 
     fun buildingId(mapNodeId: String): String? = buildingIds[mapNodeId]
 
+    /** The map's frame back onto the real plan: the inverse of [toMap]. */
+    fun toPlan(): (Double, Double) -> Pair<Double, Double> = { x, y ->
+        val dx = x - toCenter.x
+        val dy = y - toCenter.y
+        (fromCenter.x + dx * cos(rotationRad) + dy * sin(rotationRad)) to (fromCenter.y - dx * sin(rotationRad) + dy * cos(rotationRad))
+    }
+
     /** A point of the real plan in the map's frame. */
     fun toMap(point: Point): Point {
         val dx = point.x - fromCenter.x
