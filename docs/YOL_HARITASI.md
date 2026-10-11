@@ -139,7 +139,9 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   uzun yürüyüş ve jiroskop kayması, kısa adım, beacon, kötü ve seyrek sinyal,
   yanlış başlangıç) 10'ar farklı rastgelelikle çalıştırıyor.
   `UMAY_SIM_REPORT=1` ile sayıları yazdırıyor.
-- [ ] **0.9 Telefonda saha kaydı özeti** (K). Dosyalar'da her kaydın
+- [ ] **0.9 Telefonda saha kaydı özeti** (K). **Kod hazır:** Dosyalar →
+  Saha kayıtları, her kaydın altında (`FieldLogSummary`); telefonda
+  denenecek. Dosyalar'da her kaydın
   "Buradayım" işaretlerinden ortalama ve en kötü hatası, en kötü yerin adıyla.
   *Bitti:* sahada kaydı göndermeden doğruluk görülebiliyor.
 - [x] **0.10 Gerçek açık veriyle tekrar** (O). Microsoft'un Indoor Location

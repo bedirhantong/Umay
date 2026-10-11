@@ -53,6 +53,7 @@ import com.appvalence.umay.common.StoredFile
 import com.appvalence.umay.common.buildingSummary
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.diagnostics.CrashLog
+import com.appvalence.umay.coremodel.FieldLogSummary
 import com.appvalence.umay.fieldlog.FieldLogStore
 import java.text.DateFormat
 import java.util.Date
@@ -203,6 +204,7 @@ fun FilesScreen(
             FileRow(
                 title = log.name,
                 subtitle = "${dateTimeFormat.format(Date(log.modifiedAtMs))} · ${Formatter.formatShortFileSize(context, log.sizeBytes)}",
+                detail = state.logSummaries[log.file.path]?.let { logSummaryText(it) },
                 shareDescription = stringResource(R.string.files_log_share_description),
                 deleteDescription = stringResource(R.string.files_log_delete_description),
                 onShare = {
@@ -329,6 +331,8 @@ private fun FileRow(
     onDelete: () -> Unit,
     editDescription: String? = null,
     onEdit: (() -> Unit)? = null,
+    /** A line under the subtitle, e.g. a field log's accuracy. */
+    detail: String? = null,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Row(
@@ -338,12 +342,27 @@ private fun FileRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = title, style = MaterialTheme.typography.titleSmall)
                 Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (detail != null) Text(text = detail, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
             }
             if (onEdit != null) IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = editDescription) }
             IconButton(onClick = onShare) { Icon(Icons.Filled.Share, contentDescription = shareDescription) }
             IconButton(onClick = onDelete) { Icon(Icons.Filled.DeleteOutline, contentDescription = deleteDescription) }
         }
     }
+}
+
+/** "4 işaret · ortalama 1,8 m · en kötü 4,2 m (Kantin)", or why there's nothing to say. */
+@Composable
+private fun logSummaryText(summary: FieldLogSummary): String {
+    val mean = summary.meanErrorMeters
+    val worst = summary.worstErrorMeters
+    val accuracy = when {
+        summary.marks == 0 -> stringResource(R.string.files_log_no_marks)
+        mean == null || worst == null -> pluralStringResource(R.plurals.files_log_marks_wrong_floor_only, summary.marks, summary.marks)
+        else -> pluralStringResource(R.plurals.files_log_accuracy, summary.marks, summary.marks, mean, worst, summary.worstPlaceName.orEmpty())
+    }
+    if (summary.wrongFloor == 0 || mean == null) return accuracy
+    return accuracy + " " + pluralStringResource(R.plurals.files_log_wrong_floor, summary.wrongFloor, summary.wrongFloor)
 }
 
 @Composable

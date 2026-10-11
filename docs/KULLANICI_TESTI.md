@@ -109,6 +109,9 @@ Testin sonunda:
 - Kayıtlarda ad, yüz ya da ses yoktur; yalnızca bina içi konum, adımlar, sinyal
   güçleri, basınç ve yönergeler vardır.
 - Notlar ve kayıtlar onamda yazan süre sonunda silinir.
+- Her kaydın ortalama ve en kötü konum hatası, hangi yerde olduğuyla
+  **Dosyalar → Saha kayıtları**'nda kaydın altında görünür: göndermeden
+  sahada bakılabilir.
 - Kayıtlar geliştiriciye verilir; konum ayarları bu kayıtlarla yapılır
   (`FieldLogReplayTest`, README "Saha testi").
 

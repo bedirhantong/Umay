@@ -1,6 +1,8 @@
 package com.appvalence.umay.files
 
 import com.appvalence.umay.common.Distribution
+import com.appvalence.umay.coremodel.FieldLogJson
+import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.storage.BuildingRepository
 import com.appvalence.umay.testing.FakeBuildingMapStore
 import com.appvalence.umay.testing.FakeCrashReports
@@ -51,6 +53,27 @@ class FilesViewModelTest {
         assertEquals(listOf("umay_a", "umay_b"), state.logs.map { it.name })
         assertEquals(listOf("crash_1"), state.crashReports.map { it.name })
         assertEquals(listOf("Ofis"), state.buildings.map { it.id })
+    }
+
+    @Test
+    fun `each log shows how accurate its walk was`() = runTest(main.dispatcher) {
+        val viewModel = viewModel()
+        logs.files.first().writeText(
+            listOf(
+                GroundTruthEvent(1, "a", "Giriş", 0, 0.0, 0.0, 1.0, 0.0, 0, 1.0),
+                GroundTruthEvent(2, "b", "Kantin", 0, 0.0, 0.0, 3.0, 0.0, 0, 3.0),
+            ).joinToString("\n") { FieldLogJson.encode(it) },
+        )
+
+        viewModel.refreshFiles()
+        advanceUntilIdle()
+
+        val summaries = viewModel.state.value.logSummaries
+        val walked = summaries.getValue(logs.files.first().path)
+        assertEquals(2, walked.marks)
+        assertEquals(2.0, walked.meanErrorMeters!!, 1e-9)
+        assertEquals("Kantin", walked.worstPlaceName)
+        assertEquals(0, summaries.getValue(logs.files.last().path).marks)
     }
 
     @Test

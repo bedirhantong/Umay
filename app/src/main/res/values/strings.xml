@@ -477,6 +477,19 @@
     <string name="files_log_chooser">Saha kaydını paylaş</string>
     <string name="files_logs_share_failed">Kayıtlar paylaşılamadı.</string>
     <string name="files_log_share_failed">Kayıt paylaşılamadı.</string>
+    <string name="files_log_no_marks">“Buradayım” işareti yok; doğruluk ölçülmedi.</string>
+    <plurals name="files_log_accuracy">
+        <item quantity="one">%1$d işaret · hata %2$.1f m (%4$s)</item>
+        <item quantity="other">%1$d işaret · ortalama %2$.1f m · en kötü %3$.1f m (%4$s)</item>
+    </plurals>
+    <plurals name="files_log_marks_wrong_floor_only">
+        <item quantity="one">%1$d işaret; uygulama başka katta sanıyordu.</item>
+        <item quantity="other">%1$d işaret; hepsinde uygulama başka katta sanıyordu.</item>
+    </plurals>
+    <plurals name="files_log_wrong_floor">
+        <item quantity="one">%1$d işarette kat yanlıştı.</item>
+        <item quantity="other">%1$d işarette kat yanlıştı.</item>
+    </plurals>
     <string name="files_log_share_description">Bu kaydı paylaş</string>
     <string name="files_log_delete_description">Bu kaydı sil</string>
     <string name="files_log_delete_title">Kayıt silinsin mi?</string>
