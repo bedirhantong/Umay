@@ -117,7 +117,10 @@ class SurveyViewModel @Inject constructor(
                 built.copy(
                     // Doors cut into the walls after fitting, so a coarser map still gets them.
                     // Then shortcuts across open space the camera saw (see OpenSpaceLinks).
-                    floors = built.floors.map { OpenSpaceLinks.add(MapDoors.apply(it.copy(occupancy = wallMaps[it.floorIndex]))) },
+                    // And how the compass lines up with each floor, for navigation's starting direction.
+                    floors = built.floors.map {
+                        OpenSpaceLinks.add(MapDoors.apply(it.copy(occupancy = wallMaps[it.floorIndex], compass = survey.compass[it.floorIndex]?.calibration())))
+                    },
                     // A camera-measured map isn't steps × stride, so there's no stride to rescale by.
                     surveyStepLengthMeters = if (cameraSurvey) null else survey.stepLengthMeters ?: settings.stepLengthMeters,
                 )

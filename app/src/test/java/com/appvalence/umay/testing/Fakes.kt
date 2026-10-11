@@ -25,6 +25,7 @@ import com.appvalence.umay.fieldlog.FieldLogFiles
 import com.appvalence.umay.navigation.NavigationSession
 import com.appvalence.umay.navigation.NavigationSessions
 import com.appvalence.umay.positioning.baro.PressureReading
+import com.appvalence.umay.positioning.compass.HeadingReading
 import com.appvalence.umay.positioning.ble.BeaconScanner
 import com.appvalence.umay.positioning.ble.BleScanState
 import com.appvalence.umay.positioning.ble.ScanTarget
@@ -153,8 +154,10 @@ class FakeCapabilities(override val hasStepSensors: Boolean = true, override val
 class FakeMotionSensors : MotionSensors {
     val steps = MutableSharedFlow<StepEvent>(extraBufferCapacity = 64)
     val pressure = MutableSharedFlow<PressureReading>(extraBufferCapacity = 64)
+    val headings = MutableSharedFlow<HeadingReading>(replay = 1, extraBufferCapacity = 64)
     override fun steps(stepLengthMeters: Double): Flow<StepEvent> = steps
     override fun pressure(): Flow<PressureReading> = pressure
+    override fun headings(): Flow<HeadingReading> = headings
 }
 
 class FakeBeaconScanner : BeaconScanner {

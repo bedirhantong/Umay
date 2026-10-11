@@ -4,12 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.CreationExtras
+import com.appvalence.umay.coremodel.CompassSums
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.positioning.mapping.ArPose
 import com.appvalence.umay.positioning.mapping.DepthFrame
 import com.appvalence.umay.survey.ar.ArCameraStatus
 import com.appvalence.umay.survey.ar.ArFrameSample
 import com.appvalence.umay.coremodel.StepEvent
+import com.appvalence.umay.positioning.compass.HeadingReading
 import com.appvalence.umay.storage.BuildingRepository
 import com.appvalence.umay.testing.FakeArSurveyCamera
 import com.appvalence.umay.testing.FakeBeaconScanner
@@ -84,6 +86,27 @@ class SurveyViewModelTest {
         assertEquals(2, result.points)
         assertEquals(1, result.floors)
         assertFalse(viewModel.save.value.saving)
+    }
+
+    @Test
+    fun `the saved map knows how its floor lines up with the compass`() = runTest(main.dispatcher) {
+        val viewModel = viewModel()
+        viewModel.startRecording(SurveyMode.FOOTSTEPS)
+        motion.steps.emit(StepEvent(0.68, 0.0, System.currentTimeMillis()))
+        advanceTimeBy(1)
+        viewModel.tag("Giriş", NodeType.WAYPOINT)
+        motion.headings.emit(HeadingReading(System.currentTimeMillis(), 0.0, magneticHeadingDeg = 350.0, magneticReliable = true))
+        advanceTimeBy(1)
+        repeat(CompassSums.MIN_SAMPLES) { motion.steps.emit(StepEvent(0.68, 0.0, System.currentTimeMillis())) }
+        advanceTimeBy(1)
+        viewModel.tag("Salon", NodeType.WAYPOINT)
+        viewModel.stopRecording()
+        advanceTimeBy(1)
+
+        viewModel.saveMap("Ofis") { _, _ -> "" }
+        advanceUntilIdle()
+
+        assertEquals(10.0, store.files.getValue("Ofis").floors.single().compass!!.offsetDeg, 1e-6)
     }
 
     @Test

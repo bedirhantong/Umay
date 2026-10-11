@@ -54,6 +54,8 @@ import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.baro.BarometricFloorChangeDetector
 import com.appvalence.umay.positioning.ble.BeaconScanTargets
 import com.appvalence.umay.positioning.ble.BleBeaconScanner
+import com.appvalence.umay.positioning.compass.CompassHint
+import com.appvalence.umay.positioning.compass.HeadingSensors
 import com.appvalence.umay.positioning.engine.ParticleFilterPositioningEngine
 import com.appvalence.umay.positioning.engine.PositioningEngine
 import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
@@ -77,10 +79,12 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Everything the navigation screen (and the notification) shows about a running session. */
 data class NavigationSessionUi(
@@ -272,9 +276,30 @@ class NavigationSession internal constructor(
         )
 
         scope.launch { runGuidance() }
+        scope.launch { hintHeadingFromCompass() }
         if (recorder != null) scope.launch { logRssi(recorder) }
         if (hasBarometer) scope.launch { watchBarometer() }
         scope.launch { conditions.power().collect { applyCameraPower(CameraPowerPolicy.decide(it.thermalStatus, it.batteryPercent, it.charging)) } }
+    }
+
+    /**
+     * Which way the walker faces, from the compass, if the map knows how its floor lines
+     * up with it (see CompassHint): positioning would otherwise learn it from the first
+     * steps, slowly at a junction or in an open space. Read for a moment while the walk
+     * starts; without a compass, or one unsure of itself, it goes without.
+     */
+    private suspend fun hintHeadingFromCompass() {
+        val calibration = buildingMap.floors.firstOrNull { it.floorIndex == startFloorIndex }?.compass ?: return
+        val hint = CompassHint(calibration)
+        withTimeoutOrNull(CompassHint.WAIT_MS) {
+            HeadingSensors(appContext).readings().first { reading ->
+                hint.add(reading)
+                hint.isReady
+            }
+        }
+        val (offset, sigma) = hint.offset() ?: return
+        positioningEngine.observeHeadingOffset(offset, sigma)
+        recorder?.record(StatusEvent(System.currentTimeMillis(), CompassHint.logStatus(offset, sigma)))
     }
 
     private suspend fun runGuidance() {

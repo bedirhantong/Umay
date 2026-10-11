@@ -23,6 +23,8 @@ data class SurveyDraft(
     val taggedWaypoints: List<TaggedWaypoint> = emptyList(),
     val wallMaps: Map<Int, OccupancyRaster> = emptyMap(),
     val radioSamples: Map<Int, List<RadioSample>> = emptyMap(),
+    /** Per floor, see [CompassSums]. */
+    val compass: Map<Int, CompassSums> = emptyMap(),
     val savedAtMs: Long,
 )
 

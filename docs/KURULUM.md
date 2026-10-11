@@ -77,6 +77,11 @@ Haritayı gören bir kişi, binada bir kez yürüyerek çıkarır. Haritayı ç�
   bileşeni istemiyorsa "Adım sayarak" modunu kullanın.
 - Adım sayarak çıkaracaksanız önce **Ayarlar → Adım uzunluğu** ile adımınızı
   ölçün; haritanın bütün mesafeleri buna dayanır.
+- Telefonun pusulası kalibre olsun: haritaya başlamadan telefonu havada
+  birkaç kez 8 çizerek çevirin. Umay haritalarken pusulanın binaya göre
+  farkını da kaydeder; kör kullanıcı yola çıkarken telefonunun hangi yöne
+  baktığını buradan bilir. Pusula binada çok sapıyorsa bu kendiliğinden
+  kullanılmaz.
 - Bina olabildiğince boş olsun (sabah erken ya da mesai sonrası). Kapıları
   açık bırakmak duvar haritasını iyileştirir; kapalıysa kapıyı "Kapı" olarak
   işaretlemek yeterlidir, Umay duvarda açıklığı kendisi açar.

@@ -56,6 +56,9 @@ data class FloorMap(
     val radioMap: List<RadioSample> = emptyList(),
     // Doorways cut into [occupancy] (see MapDoors): one per DOOR node walked through.
     val doors: List<DoorOpening> = emptyList(),
+    // How the compass lines up with this floor's map, measured during the survey; null
+    // for maps surveyed before this, or where the compass was too inconsistent.
+    val compass: CompassCalibration? = null,
 )
 
 /** The beacons heard at one spot of a floor during the survey (see [FloorMap.radioMap]). */

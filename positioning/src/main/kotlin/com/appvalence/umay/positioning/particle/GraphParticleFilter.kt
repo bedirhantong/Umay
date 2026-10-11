@@ -52,11 +52,7 @@ class GraphParticleFilter(
     startNodeId: String,
     private val config: Config = Config(),
     private val random: Random = Random.Default,
-    /**
-     * A rough idea of how the gyro's heading turns into the map's (map heading minus
-     * gyro heading), when something other than the walk can tell — a compass, say.
-     * Null: no idea, every direction equally likely at the start.
-     */
+    /** Known at construction, the same as [observeHeadingOffset] before the first step. Null: no idea. */
     startHeadingOffsetDeg: Double? = null,
     startHeadingSigmaDeg: Double = 30.0,
 ) {
@@ -204,7 +200,25 @@ class GraphParticleFilter(
         }
     }
 
+    private var stepsTaken = 0
+
+    /**
+     * Something other than the walk says how the gyro's heading turns into the map's
+     * (map heading minus gyro heading, give or take [sigmaDeg]) — a compass, say. Before
+     * the first step every particle takes it on; after, it's weighed against what the
+     * steps have taught the cloud so far.
+     */
+    fun observeHeadingOffset(offsetDeg: Double, sigmaDeg: Double) {
+        if (stepsTaken == 0) {
+            particles.forEach { it.headingOffsetDeg = offsetDeg + gaussian() * sigmaDeg }
+            return
+        }
+        for (p in particles) p.logWeight += -0.5 * square(angleBetween(p.headingOffsetDeg, offsetDeg) / sigmaDeg)
+        normalizeAndMaybeResample()
+    }
+
     fun onStep(step: StepEvent): Position {
+        stepsTaken++
         gyroHeadingDeg += step.headingDeltaDeg
         lastTimestampMs = step.timestampMs
         for (particle in particles) {

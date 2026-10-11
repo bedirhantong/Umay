@@ -2,6 +2,8 @@ package com.appvalence.umay.simulation
 
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.coremodel.CompassCalibration
+import com.appvalence.umay.coremodel.CompassSums
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
@@ -9,6 +11,8 @@ import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.coremodel.RadioSample
 import com.appvalence.umay.coremodel.StepEvent
+import com.appvalence.umay.positioning.compass.CompassHint
+import com.appvalence.umay.positioning.compass.HeadingReading
 import com.appvalence.umay.positioning.particle.GraphParticleFilter
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import com.appvalence.umay.positioning.pdr.RotationVectors
@@ -70,7 +74,7 @@ internal class IlcPath(
         if (gyroscope.isEmpty() || rotation.isEmpty()) return emptyList()
         val out = ArrayList<Pair<Long, Double>>(gyroscope.size)
         var r = 0
-        var azimuth = RotationVectors.azimuthDeg(floatArrayOf(rotation[0].x, rotation[0].y, rotation[0].z))
+        var azimuth = RotationVectors.headingDeg(floatArrayOf(rotation[0].x, rotation[0].y, rotation[0].z))
         var previousT = gyroscope.first().t
         for (sample in gyroscope) {
             while (r + 1 < rotation.size && rotation[r + 1].t <= sample.t) r++
@@ -85,13 +89,9 @@ internal class IlcPath(
         return out
     }
 
-    /** The compass (rotation vector, magnetometer included) averaged from [from] to [to]; null without samples. */
-    fun magneticAzimuthDeg(from: Long, to: Long): Double? {
-        val window = rotation.filter { it.t in from..to }.ifEmpty { return null }
-        val sinSum = window.sumOf { sin(Math.toRadians(RotationVectors.azimuthDeg(floatArrayOf(it.x, it.y, it.z)))) }
-        val cosSum = window.sumOf { cos(Math.toRadians(RotationVectors.azimuthDeg(floatArrayOf(it.x, it.y, it.z)))) }
-        return Math.toDegrees(atan2(sinSum, cosSum))
-    }
+    /** The compass's heading (rotation vector, magnetometer included) at each sample from [from] to [to], as the app reads it. */
+    fun magneticHeadings(from: Long, to: Long): List<Pair<Long, Double>> =
+        rotation.filter { it.t in from..to }.map { it.t to RotationVectors.headingDeg(floatArrayOf(it.x, it.y, it.z)) }
 
     /** Footsteps as the app's own step detection ([StepDetection]) finds them in this walk's accelerometer. */
     fun steps(strideMeters: Double): List<StepEvent> {
@@ -191,25 +191,22 @@ internal class IlcFloor(val name: String, val paths: List<IlcPath>) {
     }
 
     /**
-     * How much to add to the phone's magnetic azimuth to get a map heading on this floor,
-     * learned from every walk but [excluded] the way a survey could learn it: along each
-     * straight stretch, the compass against the direction actually walked, averaged over
-     * the whole floor so no one distorted spot decides it.
+     * How the compass lines up with this floor's map, made from every walk but [excluded]
+     * the way the app's survey makes it ([CompassSums]): the map heading against the
+     * compass all along the walk — here, the direction walked along each straight stretch
+     * (the phone held facing ahead), against the compass over its middle.
      */
-    fun magneticToMapDeg(excluded: IlcPath?): Double? {
-        var sinSum = 0.0
-        var cosSum = 0.0
+    fun compassCalibration(excluded: IlcPath?): CompassCalibration? {
+        var sums = CompassSums()
         for (path in paths) {
             if (path === excluded) continue
             for ((a, b) in path.waypoints.zipWithNext()) {
-                if (hypot(b.x - a.x, b.y - a.y) < 4.0) continue
-                val compass = path.magneticAzimuthDeg(a.t + (b.t - a.t) / 5, b.t - (b.t - a.t) / 5) ?: continue
+                if (hypot(b.x - a.x, b.y - a.y) < STRAIGHT_STRETCH_METERS) continue
                 val walked = Math.toDegrees(atan2(b.x - a.x, b.y - a.y))
-                sinSum += sin(Math.toRadians(walked - compass))
-                cosSum += cos(Math.toRadians(walked - compass))
+                for ((_, magnetic) in path.magneticHeadings(a.t + (b.t - a.t) / 5, b.t - (b.t - a.t) / 5)) sums = sums.plus(walked, magnetic)
             }
         }
-        return if (sinSum == 0.0 && cosSum == 0.0) null else Math.toDegrees(atan2(sinSum, cosSum))
+        return sums.calibration()
     }
 
     /** The access points heard most often on this floor, as many as a building would have beacons. */
@@ -355,6 +352,8 @@ internal data class IlcResult(
     val recording: WalkRecording?,
     /** How far the true position was from the nearest surveyed corridor, at every step. */
     val offMapMeters: List<Double> = emptyList(),
+    /** How far the compass's starting direction was from the true one, when it gave one. */
+    val compassMissDeg: Double? = null,
 ) {
     /** Share of the walk within [ON_MAP_METERS] of a surveyed corridor. */
     val coverage: Double get() = offMapMeters.count { it <= ON_MAP_METERS }.toDouble() / offMapMeters.size.coerceAtLeast(1)
@@ -381,7 +380,7 @@ internal fun replayIlcWalk(
     surveyIncludesWalk: Boolean = false,
     /** Tell the filter the walk's true starting direction, give or take this many degrees (an experiment: the app has no such hint). */
     startHeadingHintSigmaDeg: Double? = null,
-    /** Tell the filter the compass's starting direction (see [IlcFloor.magneticToMapDeg]), trusted to this many degrees. */
+    /** Non-null: give the filter the compass's starting direction, as the app does (CompassHint, which sets its own trust). */
     compassHintSigmaDeg: Double? = null,
 ): IlcResult? {
     val map = floor.surveyMap(excluded = if (surveyIncludesWalk) null else path, radio = radio)
@@ -399,12 +398,14 @@ internal fun replayIlcWalk(
     val pdr = oraclePdr(path, steps, inSpan)
     // The filter's gyro frame starts at zero before the first step it sees; the dead
     // reckoner's starting heading is already in that frame's terms.
-    val compassHint = compassHintSigmaDeg?.let { compassStartHeading(floor, path, steps, inSpan) }
     val filter = GraphParticleFilter(
         map, start.id, config, Random(seed),
-        startHeadingOffsetDeg = startHeadingHintSigmaDeg?.let { pdr.startHeadingDeg() } ?: compassHint,
-        startHeadingSigmaDeg = startHeadingHintSigmaDeg ?: compassHintSigmaDeg ?: 30.0,
+        startHeadingOffsetDeg = startHeadingHintSigmaDeg?.let { pdr.startHeadingDeg() },
+        startHeadingSigmaDeg = startHeadingHintSigmaDeg ?: 30.0,
     )
+    val compass = if (compassHintSigmaDeg != null) compassStartHeading(floor, path, steps, inSpan) else null
+    compass?.let { (offset, sigma) -> filter.observeHeadingOffset(offset, sigma) }
+    val compassMissDeg = compass?.let { (offset, _) -> kotlin.math.abs(((offset - pdr.startHeadingDeg()) % 360.0 + 540.0) % 360.0 - 180.0) }
 
     val scans: List<Pair<Long, List<BleBeaconReading>>> = when (radio) {
         IlcRadio.NONE -> emptyList()
@@ -468,7 +469,7 @@ internal fun replayIlcWalk(
             secondEstimateLabel = "Yalnız adım sayma (başlangıç yönü bilinerek)",
         )
     }
-    return IlcResult(path.name, inSpan.size, path.truthLengthMeters, stride, particleErrors, pdrErrors, recording, offMap)
+    return IlcResult(path.name, inSpan.size, path.truthLengthMeters, stride, particleErrors, pdrErrors, recording, offMap, compassMissDeg)
 }
 
 private const val MAX_START_OFFSET_METERS = 3.0
@@ -520,28 +521,33 @@ private fun oraclePdr(path: IlcPath, allSteps: List<StepEvent>, inSpan: List<Ste
 private const val ORACLE_METERS = 4.0
 
 /**
- * The filter's starting heading offset as a compass could give it: the compass over the
- * first few seconds, turned into map terms with the floor's learned difference, against
- * the gyro's heading over the same seconds. Null when the compass or the floor can't say.
+ * The filter's starting heading offset as the app gets it (CompassHint): the compass and
+ * the gyro read together for the first moments of the walk, turned onto the map with the
+ * floor's calibration. The gyro reading is in the filter's own frame: the turns of the
+ * steps it was given, from zero. Null when the compass or the floor can't say.
  */
-private fun compassStartHeading(floor: IlcFloor, path: IlcPath, allSteps: List<StepEvent>, inSpan: List<StepEvent>): Double? {
-    val toMap = floor.magneticToMapDeg(excluded = path) ?: return null
-    val early = inSpan.take(COMPASS_STEPS).ifEmpty { return null }
-    val compass = path.magneticAzimuthDeg(early.first().timestampMs - 500, early.last().timestampMs) ?: return null
-    var heading = 0.0
-    val headingAt = HashMap<Long, Double>()
-    for (step in allSteps) {
-        heading += step.headingDeltaDeg
-        headingAt[step.timestampMs] = heading
+private fun compassStartHeading(floor: IlcFloor, path: IlcPath, allSteps: List<StepEvent>, inSpan: List<StepEvent>): Pair<Double, Double>? {
+    val calibration = floor.compassCalibration(excluded = path) ?: return null
+    val first = inSpan.firstOrNull() ?: return null
+    // Each step carries the turn since the one before; the very first, the gyro's whole heading.
+    val beforeFirst = allSteps.takeWhile { it.timestampMs < first.timestampMs }.sumOf { it.headingDeltaDeg }
+    val gyro = path.gyroHeadings()
+    val hint = CompassHint(calibration)
+    var g = 0
+    // As the app does: about 5 readings a second, from when the walk starts, until enough
+    // or CompassHint.WAIT_MS has gone by.
+    val from = first.timestampMs - COMPASS_LOOK_BACK_MS
+    for ((t, magnetic) in path.magneticHeadings(from, from + CompassHint.WAIT_MS).filterIndexed { i, _ -> i % 10 == 0 }) {
+        while (g + 1 < gyro.size && gyro[g + 1].first <= t) g++
+        val gyroHeading = gyro.getOrNull(g)?.second ?: continue
+        hint.add(HeadingReading(t, gyroHeading - beforeFirst, magnetic, magneticReliable = true))
+        if (hint.isReady) break
     }
-    val sinSum = early.sumOf { sin(Math.toRadians(headingAt.getValue(it.timestampMs))) }
-    val cosSum = early.sumOf { cos(Math.toRadians(headingAt.getValue(it.timestampMs))) }
-    val gyro = Math.toDegrees(atan2(sinSum, cosSum))
-    val beforeFirst = headingAt.getValue(early.first().timestampMs) - early.first().headingDeltaDeg
-    return beforeFirst + (compass + toMap - gyro)
+    return hint.offset()
 }
 
-private const val COMPASS_STEPS = 4
+private const val COMPASS_LOOK_BACK_MS = 1_000L
+private const val STRAIGHT_STRETCH_METERS = 4.0
 
 private fun reading(scan: IlcPath.Scan) = BleBeaconReading(
     beaconId = scan.id,

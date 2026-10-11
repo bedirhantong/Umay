@@ -62,6 +62,12 @@ class GraphParticleFilterTest {
 
         val unaided = steps.map(GraphParticleFilter(map, "O", random = Random(3))::onStep).last()
         val hinted = steps.map(GraphParticleFilter(map, "O", random = Random(3), startHeadingOffsetDeg = 73.0 + 20.0)::onStep).last()
+        // The same told after a couple of steps, weighed against them: settles too.
+        val late = GraphParticleFilter(map, "O", random = Random(3))
+        steps.take(2).forEach(late::onStep)
+        late.observeHeadingOffset(73.0 + 20.0, 30.0)
+        val lateEnd = steps.drop(2).map(late::onStep).last()
+        assertTrue(hypot(lateEnd.x, lateEnd.y - truthY) < 1.0, "told late: $lateEnd")
 
         assertTrue(hypot(hinted.x, hinted.y - truthY) < 0.8, "with the hint: $hinted")
         assertTrue(hypot(unaided.x, unaided.y - truthY) > 1.5, "without it, still undecided: $unaided")

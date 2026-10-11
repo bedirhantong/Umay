@@ -334,16 +334,16 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   *Bitti:* bir yürüyüş boyunca telefon iki kez cebe girip çıkıyor, saha
   kaydında hata sınırın içinde kalıyor.
 
-- [ ] **3.5 Pusulayla başlangıç yönü** (O). Konum motoru yürüyenin hangi
-  yöne baktığını ilk adımlardan öğreniyor; kavşakta ve açık alanda bu uzun
-  sürüyor. Haritalama sırasında pusulanın harita koordinatlarına göre farkı
-  kaydedilir; yönlendirme başlarken telefonun pusulası bundan bir ipucu
-  çıkarır (±30°). Gerçek yürüyüşlerde (0.10) ortalama hatayı açık alanlı
-  katta 7,9 m'den 4,6 m'ye, koridorlu katlarda %10–20 düşürdü. Pusula ilk
-  metrelerde medyan 12–17° sapıyor.
+- [ ] **3.5 Pusulayla başlangıç yönü** (O). **Kod hazır:** haritalama her
+  adımda haritanın yönünü pusulayla karşılaştırıp katın farkını haritaya
+  yazıyor (`CompassSums`, `FloorMap.compass`); yönlendirme başlarken pusulayı
+  2 saniye kadar okuyup konum motoruna "şu yöne bakıyor, ±30°" diyor
+  (`CompassHint`). Pusula kararsızsa ya da harita eski ise ipucu yok, her şey
+  eskisi gibi. Gerçek yürüyüşlerde (0.10, uygulamanın kendi koduyla) açık
+  alanlı katta ortalama hata 9,5 m'den 4,8 m'ye, koridorlu katlarda %15–25
+  düştü; üç farklı rastgelelikte de aynı. Sahada denenecek.
   *Bitti:* harita farkı saklıyor, yönlendirme ipucunu kullanıyor; sahada
-  denenecek.
-
+  denendi.
 - [ ] **3.6 İşaretleri daha uzaktan okumak** (O). Yönlendirmede işaretler
   480 × 640 karelerden okunuyor: 15 cm'lik kod ancak ~1 m'den okunuyor,
   960 × 1280'de 2 m'den (0.12'de ölçüldü). Kamerayı daha yüksek çözünürlükte
@@ -508,6 +508,17 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** 0.9 (saha kaydı özeti telefonda), 4.10 (yanından
+  geçilen engel), 3.5 (pusula) kodlandı. Yolda iki gerçek hata bulundu:
+  - Telefonun yönü Android'in `getOrientation` açısından okunuyordu. Bu açı
+    telefon dik tutulunca tanımsız; tepesi biraz öne eğilince (kamera yere
+    bakınca) 180° dönüyor. Göğüs hizasında tutulan telefonda her sallanma
+    sahte bir geri dönüş oluyordu. Dikey eksen etrafındaki dönme (`headingDeg`)
+    ile düzeltildi.
+  - Adım sayarak haritalamada "Kayda devam et"ten sonraki ilk adım,
+    sensörün başlangıç açısını dönüş sanıyordu; devam eden harita rastgele bir
+    açıyla dönüyordu.
 
 - **11 Ekim 2026:** Plana eklendi: 0.16 çok katlı sanal bina, 0.17 gerçek
   haritayla sanal yürüyüş, 0.18 kamerayla haritalamanın simülasyonu, 2.5
