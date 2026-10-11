@@ -38,6 +38,7 @@ import com.appvalence.umay.feedback.TtsFeedbackController
 import com.appvalence.umay.fieldlog.FieldLogFiles
 import com.appvalence.umay.fieldlog.FieldLogRecorder
 import com.appvalence.umay.orchestrator.BuildingQueryMatcher
+import com.appvalence.umay.orchestrator.FloorChangeConfirmation
 import com.appvalence.umay.orchestrator.BuildingQueryResult
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
@@ -195,8 +196,7 @@ class NavigationSession internal constructor(
     // fallback if the pressure change doesn't register (a split-level half floor, say).
     val hasBarometer: Boolean = BarometerSensor.isAvailable(appContext)
     private val barometer = BarometerSensor(appContext)
-    private val floorChangeDetector = BarometricFloorChangeDetector()
-    private var barometerConfirmedTargetId: String? = null
+    private val floorChanges = FloorChangeConfirmation(hasBarometer)
 
     // Field-test log for this one session (see FieldLogRecorder) — null unless recording
     // was switched on in "Dosyalar". Everything records through `recorder?.`, so with
@@ -317,7 +317,7 @@ class NavigationSession internal constructor(
                         state = newState,
                         phase = phase,
                         instruction = guidance?.message ?: it.instruction,
-                        barometerClimbMeters = floorChangeDetector.climbedMeters(),
+                        barometerClimbMeters = floorChanges.climbedMeters(),
                     )
                 }
 
@@ -338,23 +338,7 @@ class NavigationSession internal constructor(
                     lastPromptedFloorChange = hint?.targetNodeId
                 }
 
-                val hint = newState.pendingFloorChange
-                if (hint == null) {
-                    floorChangeDetector.disarm()
-                    barometerConfirmedTargetId = null
-                } else if (hasBarometer) {
-                    // Don't re-arm for a crossing the barometer already confirmed: the hint
-                    // lingers until the next footstep produces a position on the new floor.
-                    if (hint.targetNodeId != barometerConfirmedTargetId) {
-                        floorChangeDetector.arm(fromFloor = newState.position.floor, toFloor = hint.targetFloor)
-                    }
-                } else if (hint.autoConfirm) {
-                    // No barometer: a STAIRS crossing confirms itself once enough footsteps have
-                    // piled up (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap
-                    // needed, which matters since a blind user's hands may well be full on a
-                    // staircase. Elevators never set autoConfirm; those wait for the button.
-                    confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_AUTOMATICALLY)
-                }
+                floorChanges.onState(newState)?.let(::confirmFloorChange)
             }
         } catch (e: CancellationException) {
             throw e // normal teardown (session stopped) — not a failure
@@ -392,26 +376,19 @@ class NavigationSession internal constructor(
                 lastLoggedAtMs = reading.timestampMs
                 recorder.record(PressureEvent(reading.timestampMs, reading.hPa))
             }
-            if (floorChangeDetector.onPressure(reading.hPa, reading.timestampMs)) {
-                val current = _ui.value.state ?: return@collect
-                val hint = current.pendingFloorChange ?: return@collect
-                barometerConfirmedTargetId = hint.targetNodeId
-                confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_BY_BAROMETER)
-            }
+            floorChanges.onPressure(reading.hPa, reading.timestampMs)?.let(::confirmFloorChange)
         }
     }
 
-    private fun confirmFloorChange(targetNodeId: String, targetFloor: Int, phase: FloorChangePhase) {
-        if (targetNodeId !in allNodesById) return
-        positioningEngine.changeFloor(targetNodeId, System.currentTimeMillis())
-        recorder?.record(FloorChangeEvent(System.currentTimeMillis(), phase, targetNodeId, targetFloor))
+    private fun confirmFloorChange(change: FloorChangeConfirmation.Confirmed) {
+        if (change.targetNodeId !in allNodesById) return
+        positioningEngine.changeFloor(change.targetNodeId, System.currentTimeMillis())
+        recorder?.record(FloorChangeEvent(System.currentTimeMillis(), change.phase, change.targetNodeId, change.targetFloor))
     }
 
     /** The "Kat değiştirdim" button. */
     fun confirmFloorChangeManually() {
-        val current = _ui.value.state ?: return
-        val hint = current.pendingFloorChange ?: return
-        confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_MANUALLY)
+        floorChanges.manual()?.let(::confirmFloorChange)
     }
 
     /**
