@@ -36,6 +36,10 @@ class WalkReportsTest {
                 survey = VirtualSurveyor.survey(office, "giris", 2, walker = WalkerModel(trueStrideMeters = 0.78, gyroDriftPerStepDeg = 0.15)).surveyed,
                 title = "Adım sayarak, özensizce çıkarılmış haritayla",
             ),
+            simulateGuidedWalk(VirtualBuildings.twoFloorOffice(), "yazici", "salon", seed = 2, phrases = phrases, record = true,
+                title = "Merdivenle üst kata: yazıcıdan toplantı salonuna"),
+            simulateGuidedWalk(VirtualBuildings.twoFloorOffice(), "giris", "mudur", seed = 1, phrases = phrases, record = true, barometer = false,
+                title = "Asansörle üst kata, basınç sensörü olmayan telefonla"),
         ).map { it.recording!! } + listOf(
             institutionWalk(institution, "Kurum katı, beacon'larla", seed = 1, aids = Aids(beacons = true)),
             institutionWalk(institution, "Kurum katı, yanlış başlangıç ve yer işareti", seed = 1, aids = Aids(markerNodeIds = setOf("M10")), filterStart = "M40"),

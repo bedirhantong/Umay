@@ -26,6 +26,7 @@ internal data class VirtualObstacle(
     val blocking: Boolean = false,
     /** Side to side, across the corridor. */
     val widthMeters: Double = 0.5,
+    val floor: Int = 0,
 )
 
 /**
@@ -48,10 +49,11 @@ internal class VirtualObstacleSensor(
 ) {
     private val focalPx = width / (2 * tan(Math.toRadians(horizontalFovDeg / 2)))
 
-    fun detect(x: Double, y: Double, headingDeg: Double, timestampMs: Long): List<DetectedObstacle> = obstacles.mapNotNull { obstacle ->
+    fun detect(x: Double, y: Double, headingDeg: Double, timestampMs: Long, floor: Int = 0): List<DetectedObstacle> = obstacles.mapNotNull { obstacle ->
+        if (obstacle.floor != floor) return@mapNotNull null
         val distance = hypot(obstacle.x - x, obstacle.y - y)
         val relative = angle(Math.toDegrees(atan2(obstacle.x - x, obstacle.y - y)) - headingDeg)
-        if (distance > MAX_RANGE_METERS || abs(relative) > horizontalFovDeg / 2 || !building.lineOfSight(x, y, obstacle.x, obstacle.y)) return@mapNotNull null
+        if (distance > MAX_RANGE_METERS || abs(relative) > horizontalFovDeg / 2 || !building.lineOfSight(x, y, obstacle.x, obstacle.y, floor)) return@mapNotNull null
         if (random.nextDouble() > if (distance <= NEAR_METERS) NEAR_RECALL else FAR_RECALL) return@mapNotNull null
         val depth = distance * cos(Math.toRadians(relative))
         val bottom = (height / 2.0 + cameraHeightMeters * focalPx / depth).coerceAtMost(height.toDouble())

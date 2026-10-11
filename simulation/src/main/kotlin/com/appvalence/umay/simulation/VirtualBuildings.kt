@@ -144,4 +144,61 @@ internal object VirtualBuildings {
         ),
         markerNodeIds = setOf("giris", "asansor", "danisma", "tuvalet", "toplanti1", "toplanti2", "mutfak"),
     )
+
+    /**
+     * The open office ([openOffice]) as the ground floor of a two-storey building:
+     * a staircase by the printer and the lift by the west wall lead up to a first
+     * floor with a corridor along its south side and three rooms off it. Each
+     * staircase and lift landing has one way out, as most do. Floors are 3.5 m
+     * apart; a slab between beacon and phone costs 15 dB.
+     *
+     * ```
+     *  Floor 1:   ┌── Arşiv ──── Müdür odası ─── Toplantı salonu ──┐
+     *             Asansör ─ k1 ── Bekleme salonu ── k3 ── k4       │
+     *             └────────────────────────────────────── Merdiven ┘
+     * ```
+     */
+    fun twoFloorOffice(radio: RadioModel = RadioModel()): VirtualBuilding {
+        val ground = openOffice(radio)
+        val upper = listOf(
+            place("asansor1", 1.0, 5.0, "Asansör (1. kat)", NodeType.ELEVATOR),
+            place("k1", 6.5, 5.0),
+            place("bekleme", 16.0, 5.0, "Bekleme salonu"),
+            place("k3", 27.0, 5.0),
+            place("k4", 30.5, 5.0),
+            place("merdiven1", 30.5, 2.0, "Merdiven (1. kat)", NodeType.STAIRS),
+            place("arsiv", 6.5, 10.0, "Arşiv", NodeType.DOOR),
+            place("mudur", 16.0, 10.0, "Müdür odası", NodeType.DOOR),
+            place("salon", 27.0, 10.0, "Toplantı salonu", NodeType.DOOR),
+        )
+        val stairsDown = place("merdiven0", 30.5, 2.0, "Merdiven (zemin)", NodeType.STAIRS)
+        return VirtualBuilding(
+            name = "Sanal iki katlı ofis",
+            nodes = ground.nodes + stairsDown + upper,
+            edges = ground.edges + ("yazici" to "merdiven0") + listOf(
+                "asansor1" to "k1", "k1" to "bekleme", "bekleme" to "k3", "k3" to "k4", "k4" to "merdiven1",
+                "k1" to "arsiv", "bekleme" to "mudur", "k3" to "salon",
+            ),
+            beacons = ground.beacons + listOf(
+                VirtualBeacon("u1", 3.0, 7.4, floor = 1),
+                VirtualBeacon("u2", 12.0, 0.3, floor = 1),
+                VirtualBeacon("u3", 21.0, 7.4, floor = 1),
+                VirtualBeacon("u4", 31.7, 4.0, floor = 1),
+                VirtualBeacon("u5", 16.0, 11.7, floor = 1),
+            ),
+            radio = radio,
+            walls = ground.walls + listOf(
+                Wall(0.0, 0.0, 32.0, 0.0, floor = 1), Wall(32.0, 0.0, 32.0, 12.0, floor = 1),
+                Wall(32.0, 12.0, 0.0, 12.0, floor = 1), Wall(0.0, 12.0, 0.0, 0.0, floor = 1),
+                // The rooms' wall along the corridor, a door to each.
+                Wall(0.0, 7.5, 5.9, 7.5, floor = 1), Wall(7.1, 7.5, 15.4, 7.5, floor = 1),
+                Wall(16.6, 7.5, 26.4, 7.5, floor = 1), Wall(27.6, 7.5, 32.0, 7.5, floor = 1),
+                Wall(11.0, 7.5, 11.0, 12.0, floor = 1), Wall(21.5, 7.5, 21.5, 12.0, floor = 1),
+            ),
+            blocks = ground.blocks,
+            markerNodeIds = ground.markerNodeIds,
+            floorOf = upper.associate { it.id to 1 },
+            transitions = listOf("asansor" to "asansor1", "merdiven0" to "merdiven1"),
+        )
+    }
 }

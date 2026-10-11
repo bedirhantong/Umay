@@ -115,6 +115,7 @@ internal object VirtualSurveyor {
         phone: PhoneRadio = PhoneRadio(),
         withRadio: Boolean = true,
     ): Survey {
+        require(building.floors.size == 1) { "the virtual surveyor walks one floor; ${building.name} has ${building.floors.size}" }
         val random = Random(seed)
         val scanner = VirtualScanner(building, random, phone)
         val sampler = RadioSampler()

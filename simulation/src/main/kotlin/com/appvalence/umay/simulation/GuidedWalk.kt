@@ -1,11 +1,14 @@
 package com.appvalence.umay.simulation
 
 import com.appvalence.umay.coremodel.DetectedObstacle
+import com.appvalence.umay.coremodel.FloorChangePhase
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
+import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.feedback.FeedbackController
 import com.appvalence.umay.orchestrator.AStarPathfinder
+import com.appvalence.umay.orchestrator.FloorChangeConfirmation
 import com.appvalence.umay.orchestrator.GuidancePhrases
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
@@ -52,6 +55,12 @@ internal data class GuidedWalkResult(
     val unwarnedContacts: Int = 0,
     /** New routes around an obstacle. */
     val reroutes: Int = 0,
+    /** Each floor change the walker made, by staircase or lift (the type of the place left). */
+    val crossings: List<NodeType> = emptyList(),
+    /** How each floor change was confirmed to positioning. */
+    val floorConfirmations: List<FloorChangePhase> = emptyList(),
+    /** Footsteps the app had the walker on another floor. */
+    val wrongFloorSteps: Int = 0,
 ) {
     /** The app said "arrived" with the walker really there. */
     val reached: Boolean get() = arrived && (arrivalErrorMeters ?: Double.MAX_VALUE) <= REACHED_METERS
@@ -59,7 +68,7 @@ internal data class GuidedWalkResult(
     /** Distance walked over the shortest way: 1.0 is perfect. */
     val detour: Double get() = walkedMeters / shortestMeters
 
-    val meanError: Double get() = errorsMeters.average()
+    val meanError: Double get() = if (errorsMeters.isEmpty()) Double.NaN else errorsMeters.average()
 
     companion object {
         /** Close enough to find the door by hand or cane. */
@@ -84,6 +93,11 @@ internal data class GuidedWalkResult(
  * stand-in for the camera's detector ([VirtualObstacleSensor]). [survey] is
  * the map the app guides by; by default the building's plan itself, or one
  * a [VirtualSurveyor] made, drifts and all.
+ *
+ * Between floors the walker climbs the stairs step by step or stands in the
+ * lift, and the app learns of it the way it does on a phone
+ * (FloorChangeConfirmation): from the [barometer], else from footsteps on
+ * stairs, else from the walker pressing "Kat değiştirdim" on leaving the lift.
  */
 internal fun simulateGuidedWalk(
     building: VirtualBuilding,
@@ -101,6 +115,7 @@ internal fun simulateGuidedWalk(
     title: String = "",
     obstacles: List<VirtualObstacle> = emptyList(),
     survey: SurveyedMap? = null,
+    barometer: Boolean = true,
 ): GuidedWalkResult = runBlocking {
     val random = Random(seed)
     val surveyed = survey ?: SurveyedMap.ideal(
@@ -108,7 +123,7 @@ internal fun simulateGuidedWalk(
     )
     val map = surveyed.map
     fun mapIdOf(id: String) = surveyed.mapId(id) ?: error("the map has no place for $id")
-    val device = VirtualPhone(building, surveyed, mapIdOf(appStartNodeId), walker, aids, config, random, Random(seed + 2_000), phone)
+    val device = VirtualPhone(building, surveyed, mapIdOf(appStartNodeId), walker, aids, config, random, Random(seed + 2_000), phone, Random(seed + 4_000))
     val destination = building.nodesById.getValue(destinationNodeId)
     val follower = InstructionFollower(building, building.nodesById.getValue(startNodeId), random)
     val shortest = AStarPathfinder.findPathAcrossFloors(building.surveyedMap(Random(0), withRadio = false), startNodeId, destinationNodeId)
@@ -156,27 +171,85 @@ internal fun simulateGuidedWalk(
     var unwarnedContacts = 0
     var reroutes = 0
     var obstaclesInView = false
-    if (record) frames += device.frame(Point(follower.x, follower.y), listOf("Yola çıkıyor: ${follower.startNote}"))
+    val floorChanges = FloorChangeConfirmation(hasBarometer = barometer)
+    val crossings = ArrayList<NodeType>()
+    val confirmations = ArrayList<FloorChangePhase>()
+    var wrongFloorSteps = 0
+    var altitude = building.floorOf(startNodeId) * building.floorHeightMeters
+    var lastState: NavigationState? = null
+    if (record) frames += device.frame(Point(follower.x, follower.y), listOf("Yola çıkıyor: ${follower.startNote}"), truthFloor = follower.floor)
+
+    fun apply(change: FloorChangeConfirmation.Confirmed?, notes: MutableList<String>) {
+        change ?: return
+        val mapId = surveyed.mapId(change.targetNodeId) ?: change.targetNodeId
+        if (device.estimate.floor == change.targetFloor) return // already applied; the hint lingers a step
+        device.changeFloor(mapId)
+        confirmations += change.phase
+        notes += "Kat değişimi onaylandı (${change.phase.name.lowercase()})."
+    }
+
+    // One footstep (or, standing in a lift, none) and what the app makes of it.
+    suspend fun sense(stepped: Boolean, x: Double, y: Double, headingDeg: Double, floor: Int, notes: MutableList<String>): MutableList<NavigationAlert> {
+        val alerts = mutableListOf<NavigationAlert>()
+        if (stepped) {
+            notes += device.step(x, y, headingDeg, floor)
+            positions.send(device.estimate)
+            val state = withTimeoutOrNull(STATE_TIMEOUT_MS) { states.receive() } ?: error("the app gave no answer to a footstep (step $steps)")
+            lastState = state
+            alerts += state.alerts
+            apply(floorChanges.onState(state), notes)
+        }
+        if (barometer) apply(floorChanges.onPressure(device.pressureHpa(altitude), device.timeMs), notes)
+        return alerts
+    }
 
     while (!follower.arrived && steps < stepBudget) {
         val stride = walker.trueStrideMeters * (1.0 + random.gaussian() * walker.strideNoiseFraction)
-        val move = follower.step(stride, route, obstacles.filter { it.blocking })
+        val move = follower.step(stride, route, obstacles.filter { it.blocking && it.floor == follower.floor })
         if (move.wrongTurn) wrongTurns++
         val notes = move.notes.toMutableList()
-        notes += device.step(follower.x, follower.y, follower.headingDeg)
-        steps++
-
-        positions.send(device.estimate)
-        var state = withTimeoutOrNull(STATE_TIMEOUT_MS) { states.receive() }
-            ?: error("the app gave no answer to a footstep (step $steps)")
-        val alerts = state.alerts.toMutableList()
-        if (obstacles.isNotEmpty()) {
-            val seen = sensor.detect(follower.x, follower.y, follower.headingDeg, device.timeMs)
+        val crossing = move.crossing
+        val alerts: MutableList<NavigationAlert>
+        if (crossing == null) {
+            steps++
+            alerts = sense(true, follower.x, follower.y, follower.headingDeg, follower.floor, notes)
+        } else {
+            // Up or down the stairs step by step, or standing in the lift; then out at the other floor.
+            crossings += crossing.from.type
+            val fromAltitude = altitude
+            val toAltitude = building.floorOf(crossing.to.id) * building.floorHeightMeters
+            alerts = mutableListOf()
+            if (crossing.from.type == NodeType.ELEVATOR) {
+                notes += "Asansöre bindi."
+                repeat(LIFT_SECONDS * 2) { half ->
+                    device.standStill(500)
+                    val moving = (half - LIFT_DOORS_HALF_SECONDS).coerceIn(0, LIFT_RIDE_HALF_SECONDS).toDouble() / LIFT_RIDE_HALF_SECONDS
+                    altitude = fromAltitude + (toAltitude - fromAltitude) * moving
+                    alerts += sense(false, crossing.from.x, crossing.from.y, follower.headingDeg, building.floorOf(crossing.from.id), notes)
+                }
+            } else {
+                notes += "Merdivene çıktı."
+                for (k in 1..STAIR_STEPS) {
+                    steps++
+                    altitude = fromAltitude + (toAltitude - fromAltitude) * k / STAIR_STEPS
+                    val floorNow = if (k <= STAIR_STEPS / 2) building.floorOf(crossing.from.id) else building.floorOf(crossing.to.id)
+                    alerts += sense(true, crossing.from.x, crossing.from.y, follower.headingDeg, floorNow, notes)
+                }
+            }
+            altitude = toAltitude
+            follower.arriveAt(crossing.to)?.let(notes::add)
+            // Off the lift without a barometer, the walker presses "Kat değiştirdim".
+            if (!barometer && crossing.from.type == NodeType.ELEVATOR) apply(floorChanges.manual(), notes)
+        }
+        val state = lastState ?: continue
+        if (obstacles.isNotEmpty() && crossing == null) {
+            val seen = sensor.detect(follower.x, follower.y, follower.headingDeg, device.timeMs, follower.floor)
             // "Still nothing in view" after nothing is no news to the app (see NavigationOrchestrator.start).
             if (seen.isNotEmpty() || obstaclesInView) {
                 detections.send(seen)
-                state = withTimeoutOrNull(STATE_TIMEOUT_MS) { states.receive() } ?: error("the app gave no answer to the camera (step $steps)")
-                alerts += state.alerts
+                val seenState = withTimeoutOrNull(STATE_TIMEOUT_MS) { states.receive() } ?: error("the app gave no answer to the camera (step $steps)")
+                lastState = seenState
+                alerts += seenState.alerts
             }
             obstaclesInView = seen.isNotEmpty()
             for (alert in alerts) {
@@ -186,6 +259,7 @@ internal fun simulateGuidedWalk(
                 if (alert.id.startsWith("reroute-")) reroutes++
             }
             for (obstacle in obstacles) {
+                if (obstacle.floor != follower.floor) continue
                 if (obstacle.id in contacted || hypot(obstacle.x - follower.x, obstacle.y - follower.y) > GuidedWalkResult.CONTACT_METERS) continue
                 contacted += obstacle.id
                 if (obstacle.id !in firstWarning) {
@@ -203,18 +277,23 @@ internal fun simulateGuidedWalk(
             }
             follower.hear(alert.message)?.let(notes::add)
         }
-        if (follower.arrived) arrivalError = hypot(follower.x - destination.x, follower.y - destination.y)
-        val mapRoute = state.route.map { it.id }
+        if (follower.arrived) {
+            arrivalError = if (follower.floor != building.floorOf(destinationNodeId)) Double.MAX_VALUE else hypot(follower.x - destination.x, follower.y - destination.y)
+        }
+        val current = lastState ?: state
+        val mapRoute = current.route.map { it.id }
         // The walker knows real places; a map node the survey left unnamed is no place of theirs.
         route = mapRoute.map { surveyed.buildingId(it) ?: it }
-        errors += device.errorTo(Point(follower.x, follower.y))
+        val error = device.errorTo(Point(follower.x, follower.y), follower.floor)
+        if (error == null) wrongFloorSteps++ else errors += error
         if (record) {
             frames += device.frame(
                 truth = Point(follower.x, follower.y),
                 notes = notes,
                 speech = speech,
                 route = mapRoute.takeIf { it != recordedRoute },
-                targetNodeId = state.route.getOrNull(state.nextRouteIndex)?.id,
+                targetNodeId = current.route.getOrNull(current.nextRouteIndex)?.id,
+                truthFloor = follower.floor,
             )
             recordedRoute = mapRoute
         }
@@ -238,6 +317,9 @@ internal fun simulateGuidedWalk(
         firstWarningMeters = firstWarning,
         unwarnedContacts = unwarnedContacts,
         reroutes = reroutes,
+        crossings = crossings,
+        floorConfirmations = confirmations,
+        wrongFloorSteps = wrongFloorSteps,
     )
     if (!record) return@runBlocking result
     result.copy(
@@ -255,6 +337,14 @@ internal fun simulateGuidedWalk(
 
 private const val STATE_TIMEOUT_MS = 5_000L
 
+// A flight of stairs, 3.5 m: about 20 risers, taken a step at a time over the landing.
+private const val STAIR_STEPS = 20
+
+// The lift: doors close (2 s), it travels (5 s), doors open and the walker steps out.
+private const val LIFT_SECONDS = 10
+private const val LIFT_DOORS_HALF_SECONDS = 4
+private const val LIFT_RIDE_HALF_SECONDS = 10
+
 private fun guidedSummary(result: GuidedWalkResult): List<SummaryItem> = listOf(
     SummaryItem(
         "Varış",
@@ -271,6 +361,7 @@ private fun guidedSummary(result: GuidedWalkResult): List<SummaryItem> = listOf(
     SummaryItem("Ters yön uyarısı", result.wrongWayAlerts.toString()),
     SummaryItem("Rotadan çıkma", result.offRouteAlerts.toString()),
     SummaryItem("Ortalama konum hatası", "%.2f m".format(result.meanError)),
+    SummaryItem("Kat değişimi", if (result.crossings.isEmpty()) "Yok" else result.crossings.joinToString { if (it == NodeType.ELEVATOR) "asansör" else "merdiven" }),
     SummaryItem("İlk yönerge", result.firstInstructionStep?.let { "$it. adımdan sonra" } ?: "Hiç"),
 )
 
@@ -285,10 +376,18 @@ private fun guidedSummary(result: GuidedWalkResult): List<SummaryItem> = listOf(
  * - at a junction nobody explained, or at the start with several ways out,
  *   guesses; at a dead end, turns back.
  */
-private class InstructionFollower(building: VirtualBuilding, start: MapNode, private val random: Random) {
+private class InstructionFollower(private val building: VirtualBuilding, start: MapNode, private val random: Random) {
     private val neighbors: Map<String, List<MapNode>> = building.edges
         .flatMap { (a, b) -> listOf(a to b, b to a) }
         .groupBy({ it.first }, { building.nodesById.getValue(it.second) })
+
+    // Stairs and lifts: from a place on one floor to its other end on another.
+    private val crossingsFrom: Map<String, List<MapNode>> = building.transitions
+        .flatMap { (a, b) -> listOf(a to b, b to a) }
+        .groupBy({ it.first }, { building.nodesById.getValue(it.second) })
+
+    /** Heard "Merdivenle yukarı çık: Kat 1, …": the floor to go to at the next staircase or lift. */
+    private var floorChangeTo: Int? = null
 
     private var from: MapNode = start
     private var to: MapNode
@@ -318,9 +417,28 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
     private val length: Double get() = hypot(to.x - from.x, to.y - from.y)
     val x: Double get() = from.x + (to.x - from.x) * along / length
     val y: Double get() = from.y + (to.y - from.y) * along / length
-    val headingDeg: Double get() = bearing(from, to)
+    val headingDeg: Double get() = if (length == 0.0) lastHeadingDeg else bearing(from, to)
+    val floor: Int get() = building.floorOf(from.id)
+    private var lastHeadingDeg = 0.0
 
-    class Move(val notes: List<String>, val wrongTurn: Boolean)
+    /** Up or down from [from] (a staircase or lift landing) to [to] on another floor. */
+    class Crossing(val from: MapNode, val to: MapNode)
+
+    class Move(val notes: List<String>, val wrongTurn: Boolean, val crossing: Crossing? = null)
+
+    /** Off the stairs or lift at [arrival]: on along the only way out, or a guess among several. */
+    fun arriveAt(arrival: MapNode): String? {
+        val ways = neighbors[arrival.id].orEmpty()
+        from = arrival
+        along = 0.0
+        floorChangeTo = null
+        if (ways.isEmpty()) {
+            arrived = true
+            return "${arrival.name}: çıkacak yol yok."
+        }
+        to = if (ways.size == 1) ways.first() else ways[random.nextInt(ways.size)]
+        return "${arrival.name} katına vardı" + if (ways.size == 1) "." else ", ${ways.size} yoldan birini seçti (${to.name})."
+    }
 
     /**
      * One stride along the corridors; [route] is the app's current route, to tell a wrong
@@ -354,6 +472,13 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
             val leftover = along + remaining - length
             walkedMeters += length - along
             val junction = to
+            // Told to change floor, and this is the staircase or lift for it: up or down here.
+            val crossTo = floorChangeTo?.let { target -> crossingsFrom[junction.id]?.firstOrNull { building.floorOf(it.id) == target } }
+            if (crossTo != null) {
+                lastHeadingDeg = headingDeg
+                along = length
+                return Move(notes, wrongTurn, Crossing(junction, crossTo))
+            }
             val (next, note) = chooseAt(junction, cameFrom = from)
             note?.let(notes::add)
             if (route != null) {
@@ -426,6 +551,7 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
             turnNowDeg = null
             return null
         }
+        FLOOR_CHANGE.find(text)?.let { floorChangeTo = it.groupValues[1].toInt() }
         if (WALK !in text && APPROACH !in text) return understood
         turnNowDeg = when {
             text.startsWith(TURN_LEFT_NOW) -> -90.0
@@ -468,6 +594,7 @@ private class InstructionFollower(building: VirtualBuilding, start: MapNode, pri
         private const val TURN_LEFT_NOW = "Sola dön."
         private const val TURN_RIGHT_NOW = "Sağa dön."
         private val DISTANCE = Regex("""[Yy]aklaşık (\d+) metre""")
+        private val FLOOR_CHANGE = Regex("""(?:yukarı çık|aşağı in)[:,] Kat (-?\d+)""")
         private const val HALF = 0.5
         private const val BLOCKING_HALF_WIDTH_METERS = 0.6
         private const val CANE_REACH_METERS = 0.8

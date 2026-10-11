@@ -23,6 +23,7 @@ internal data class PlacedMarker(
     val facingDeg: Double,
     val centerHeightMeters: Double = 1.4,
     val qrSideMeters: Double = PlaceMarkers.PRINTED_SIDE_METERS,
+    val floor: Int = 0,
 )
 
 /**
@@ -54,18 +55,23 @@ internal class VirtualCamera(
     }
 
     /** Markers that could be in view from ([x], [y]) facing [headingDeg]: close, in front, facing back, not behind a wall. */
-    fun markersInView(x: Double, y: Double, headingDeg: Double, maxMeters: Double = 8.0): List<PlacedMarker> = markers.filter { m ->
+    fun markersInView(x: Double, y: Double, headingDeg: Double, maxMeters: Double = 8.0, floor: Int = 0): List<PlacedMarker> = markers.filter { m ->
         val distance = hypot(m.x - x, m.y - y)
         val toMarker = Math.toDegrees(atan2(m.x - x, m.y - y))
-        distance <= maxMeters &&
+        m.floor == floor &&
+            distance <= maxMeters &&
             abs(angle(toMarker - headingDeg)) <= horizontalFovDeg / 2 + 5 &&
             abs(angle(m.facingDeg - (toMarker + 180))) < 85 &&
             // A point just in front of the sheet: its own wall mustn't count as in the way.
-            building.lineOfSight(x, y, m.x + 0.05 * sin(Math.toRadians(m.facingDeg)), m.y + 0.05 * cos(Math.toRadians(m.facingDeg)))
+            building.lineOfSight(x, y, m.x + 0.05 * sin(Math.toRadians(m.facingDeg)), m.y + 0.05 * cos(Math.toRadians(m.facingDeg)), floor)
     }
 
-    /** The frame seen from ([x], [y]) facing [headingDeg]: one luminance byte per pixel, row by row. */
-    fun render(x: Double, y: Double, headingDeg: Double): ByteArray {
+    // The floor being rendered: its walls and markers only.
+    private var renderFloor = 0
+
+    /** The frame seen from ([x], [y]) on [floor] facing [headingDeg]: one luminance byte per pixel, row by row. */
+    fun render(x: Double, y: Double, headingDeg: Double, floor: Int = 0): ByteArray {
+        renderFloor = floor
         val yaw = Math.toRadians(headingDeg)
         val pitch = Math.toRadians(pitchDeg)
         // Camera axes in the world (x east, y north, z up).
@@ -113,6 +119,7 @@ internal class VirtualCamera(
             }
         }
         for (wall in building.walls) {
+            if (wall.floor != renderFloor) continue
             val t = hitVertical(ox, oy, dx, dy, wall.x1, wall.y1, wall.x2, wall.y2) ?: continue
             val z = oz + t * dz
             if (t < nearest && z in 0.0..CEILING_METERS) {
@@ -123,6 +130,7 @@ internal class VirtualCamera(
             }
         }
         for (marker in markers) {
+            if (marker.floor != renderFloor) continue
             val facing = Math.toRadians(marker.facingDeg)
             val nx = sin(facing)
             val ny = cos(facing)
@@ -205,6 +213,7 @@ internal class VirtualCamera(
             val node = building.nodesById.getValue(id)
             var best: Triple<Double, Pair<Double, Double>, Pair<Double, Double>>? = null
             for (wall in building.walls) {
+                if (wall.floor != building.floorOf(id)) continue
                 val ex = wall.x2 - wall.x1
                 val ey = wall.y2 - wall.y1
                 val length = hypot(ex, ey)
@@ -230,7 +239,7 @@ internal class VirtualCamera(
                 if (d <= maxMeters && (best == null || d < best.first)) best = Triple(d, px to py, nx to ny)
             }
             val (_, point, normal) = best ?: return@mapNotNull null
-            PlacedMarker(id, point.first + normal.first * 0.005, point.second + normal.second * 0.005, Math.toDegrees(atan2(normal.first, normal.second)))
+            PlacedMarker(id, point.first + normal.first * 0.005, point.second + normal.second * 0.005, Math.toDegrees(atan2(normal.first, normal.second)), floor = building.floorOf(id))
         }
 
         private const val SHEET_CLEARANCE_METERS = 0.2

@@ -4,6 +4,7 @@ import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.StepEvent
 import com.appvalence.umay.perception.QrMarkerReader
+import com.appvalence.umay.positioning.baro.PressureAltitude
 import com.appvalence.umay.positioning.particle.GraphParticleFilter
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -53,6 +54,10 @@ private const val MARKER_BEARING_NOISE_DEG = 3.0
 /** Beyond this a rendered marker is too small to read (see MarkerRangeTest), so no frame is rendered. */
 private const val CAMERA_LOOK_METERS = 2.5
 
+// Somewhere above sea level, so pressures look like a real building's; and a phone barometer's noise.
+private const val BASE_ALTITUDE_METERS = 100.0
+private const val BAROMETER_NOISE_HPA = 0.02
+
 /** Particles drawn per frame in the viewer: enough to show the cloud's shape, few enough to keep the page small. */
 private const val PARTICLES_PER_FRAME = 60
 
@@ -93,6 +98,8 @@ internal class VirtualPhone(
     private val random: Random,
     filterRandom: Random,
     phone: PhoneRadio,
+    // Its own stream, so a walk with a barometer draws the same world as one without.
+    private val barometerRandom: Random = Random(0),
 ) {
     val map: BuildingMap get() = surveyed.map
     val filter = GraphParticleFilter(surveyed.map, startNodeId, config, filterRandom)
@@ -114,14 +121,35 @@ internal class VirtualPhone(
     var estimate: Position = filter.estimate(timeMs)
         private set
 
-    /** How far the app's estimate is from the walker's true position ([truth], on the building's plan). */
-    fun errorTo(truth: Point): Double {
+    /**
+     * How far the app's estimate is from the walker's true position ([truth] on [floor],
+     * on the building's plan); null while the app has them on another floor.
+     */
+    fun errorTo(truth: Point, floor: Int = 0): Double? {
+        if (estimate.floor != floor) return null
         val laid = surveyed.toMap(truth)
         return hypot(estimate.x - laid.x, estimate.y - laid.y)
     }
 
-    /** One footstep that left the walker at ([x], [y]) facing [headingDeg] (the building's frame); returns what happened. */
-    fun step(x: Double, y: Double, headingDeg: Double): List<String> {
+    /** Time passing with no footstep: standing in a lift, say. */
+    fun standStill(ms: Long) {
+        timeMs += ms
+    }
+
+    /** A floor change confirmed (see FloorChangeConfirmation): positioning restarts at the arrival place, a map node id. */
+    fun changeFloor(arrivalMapNodeId: String) {
+        estimate = filter.changeFloor(arrivalMapNodeId, timeMs)
+    }
+
+    /**
+     * What the barometer reads [altitudeMeters] above the ground floor, with the sensor's
+     * own noise (a phone barometer resolves about half a metre).
+     */
+    fun pressureHpa(altitudeMeters: Double): Double =
+        PressureAltitude.hpaFromMeters(BASE_ALTITUDE_METERS + altitudeMeters) + barometerRandom.gaussian() * BAROMETER_NOISE_HPA
+
+    /** One footstep that left the walker at ([x], [y]) on [floor] facing [headingDeg] (the building's frame); returns what happened. */
+    fun step(x: Double, y: Double, headingDeg: Double, floor: Int = 0): List<String> {
         val notes = mutableListOf<String>()
         // The gyro sees the true heading change, in its own frame, plus noise and drift.
         val sensed = headingDeg - gyroOffsetDeg + walker.gyroDriftPerStepDeg * steps + random.gaussian() * walker.headingNoiseDeg
@@ -133,7 +161,7 @@ internal class VirtualPhone(
 
         if (aids.beacons) {
             // Advertisements arrive all the time; the filter looks about once a second.
-            val sightings = scanner.hear(x, y, timeMs)
+            val sightings = scanner.hear(x, y, timeMs, floor)
             if (steps % aids.scanEverySteps == 0) {
                 filter.onBeaconReadings(sightings, timeMs)?.let { notes += "Parmak izi eşleşmesi: ${it.node.name}" }
                 estimate = filter.estimate(timeMs)
@@ -141,9 +169,9 @@ internal class VirtualPhone(
         }
         if (camera != null) {
             // Rendering is the costly part: only when a marker is close enough to have a chance.
-            if (camera.markersInView(x, y, headingDeg, maxMeters = CAMERA_LOOK_METERS).isNotEmpty()) {
+            if (camera.markersInView(x, y, headingDeg, maxMeters = CAMERA_LOOK_METERS, floor = floor).isNotEmpty()) {
                 framesRendered++
-                for (sighting in markerReader.read(camera.render(x, y, headingDeg), camera.width, camera.height, timeMs)) {
+                for (sighting in markerReader.read(camera.render(x, y, headingDeg, floor), camera.width, camera.height, timeMs)) {
                     markersRead++
                     // A printed marker carries the id its map gave the place.
                     val mapId = surveyed.mapId(sighting.nodeId) ?: continue
@@ -155,12 +183,13 @@ internal class VirtualPhone(
             return notes
         }
         for (markerId in aids.markerNodeIds) {
+            if (building.floorOf(markerId) != floor) continue
             val marker = building.nodesById.getValue(markerId)
             val distance = hypot(marker.x - x, marker.y - y)
             if (distance > MARKER_RANGE_METERS) continue
             val toMarker = Math.toDegrees(atan2(marker.x - x, marker.y - y))
             val relative = ((toMarker - headingDeg + 540.0) % 360.0) - 180.0
-            if (abs(relative) > CAMERA_HALF_FOV_DEG || !building.lineOfSight(x, y, marker.x, marker.y)) continue
+            if (abs(relative) > CAMERA_HALF_FOV_DEG || !building.lineOfSight(x, y, marker.x, marker.y, floor)) continue
             val seen = filter.onMarker(
                 nodeId = surveyed.mapId(markerId) ?: continue,
                 distanceMeters = distance * (1.0 + random.gaussian() * MARKER_DISTANCE_NOISE_FRACTION),
@@ -182,10 +211,12 @@ internal class VirtualPhone(
         speech: List<String> = emptyList(),
         route: List<String>? = null,
         targetNodeId: String? = null,
+        truthFloor: Int = estimate.floor,
     ) = WalkFrame(
         tMs = timeMs,
         floor = estimate.floor,
-        truth = surveyed.toMap(truth),
+        // Drawn on the floor the app has them on; where they really are only when that's the same floor.
+        truth = surveyed.toMap(truth).takeIf { truthFloor == estimate.floor },
         estimate = Point(estimate.x, estimate.y),
         accuracyMeters = estimate.accuracyMeters,
         headingDeg = estimate.headingDeg,
@@ -236,7 +267,7 @@ internal fun simulateWalk(
             val x = from.x + (to.x - from.x) * along / legLength
             val y = from.y + (to.y - from.y) * along / legLength
             val notes = device.step(x, y, bearing)
-            errors += device.errorTo(Point(x, y))
+            errors += device.errorTo(Point(x, y)) ?: error("${building.name}: the app left floor 0 on a one-floor walk")
             if (record) frames += device.frame(Point(x, y), notes)
         }
     }
