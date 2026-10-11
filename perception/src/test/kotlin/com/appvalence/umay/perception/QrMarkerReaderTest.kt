@@ -44,6 +44,26 @@ class QrMarkerReaderTest {
     }
 
     @Test
+    fun `an upright frame sees less across, so the same code is farther than on its side`() {
+        // Navigation reads upright frames: their width is the camera's shorter side.
+        val upright = QrMarkerReader()
+        val w = 480
+        val h = 640
+        val matrix = QRCodeWriter().encode(PlaceMarkers.contentFor(nodeId), BarcodeFormat.QR_CODE, 0, 0, mapOf(EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.L, EncodeHintType.MARGIN to 0))
+        val pixels = ByteArray(w * h) { 255.toByte() }
+        val sidePx = 116
+        val module = sidePx.toDouble() / matrix.width
+        for (y in 0 until sidePx) for (x in 0 until sidePx) if (matrix[(x / module).toInt(), (y / module).toInt()]) pixels[(260 + y) * w + 182 + x] = 0
+
+        val sighting = upright.read(pixels, w, h, 0).single()
+
+        val focal = w / (2 * tan(Math.toRadians(CameraOptics.fovAcrossDegrees(w, h) / 2)))
+        val expected = PlaceMarkers.PRINTED_SIDE_METERS * focal / sidePx
+        assertTrue(kotlin.math.abs(sighting.distanceMeters - expected) < expected * 0.1, "${sighting.distanceMeters} vs $expected")
+        assertTrue(CameraOptics.fovAcrossDegrees(w, h) < 55.0)
+    }
+
+    @Test
     fun `a marker to the right is seen to the right`() {
         val sighting = QrMarkerReader().read(frame(PlaceMarkers.contentFor(nodeId), 116, left = 480, top = 182), width, height, 0).single()
 

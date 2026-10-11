@@ -13,8 +13,9 @@ import kotlin.math.tan
  */
 object ObstacleGeometry {
     const val AVERAGE_PERSON_HEIGHT_METERS = 1.7
-    const val ASSUMED_VERTICAL_FOV_DEGREES = 55.0
-    const val ASSUMED_HORIZONTAL_FOV_DEGREES = 40.0
+    // Navigation frames are upright: their height is the camera's longer side.
+    const val ASSUMED_VERTICAL_FOV_DEGREES = CameraOptics.LONG_SIDE_FOV_DEGREES
+    val ASSUMED_HORIZONTAL_FOV_DEGREES: Double = CameraOptics.fovAcrossDegrees(3, 4)
 
     fun estimateDistanceMeters(
         boundingBoxHeightPx: Float,

@@ -18,11 +18,16 @@ import kotlin.math.tan
  * Finds Umay's place markers ([PlaceMarkers]) in a grayscale camera frame and
  * tells how far each one is, from how big it looks: the printed size is known,
  * so it's the same pinhole estimate as for people, using the distance between
- * the QR code's finder patterns. Other QR codes are ignored.
+ * the QR code's finder patterns. Other QR codes are ignored. The camera's view
+ * is [CameraOptics]' assumption unless [horizontalFovDegrees] says otherwise.
+ *
+ * A 15 cm code is read from about a metre in a 480-pixel-wide frame, two at
+ * 960 (rendered frames, the simulation module's MarkerRange tests); beyond
+ * about 45° off its face it isn't read at all.
  *
  * Pure JVM (ZXing), so it's tested with generated images. Not thread-safe.
  */
-class QrMarkerReader(private val horizontalFovDegrees: Double = ASSUMED_HORIZONTAL_FOV_DEGREES) {
+class QrMarkerReader(private val horizontalFovDegrees: Double? = null) {
     private val reader = GenericMultipleBarcodeReader(QRCodeReader())
     private val hints = mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE), DecodeHintType.TRY_HARDER to true)
 
@@ -36,7 +41,9 @@ class QrMarkerReader(private val horizontalFovDegrees: Double = ASSUMED_HORIZONT
         } catch (e: ReaderException) {
             return emptyList()
         }
-        val focalPx = width / (2.0 * tan(Math.toRadians(horizontalFovDegrees / 2)))
+        // Upright frames (navigation) see less across than ones on their side (the scanner).
+        val fov = horizontalFovDegrees ?: CameraOptics.fovAcrossDegrees(width, height)
+        val focalPx = width / (2.0 * tan(Math.toRadians(fov / 2)))
         return results.mapNotNull { result ->
             val nodeId = PlaceMarkers.nodeIdOf(result.text ?: return@mapNotNull null) ?: return@mapNotNull null
             // Finder patterns: bottom-left, top-left, top-right. Their centres sit 3.5 modules
@@ -57,9 +64,6 @@ class QrMarkerReader(private val horizontalFovDegrees: Double = ASSUMED_HORIZONT
     }
 
     companion object {
-        // Phones' main cameras see about this wide; the estimate is a starting point, like ObstacleGeometry's.
-        const val ASSUMED_HORIZONTAL_FOV_DEGREES = 65.0
-
         /**
          * Modules across an Umay marker: "UMAY1:" plus a 36-character id is 42 bytes, which
          * fits QR version 3 (29 modules) at error correction L — what the sheet prints.

@@ -46,6 +46,7 @@ import com.appvalence.umay.perception.CameraAimJudge
 import com.appvalence.umay.perception.CameraFailure
 import com.appvalence.umay.perception.CameraPower
 import com.appvalence.umay.perception.CameraPowerPolicy
+import com.appvalence.umay.perception.CameraOptics
 import com.appvalence.umay.perception.CameraXObstacleDetector
 import com.appvalence.umay.perception.MlKitSignTextReader
 import com.appvalence.umay.perception.SignTextReader
@@ -712,6 +713,7 @@ class NavigationSession internal constructor(
                 "BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS" to BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS,
                 "BarometricFloorChangeDetector.CONFIRM_FRACTION" to BarometricFloorChangeDetector.CONFIRM_FRACTION,
                 "BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS" to BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS,
+                "CameraOptics.LONG_SIDE_FOV_DEGREES" to CameraOptics.LONG_SIDE_FOV_DEGREES,
                 "CameraXObstacleDetector.NUM_THREADS" to CameraXObstacleDetector.NUM_THREADS.toDouble(),
                 "CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS" to CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS.toDouble(),
             ) + listOfNotNull(
