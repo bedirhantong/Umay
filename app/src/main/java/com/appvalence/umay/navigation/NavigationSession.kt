@@ -540,6 +540,7 @@ class NavigationSession internal constructor(
         val previous = cameraPower
         cameraPower = power
         detector.setFrameInterval(if (power == CameraPower.REDUCED) CameraPowerPolicy.REDUCED_FRAME_INTERVAL_MS else CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS)
+        detector.setSavingPower(power == CameraPower.REDUCED)
         recorder?.record(StatusEvent(System.currentTimeMillis(), "CAMERA_${power.name}"))
         when {
             power == CameraPower.OFF -> {
@@ -718,6 +719,8 @@ class NavigationSession internal constructor(
                 "BarometricFloorChangeDetector.CONFIRM_FRACTION" to BarometricFloorChangeDetector.CONFIRM_FRACTION,
                 "BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS" to BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS,
                 "CameraOptics.LONG_SIDE_FOV_DEGREES" to CameraOptics.LONG_SIDE_FOV_DEGREES,
+                "CameraOptics.ANALYSIS_WIDTH_PX" to CameraOptics.ANALYSIS_WIDTH_PX.toDouble(),
+                "CameraOptics.MARKER_FRAME_WIDTH_PX" to CameraOptics.MARKER_FRAME_WIDTH_PX.toDouble(),
                 "CameraXObstacleDetector.NUM_THREADS" to CameraXObstacleDetector.NUM_THREADS.toDouble(),
                 "CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS" to CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS.toDouble(),
             ) + listOfNotNull(

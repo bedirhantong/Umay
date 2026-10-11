@@ -346,7 +346,9 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   düştü; üç farklı rastgelelikte de aynı. Sahada denenecek.
   *Bitti:* harita farkı saklıyor, yönlendirme ipucunu kullanıyor; sahada
   denendi.
-- [ ] **3.6 İşaretleri daha uzaktan okumak** (O). Yönlendirmede işaretler
+- [ ] **3.6 İşaretleri daha uzaktan okumak** (O). **Kod hazır:** kamera
+  1280 × 960 açılıyor, işaretler 960 genişlikte okunuyor (~2 m); pil
+  tasarrufunda 640 (~1 m). Pil ve ısı etkisi telefonda ölçülecek (4.4). Yönlendirmede işaretler
   480 × 640 karelerden okunuyor: 15 cm'lik kod ancak ~1 m'den okunuyor,
   960 × 1280'de 2 m'den (0.12'de ölçüldü). Kamerayı daha yüksek çözünürlükte
   açıp işaretleri tam karede, engel algılamayı küçültülmüş karede çalıştırmak.

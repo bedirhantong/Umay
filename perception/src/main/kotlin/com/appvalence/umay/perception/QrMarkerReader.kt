@@ -22,8 +22,9 @@ import kotlin.math.tan
  * is [CameraOptics]' assumption unless [horizontalFovDegrees] says otherwise.
  *
  * A 15 cm code is read from about a metre in a 480-pixel-wide frame, two at
- * 960 (rendered frames, the simulation module's MarkerRange tests); beyond
- * about 45° off its face it isn't read at all.
+ * 960 — what navigation reads in (CameraOptics.MARKER_FRAME_WIDTH_PX) —
+ * measured on rendered frames (the simulation module's MarkerRangeTest);
+ * beyond about 45° off its face it isn't read at all.
  *
  * Pure JVM (ZXing), so it's tested with generated images. Not thread-safe.
  */

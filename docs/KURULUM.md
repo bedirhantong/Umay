@@ -142,9 +142,10 @@ bir sayfa hazırlar: ortasında 15 cm'lik bir QR kod, altında yerin adı.
   1,3–1,6 m), insanların **yakınından geçtiği** ve yüzünü döndüğü yere
   yapıştırın: kapının yanı, kavşağın köşesi, asansör düğmesinin yanı.
   Parlak ve kırışık olmayan kâğıt ya da laminasyon kullanın.
-- Telefon 15 cm'lik bir işareti ancak **yaklaşık 1 metreden** ve en çok 45°
-  yandan okuyabiliyor (simülasyonda ölçüldü). Koridorun karşı duvarındaki ya
-  da yandan bakılan bir işaret yürürken okunmaz.
+- Telefon 15 cm'lik bir işareti **yaklaşık 2 metreden** (pil tasarrufunda 1
+  metreden) ve en çok 45° yandan okuyabiliyor (simülasyonda ölçüldü, telefonda
+  doğrulanacak). Koridorun karşı duvarındaki ya da yandan bakılan bir işaret
+  yürürken okunmaz.
 - Kritik yerlere öncelik verin: giriş, danışma, asansör ve merdiven önleri,
   kavşaklar, tuvaletler.
 - Kamerası açık bir telefon işareti görünce kullanıcı nerede olduğunu kesin

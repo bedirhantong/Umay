@@ -40,6 +40,8 @@ class CameraMarkerScanner(private val context: Context) {
         val analyzer = executor ?: Executors.newSingleThreadExecutor { Thread(it, "umay-marker-scanner") }.also { executor = it }
         val analysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            // Standing still to find where they are, the walker can afford the full detail.
+            .setResolutionSelector(analysisResolution())
             .build()
             .also { it.setAnalyzer(analyzer, ::analyze) }
         val future = ProcessCameraProvider.getInstance(context)

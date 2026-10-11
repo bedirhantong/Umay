@@ -22,6 +22,19 @@ object CameraOptics {
     /** How wide a [widthPx] × [heightPx] frame sees from top to bottom. */
     fun fovDownDegrees(widthPx: Int, heightPx: Int): Double = fovOf(heightPx, widthPx)
 
+    /**
+     * The analysis frame asked of the camera: 1280 × 960. A printed 15 cm marker is
+     * read from about 2 m in it, against 1 m at the camera's default 640 × 480
+     * (measured on rendered frames: the simulation module's MarkerRangeTest).
+     * Phones without it get the nearest below.
+     */
+    const val ANALYSIS_WIDTH_PX = 1280
+    const val ANALYSIS_HEIGHT_PX = 960
+
+    /** How wide a frame markers are read in: full detail normally, half when saving power (CameraPowerPolicy). */
+    const val MARKER_FRAME_WIDTH_PX = 960
+    const val MARKER_FRAME_WIDTH_SAVING_PX = 640
+
     private fun fovOf(sidePx: Int, otherPx: Int): Double {
         if (sidePx >= otherPx || otherPx <= 0) return LONG_SIDE_FOV_DEGREES
         val halfLong = Math.toRadians(LONG_SIDE_FOV_DEGREES / 2)
