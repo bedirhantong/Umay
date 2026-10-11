@@ -212,6 +212,26 @@ class SurveyRecorderTest {
     }
 
     @Test
+    fun `a resumed footstep walk keeps its heading, whatever the new step detector starts from`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start()
+        // A step detector's first step is "from zero" to wherever the sensor reads (137°).
+        motion.steps.emit(StepEvent(0.7, headingDeltaDeg = 137.0, timestampMs = ++stepTime))
+        motion.steps.emit(StepEvent(0.7, headingDeltaDeg = 90.0, timestampMs = ++stepTime)) // a real right turn
+        advanceUntilIdle()
+        recorder.stop()
+        advanceUntilIdle()
+
+        recorder.start()
+        motion.steps.emit(StepEvent(0.7, headingDeltaDeg = 251.0, timestampMs = ++stepTime)) // the new detector's start
+        advanceUntilIdle()
+
+        val headings = recorder.state.value.trajectory.map { it.headingDeg }
+        assertEquals(listOf(0.0, 90.0, 90.0), headings)
+        recorder.stop()
+    }
+
+    @Test
     fun `coming back to a floor carries on from its last point, not its origin`() = runTest(main.dispatcher) {
         val recorder = recorder()
         recorder.start()

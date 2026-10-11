@@ -250,7 +250,14 @@ class SurveyRecorder @Inject constructor(
     private suspend fun recordFootsteps(stepLength: Double) {
         var trackedFloor = _state.value.currentFloor
         var pdr = continueOnFloor(trackedFloor)
-        motion.steps(stepLength).collect { step ->
+        // A fresh step detector's first step carries the sensor's whole heading (its turn
+        // "from zero"), not a turn the walker made: kept, it would rotate everything walked
+        // after "Kayda devam et" by however the sensor happened to start. So a recording,
+        // new or resumed, carries on facing the way the walk last faced.
+        var first = true
+        motion.steps(stepLength).collect { raw ->
+            val step = if (first) raw.copy(headingDeltaDeg = 0.0) else raw
+            first = false
             val floor = _state.value.currentFloor
             if (floor != trackedFloor) {
                 // PDR has no vertical axis: each floor keeps its own (x, y) frame instead of
