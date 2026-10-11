@@ -4,7 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.CreationExtras
+import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.CompassSums
+import com.appvalence.umay.coremodel.MapNode
+import com.appvalence.umay.coremodel.MapEdge
+import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.positioning.mapping.ArPose
 import com.appvalence.umay.positioning.mapping.DepthFrame
@@ -54,7 +58,7 @@ class SurveyViewModelTest {
         recorder = SurveyRecorder(FakeBeaconScanner(), motion, FakeCapabilities(), settings, FakeSurveyAnnouncer(), camera, FakeSurveyDrafts(), FakeSurveyForeground(), backgroundScope, main.dispatcher, main.dispatcher)
         return SurveyViewModel(
             recorder = recorder,
-            buildings = BuildingRepository({ store }, backgroundScope, main.dispatcher),
+            buildings = BuildingRepository({ store }, backgroundScope, main.dispatcher).apply { refresh() },
             settings = settings,
             capabilities = FakeCapabilities(hasBarometer = true),
             speaker = FakeSpeaker(),
@@ -145,6 +149,43 @@ class SurveyViewModelTest {
         assertEquals(10.0, corner.y, 0.3)
         assertEquals(20.0, floor.edges.sumOf { it.distanceMeters }, 0.5)
         assertNotNull(floor.occupancy?.decodeCells())
+    }
+
+    @Test
+    fun `a re-walked section is merged into the saved map it shares places with`() = runTest(main.dispatcher) {
+        // Saved: Giriş → Salon, 2.72 m north (four of this stride's steps).
+        store.files["Ofis"] = BuildingMap(
+            id = "Ofis",
+            floors = listOf(
+                FloorMap(
+                    0,
+                    listOf(MapNode("g", 0.0, 0.0, NodeType.WAYPOINT, name = "Giriş"), MapNode("s", 0.0, 2.72, NodeType.WAYPOINT, name = "Salon")),
+                    listOf(MapEdge("g", "s", true, 2.72)),
+                ),
+            ),
+        )
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.startRecording(SurveyMode.FOOTSTEPS)
+        motion.steps.emit(StepEvent(0.68, 0.0, 1))
+        advanceTimeBy(1)
+        viewModel.tag("Giriş", NodeType.WAYPOINT)
+        repeat(2) { motion.steps.emit(StepEvent(0.68, 0.0, 2L + it)) }
+        advanceTimeBy(1)
+        viewModel.tag("Yazıcı", NodeType.WAYPOINT)
+        repeat(2) { motion.steps.emit(StepEvent(0.68, 0.0, 5L + it)) }
+        advanceTimeBy(1)
+        viewModel.tag("Salon", NodeType.WAYPOINT)
+        viewModel.stopRecording()
+        advanceTimeBy(1)
+
+        viewModel.addSectionTo("Ofis", replaceOld = true) { _, _ -> "" }
+        advanceUntilIdle()
+
+        assertEquals(SurveySaveResult.SectionAdded("Ofis", sharedPlaces = 2, newPlaces = 1, replacedWays = 1), viewModel.save.value.result)
+        val floor = store.files.getValue("Ofis").floors.single()
+        assertEquals(setOf("Giriş", "Yazıcı", "Salon"), floor.nodes.map { it.name }.toSet())
+        assertEquals(2, floor.edges.size)
     }
 
     @Test

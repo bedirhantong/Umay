@@ -288,7 +288,13 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   değiştirme, yer silme, yanlış bağlantıyı kaldırma, duvar haritasında
   hatalı lekeyi silme. Erişilebilir olmalı (liste tabanlı düzenleme).
   *Bitti:* bir haritadaki hatalar yeniden haritalamadan düzeltiliyor.
-- [ ] **2.5 Haritanın bir kısmını yeniden çıkarmak** (O). Masalar ve
+- [ ] **2.5 Haritanın bir kısmını yeniden çıkarmak** (O). **Kod hazır:**
+  Beacon Tarayıcı'da yürüyüş bitince "Var olan bir haritaya bölüm olarak
+  ekle". Bölüm haritada olan en az iki yerden (aynı adla) geçmeli; o yerler
+  bölümü haritaya oturtur (döndürme, kaydırma, adım boyu hatası için ölçek).
+  Yeni yerler eklenir, yeniden yürünen yolun eskisi kaldırılır (istenirse
+  kalır), bölümün gördüğü duvar hücreleri ve sinyal örnekleri eskisinin
+  yerine geçer (`MapSections`). Telefonda denenecek. Masalar ve
   sandalyeler yer değiştirir (ofis, bekleme salonu); bütün binayı baştan haritalamak
   yerine bir bölümü yeniden yürüyüp mevcut haritaya eklemek: bilinen bir
   yerde başlayıp bilinen bir yerde bitirmek, aradaki yol ve duvar haritası

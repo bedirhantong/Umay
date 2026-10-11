@@ -4,7 +4,9 @@ import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appvalence.umay.common.DeviceCapabilities
+import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.MapDoors
+import com.appvalence.umay.coremodel.MapSections
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.di.DefaultDispatcher
 import com.appvalence.umay.feedback.Speaker
@@ -30,6 +32,18 @@ import javax.inject.Inject
 sealed interface SurveySaveResult {
     data class Saved(val points: Int, val connections: Int, val floors: Int) : SurveySaveResult
     data object Failed : SurveySaveResult
+
+    /** The walk was merged into an existing map as a re-surveyed section (see MapSections). */
+    data class SectionAdded(val buildingId: String, val sharedPlaces: Int, val newPlaces: Int, val replacedWays: Int) : SurveySaveResult
+
+    /** The walk shared fewer than two places with the map's floor, so it couldn't be placed on it. */
+    data class SectionTooFewKnownPlaces(val floorIndex: Int, val found: Int) : SurveySaveResult
+
+    /** The walk was on a floor the map doesn't have. */
+    data class SectionUnknownFloor(val floorIndex: Int) : SurveySaveResult
+
+    /** The walk's places are much farther apart, or closer, than the map's: another building, or floor? */
+    data object SectionDoesNotFit : SurveySaveResult
 }
 
 data class SurveySaveState(val saving: Boolean = false, val result: SurveySaveResult? = null)
@@ -45,6 +59,9 @@ class SurveyViewModel @Inject constructor(
     @param:DefaultDispatcher private val default: CoroutineDispatcher,
 ) : ViewModel() {
     val survey: StateFlow<SurveyState> = recorder.state
+
+    /** Maps already saved, for adding a re-surveyed section to one. */
+    val savedBuildings: StateFlow<List<BuildingMap>?> = buildings.buildings
 
     /** Whether "survey with the camera" can be offered, and what's missing if not. */
     val cameraAvailability: StateFlow<ArAvailability> = camera.availability
@@ -103,28 +120,7 @@ class SurveyViewModel @Inject constructor(
         if (name.isEmpty() || _save.value.saving) return
         _save.value = SurveySaveState(saving = true)
         viewModelScope.launch {
-            val map = withContext(default) {
-                val cameraSurvey = survey.mode == SurveyMode.CAMERA
-                val built = BeaconMapBuilder.buildFromWaypoints(
-                    buildingId = name,
-                    taggedWaypoints = survey.taggedWaypoints,
-                    beaconResults = survey.results,
-                    anchorName = anchorName,
-                    trajectory = survey.trajectory,
-                    radioSamples = RadioMapBudget.fit(survey.radioSamples),
-                )
-                val wallMaps = WallMapBudget.fit(survey.wallMaps)
-                built.copy(
-                    // Doors cut into the walls after fitting, so a coarser map still gets them.
-                    // Then shortcuts across open space the camera saw (see OpenSpaceLinks).
-                    // And how the compass lines up with each floor, for navigation's starting direction.
-                    floors = built.floors.map {
-                        OpenSpaceLinks.add(MapDoors.apply(it.copy(occupancy = wallMaps[it.floorIndex], compass = survey.compass[it.floorIndex]?.calibration())))
-                    },
-                    // A camera-measured map isn't steps × stride, so there's no stride to rescale by.
-                    surveyStepLengthMeters = if (cameraSurvey) null else survey.stepLengthMeters ?: settings.stepLengthMeters,
-                )
-            }
+            val map = withContext(default) { buildMap(survey, name, anchorName) }
             val result = if (buildings.save(map)) {
                 SurveySaveResult.Saved(
                     points = map.floors.sumOf { it.nodes.size },
@@ -136,6 +132,53 @@ class SurveyViewModel @Inject constructor(
             }
             _save.value = SurveySaveState(result = result)
         }
+    }
+
+    /**
+     * Merges this walk into the saved map [buildingId] as a re-surveyed section
+     * (docs/YOL_HARITASI.md 2.5): it must start and end at places the map has, named the
+     * same. With [replaceOld], a way it re-walked replaces the map's old drawing of it.
+     */
+    fun addSectionTo(buildingId: String, replaceOld: Boolean, anchorName: (floor: Int, number: Int) -> String) {
+        val survey = survey.value
+        if (_save.value.saving) return
+        val existing = buildings.buildings.value?.firstOrNull { it.id == buildingId } ?: return
+        _save.value = SurveySaveState(saving = true)
+        viewModelScope.launch {
+            val merged = withContext(default) { MapSections.merge(existing, buildMap(survey, buildingId, anchorName), replaceOld) }
+            val result = when (merged) {
+                is MapSections.Result.Merged ->
+                    if (buildings.save(merged.map)) SurveySaveResult.SectionAdded(buildingId, merged.sharedPlaces, merged.newPlaces, merged.replacedWays) else SurveySaveResult.Failed
+                is MapSections.Result.TooFewKnownPlaces -> SurveySaveResult.SectionTooFewKnownPlaces(merged.floorIndex, merged.found)
+                is MapSections.Result.UnknownFloor -> SurveySaveResult.SectionUnknownFloor(merged.floorIndex)
+                is MapSections.Result.DoesNotFit -> SurveySaveResult.SectionDoesNotFit
+            }
+            _save.value = SurveySaveState(result = result)
+        }
+    }
+
+    /** The walk as a map: its own, or a section to merge into another. */
+    private fun buildMap(survey: SurveyState, name: String, anchorName: (floor: Int, number: Int) -> String): BuildingMap {
+        val cameraSurvey = survey.mode == SurveyMode.CAMERA
+        val built = BeaconMapBuilder.buildFromWaypoints(
+            buildingId = name,
+            taggedWaypoints = survey.taggedWaypoints,
+            beaconResults = survey.results,
+            anchorName = anchorName,
+            trajectory = survey.trajectory,
+            radioSamples = RadioMapBudget.fit(survey.radioSamples),
+        )
+        val wallMaps = WallMapBudget.fit(survey.wallMaps)
+        return built.copy(
+            // Doors cut into the walls after fitting, so a coarser map still gets them.
+            // Then shortcuts across open space the camera saw (see OpenSpaceLinks).
+            // And how the compass lines up with each floor, for navigation's starting direction.
+            floors = built.floors.map {
+                OpenSpaceLinks.add(MapDoors.apply(it.copy(occupancy = wallMaps[it.floorIndex], compass = survey.compass[it.floorIndex]?.calibration())))
+            },
+            // A camera-measured map isn't steps × stride, so there's no stride to rescale by.
+            surveyStepLengthMeters = if (cameraSurvey) null else survey.stepLengthMeters ?: settings.stepLengthMeters,
+        )
     }
 
     fun speak(text: String) = speaker.speakNow(text)

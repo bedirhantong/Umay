@@ -40,6 +40,14 @@
         <item quantity="one">%d kat</item>
         <item quantity="other">%d kat</item>
     </plurals>
+    <plurals name="count_new_places">
+        <item quantity="one">%d yeni yer</item>
+        <item quantity="other">%d yeni yer</item>
+    </plurals>
+    <plurals name="count_replaced_ways">
+        <item quantity="one">%d yol yenilendi</item>
+        <item quantity="other">%d yol yenilendi</item>
+    </plurals>
     <plurals name="count_points">
         <item quantity="one">%d nokta</item>
         <item quantity="other">%d nokta</item>
@@ -368,6 +376,17 @@
     <string name="survey_saved">Kaydedildi: %1$s, %2$s, %3$s.</string>
     <string name="survey_save_failed">Kaydedilemedi, cihazda yer kalmamış olabilir. Tekrar dene.</string>
     <string name="survey_save">Haritayı kaydet</string>
+    <string name="survey_section_title">Ya da var olan bir haritaya bölüm olarak ekle</string>
+    <string name="survey_section_body">Yerleri değişen bir bölümü yeniden yürüdüysen: haritada olan bir yerde başla ve haritada olan bir yerde bitir, ikisine de haritadaki adlarını ver. Bölüm bu yerlere göre haritaya oturtulur.</string>
+    <string name="survey_section_replace">Yeniden yürünen yolun eskisini kaldır</string>
+    <string name="survey_section_add">Bölümü haritaya ekle</string>
+    <string name="survey_section_added">%1$s haritasına eklendi: %2$s, %3$s.</string>
+    <plurals name="survey_section_too_few">
+        <item quantity="one">Bölüm, haritanın %2$s planında yalnızca %1$d yerden geçiyor. En az iki tanesi haritadaki adlarıyla işaretlenmeli.</item>
+        <item quantity="other">Bölüm, haritanın %2$s planında yalnızca %1$d yerden geçiyor. En az iki tanesi haritadaki adlarıyla işaretlenmeli.</item>
+    </plurals>
+    <string name="survey_section_unknown_floor">Haritada %1$s yok. Bölümü yürürken katı haritadakiyle aynı ayarla.</string>
+    <string name="survey_section_does_not_fit">Bölüm haritaya oturmuyor: ortak yerleri arasındaki uzaklıklar haritadakinden çok farklı. Doğru bina mı, yerlerin adları doğru mu?</string>
     <plurals name="survey_discovered">
         <item quantity="one">%1$d keşfedilen iBeacon</item>
         <item quantity="other">%1$d keşfedilen iBeacon</item>

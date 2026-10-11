@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
@@ -40,11 +42,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -162,6 +166,7 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
 
     val survey by viewModel.survey.collectAsStateWithLifecycle()
     val save by viewModel.save.collectAsStateWithLifecycle()
+    val savedBuildings by viewModel.savedBuildings.collectAsStateWithLifecycle()
     val cameraAvailability by viewModel.cameraAvailability.collectAsStateWithLifecycle()
     val cameraMeasuresWalls by viewModel.cameraMeasuresWalls.collectAsStateWithLifecycle()
 
@@ -303,6 +308,10 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
                     save = save,
                     onSave = { name ->
                         viewModel.saveMap(name) { floor, number -> resources.getString(R.string.survey_anchor_name, floor, number) }
+                    },
+                    savedBuildings = savedBuildings.orEmpty().map { it.id },
+                    onAddSection = { buildingId, replaceOld ->
+                        viewModel.addSectionTo(buildingId, replaceOld) { floor, number -> resources.getString(R.string.survey_anchor_name, floor, number) }
                     },
                 )
             }
@@ -720,8 +729,12 @@ private fun SaveMapCard(
     trajectoryPointCount: Int,
     save: SurveySaveState,
     onSave: (String) -> Unit,
+    savedBuildings: List<String>,
+    onAddSection: (buildingId: String, replaceOld: Boolean) -> Unit,
 ) {
     var buildingName by rememberSaveable { mutableStateOf("") }
+    var sectionOf by rememberSaveable { mutableStateOf<String?>(null) }
+    var replaceOld by rememberSaveable { mutableStateOf(true) }
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(modifier = Modifier.padding(16.dp)) {
             if (resultCount == 0 && taggedWaypointCount == 0) {
@@ -762,6 +775,45 @@ private fun SaveMapCard(
                 Icon(Icons.Filled.Save, contentDescription = null)
                 Text(text = stringResource(R.string.survey_save), modifier = Modifier.padding(start = 8.dp))
             }
+            if (savedBuildings.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                Text(text = stringResource(R.string.survey_section_title), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = stringResource(R.string.survey_section_body),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                )
+                Column(modifier = Modifier.selectableGroup()) {
+                    savedBuildings.forEach { id ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(selected = sectionOf == id, role = Role.RadioButton, onClick = { sectionOf = id }),
+                        ) {
+                            RadioButton(selected = sectionOf == id, onClick = null)
+                            Text(text = id, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .toggleable(value = replaceOld, role = Role.Switch, onValueChange = { replaceOld = it }),
+                ) {
+                    Text(text = stringResource(R.string.survey_section_replace), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Switch(checked = replaceOld, onCheckedChange = null)
+                }
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    enabled = sectionOf != null && !save.saving,
+                    onClick = { sectionOf?.let { onAddSection(it, replaceOld) } },
+                ) { Text(stringResource(R.string.survey_section_add)) }
+            }
             save.result?.let { result ->
                 Text(
                     text = when (result) {
@@ -772,9 +824,19 @@ private fun SaveMapCard(
                             countText(R.plurals.count_floors, result.floors),
                         )
                         SurveySaveResult.Failed -> stringResource(R.string.survey_save_failed)
+                        is SurveySaveResult.SectionAdded -> stringResource(
+                            R.string.survey_section_added,
+                            result.buildingId,
+                            countText(R.plurals.count_new_places, result.newPlaces),
+                            countText(R.plurals.count_replaced_ways, result.replacedWays),
+                        )
+                        is SurveySaveResult.SectionTooFewKnownPlaces ->
+                            pluralStringResource(R.plurals.survey_section_too_few, result.found, result.found, stringResource(R.string.common_floor, result.floorIndex))
+                        is SurveySaveResult.SectionUnknownFloor -> stringResource(R.string.survey_section_unknown_floor, stringResource(R.string.common_floor, result.floorIndex))
+                        SurveySaveResult.SectionDoesNotFit -> stringResource(R.string.survey_section_does_not_fit)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (result is SurveySaveResult.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    color = if (result is SurveySaveResult.Saved || result is SurveySaveResult.SectionAdded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }

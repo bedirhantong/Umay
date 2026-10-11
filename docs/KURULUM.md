@@ -158,6 +158,16 @@ bir sayfa hazırlar: ortasında 15 cm'lik bir QR kod, altında yerin adı.
 
 ---
 
+### Bir bölümü yeniden çıkarmak
+
+Masalar, dolaplar ya da bir koridor değiştiyse bütün binayı baştan yürümek
+gerekmez. **Beacon Tarayıcı**'da yeni bir yürüyüş başlatın; haritada olan bir
+yerde başlayıp haritada olan bir yerde bitirin ve bu ikisine haritadaki
+adlarını aynen verin. Arada yeni yerler işaretleyebilirsiniz. Yürüyüş bitince
+**Var olan bir haritaya bölüm olarak ekle**'yi seçip binayı işaretleyin.
+Umay bölümü ortak yerlere göre haritaya oturtur; "Yeniden yürünen yolun
+eskisini kaldır" açıksa o iki yer arasındaki eski yol yenisiyle değişir.
+
 ## 5. Beacon'ları denetlemek
 
 **Dosyalar → (bina) → Düzenle → Beacon durumu** ekranını açıp binada
