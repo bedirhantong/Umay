@@ -199,10 +199,12 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   *Bitti:* kayıtlı bir yürüyüş emülatörde baştan sona oynuyor, söylenen
   yönergeler kayıt altında.
 
-- [ ] **0.16 Çok katlı sanal bina** (O). Simülasyon bugün tek katlı.
-  Merdiven ve asansörlü iki katlı bir bina; kat değişimi (basınç sensörü
-  olan ve olmayan telefon, adımla kendiliğinden onay), merdivensiz rota
-  (4.8) ve kat değiştiren rehberli yürüyüş senaryoları.
+- [x] **0.16 Çok katlı sanal bina** (O). Merdiven ve asansörlü iki katlı
+  sanal ofis (`VirtualBuildings.twoFloorOffice`). Kat değişimi (basınç
+  sensörü olan ve olmayan telefon, adımla kendiliğinden onay, elle onay),
+  merdivensiz rota ve kat değiştiren rehberli yürüyüş senaryoları
+  (`MultiFloorWalkTest`). Kat onayı kararı uygulamanın kendi kodu
+  (`FloorChangeConfirmation`, `NavigationSession`'dan ayrıldı).
   *Bitti:* kat değiştiren yürüyüşler hata eşikleriyle testte.
 - [ ] **0.17 Gerçek haritayla sanal yürüyüş** (K). 0.2'de çıkarılan
   gerçek bir haritayı (kafe ya da koridor) simülasyona yükleyip sanal kör
@@ -508,6 +510,20 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Çok katlı sanal bina (0.16) kat değişiminde dört gerçek
+  hata buldu, düzeltildi; kat değiştiren 54 sanal yürüyüşün 53'ü varıyor:
+  - "Asansörle yukarı çık" ancak tahmin asansöre 2 m yaklaşınca
+    söyleniyordu; çıkmazdaki bir asansörde bekleyen biri adım atmadığı için
+    hiç duymuyordu. Merdivene ya da asansöre giden yönerge artık sonunu da
+    söylüyor ("…, sonra/oradan asansörle yukarı çık, Kat 1.").
+  - Basınç sensörü kat değişimini yönlendirme beklemeden fark ederse
+    yok sayılıyordu; onaylanınca da rota kullanıcıyı eski kata geri
+    yolluyordu.
+  - Çıkmazdaki merdivende 20 adım çıkış, konumu başka bir koridora
+    kaçırıyordu.
+  - Basınç sensörü onayı birkaç adım geç geliyor; konum artık
+    sahanlıktan çıkan yollar boyunca yayılarak yeniden başlıyor.
 
 - **11 Ekim 2026:** 0.9 (saha kaydı özeti telefonda), 4.10 (yanından
   geçilen engel), 3.5 (pusula) kodlandı. Yolda iki gerçek hata bulundu:
