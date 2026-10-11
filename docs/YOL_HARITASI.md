@@ -198,6 +198,15 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   (`ObstacleWalkTest`).
   *Bitti:* bir ofis sahnesinde engel ve yer işareti senaryoları
   otomatik koşuyor, sonuçlar ilerleme kaydında.
+- [ ] **0.19 Klinikteki açığı kapatmak** (O). 0.15'in doğrulama binası,
+  uygulamanın ofise ve kurum katına göre ayarlandığını gösterdi. Klinikte
+  yalnız beacon'la 21/36 yürüyüş varıyor, ofiste 34/36. İki neden görüldü:
+  uzun koridorda tahmin 2–2,5 m geride kalıyor (adım boyu farkı beacon'la
+  düzelmiyor), kapıdan başlayınca yön ilk köşeden önce öğrenilemiyor.
+  Kural: düzeltme ayar binalarında (ofis, kurum katı) seçilir, klinik
+  yalnız sonucu ölçer. Klinikteki sayılar sabit seçmek için kullanılırsa
+  doğrulama değeri kalmaz; o zaman yeni bir doğrulama binası gerekir.
+  *Bitti:* klinikte yalnız beacon'la en az 30/36, ofiste kötüleşme yok.
 - [ ] **0.14 Foto-gerçekçi ofis kopyası** (B). Gerçek bir ofisin telefon
   videosundan Gaussian splatting ile 3B kopya (nerfstudio ya da Mac'te
   OpenSplat; tek seferlik GPU işi). Kareleri 0.12'nin sanal kamerası yerine
