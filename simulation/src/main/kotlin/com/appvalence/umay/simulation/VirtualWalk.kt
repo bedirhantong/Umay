@@ -3,6 +3,7 @@ package com.appvalence.umay.simulation
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.StepEvent
+import com.appvalence.umay.perception.QrMarkerReader
 import com.appvalence.umay.positioning.particle.GraphParticleFilter
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -33,6 +34,12 @@ internal data class Aids(
     val markerNodeIds: Set<String> = emptySet(),
     /** Fingerprints at named places too (FingerprintMatcher), not just the radio map along corridors. */
     val placeFingerprints: Boolean = true,
+    /**
+     * Markers read from rendered camera frames ([VirtualCamera]) by the app's own reader,
+     * hung on the wall nearest each marked place, rather than seen perfectly within
+     * MARKER_RANGE_METERS.
+     */
+    val camera: Boolean = false,
     /** The phone hands the filter its beacon list every this many steps (~1 s at normal pace). */
     val scanEverySteps: Int = 2,
 )
@@ -42,6 +49,9 @@ private const val MARKER_RANGE_METERS = 4.0
 private const val CAMERA_HALF_FOV_DEG = 30.0
 private const val MARKER_DISTANCE_NOISE_FRACTION = 0.1
 private const val MARKER_BEARING_NOISE_DEG = 3.0
+
+/** Beyond this a rendered marker is too small to read (see MarkerRangeTest), so no frame is rendered. */
+private const val CAMERA_LOOK_METERS = 2.5
 
 /** Particles drawn per frame in the viewer: enough to show the cloud's shape, few enough to keep the page small. */
 private const val PARTICLES_PER_FRAME = 60
@@ -84,11 +94,19 @@ internal class VirtualPhone(
 ) {
     val filter = GraphParticleFilter(map, startNodeId, config, filterRandom)
     private val scanner = VirtualScanner(building, random, phone)
+    private val camera = if (aids.camera) VirtualCamera(building, VirtualCamera.placeMarkers(building), random = Random(random.nextLong())) else null
+    private val markerReader = QrMarkerReader()
     private val gyroOffsetDeg = random.nextDouble(0.0, 360.0)
     private var gyroHeadingDeg = 0.0
     private var steps = 0
 
     var timeMs = 1_000L
+        private set
+
+    /** Camera frames rendered, and markers read from them (see [Aids.camera]). */
+    var framesRendered = 0
+        private set
+    var markersRead = 0
         private set
     var estimate: Position = filter.estimate(timeMs)
         private set
@@ -111,6 +129,19 @@ internal class VirtualPhone(
                 filter.onBeaconReadings(sightings, timeMs)?.let { notes += "Parmak izi eşleşmesi: ${it.node.name}" }
                 estimate = filter.estimate(timeMs)
             }
+        }
+        if (camera != null) {
+            // Rendering is the costly part: only when a marker is close enough to have a chance.
+            if (camera.markersInView(x, y, headingDeg, maxMeters = CAMERA_LOOK_METERS).isNotEmpty()) {
+                framesRendered++
+                for (sighting in markerReader.read(camera.render(x, y, headingDeg), camera.width, camera.height, timeMs)) {
+                    markersRead++
+                    val seen = filter.onMarker(sighting.nodeId, sighting.distanceMeters, sighting.bearingDeg, timeMs) ?: continue
+                    estimate = seen
+                    notes += "Kamera yer işaretini okudu: ${building.nodesById[sighting.nodeId]?.name}, %.1f m".format(sighting.distanceMeters)
+                }
+            }
+            return notes
         }
         for (markerId in aids.markerNodeIds) {
             val marker = building.nodesById.getValue(markerId)

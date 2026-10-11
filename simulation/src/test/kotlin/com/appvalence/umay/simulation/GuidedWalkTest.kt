@@ -91,6 +91,22 @@ class GuidedWalkTest {
         assertReached(results, atLeast = results.size / 2)
     }
 
+    @Test
+    fun `printed markers, read by the camera, rescue a walker the app has misplaced`() {
+        // Markers hung on the nearest wall and read from rendered frames by the app's own
+        // reader: walking normally they're hardly ever close and square enough to read, but
+        // a walker the app has put in the wrong place wanders past one sooner or later.
+        val wrongStart = { a: String -> if (a == "lobi") "giris" else "lobi" }
+        val trips = TRIPS.take(4)
+        val withMarkers = trips.flatMap { (a, b) ->
+            (1..3).map { simulateGuidedWalk(office, a, b, it, phrases = phrases, aids = Aids(markerNodeIds = office.markerNodeIds, camera = true), appStartNodeId = wrongStart(a)) }
+        }
+        val without = trips.flatMap { (a, b) -> (1..3).map { simulateGuidedWalk(office, a, b, it, phrases = phrases, aids = Aids(), appStartNodeId = wrongStart(a)) } }
+        assertTrue(withMarkers.sumOf { it.markersRead } > 0, "no marker was ever read")
+        val rescued = withMarkers.count { it.reached } - without.count { it.reached }
+        assertTrue(rescued >= 3, "markers rescued $rescued more walks of ${withMarkers.size}")
+    }
+
     private companion object {
         const val SEEDS = 6
         val TRIPS = listOf(

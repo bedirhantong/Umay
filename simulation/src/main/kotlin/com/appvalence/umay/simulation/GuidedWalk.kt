@@ -43,6 +43,9 @@ internal data class GuidedWalkResult(
     val firstInstructionStep: Int?,
     val errorsMeters: List<Double>,
     val recording: WalkRecording?,
+    /** Camera frames rendered and markers read from them, with [Aids.camera]. */
+    val framesRendered: Int = 0,
+    val markersRead: Int = 0,
 ) {
     /** The app said "arrived" with the walker really there. */
     val reached: Boolean get() = arrived && (arrivalErrorMeters ?: Double.MAX_VALUE) <= REACHED_METERS
@@ -176,6 +179,8 @@ internal fun simulateGuidedWalk(
         firstInstructionStep = firstInstruction,
         errorsMeters = errors,
         recording = null,
+        framesRendered = device.framesRendered,
+        markersRead = device.markersRead,
     )
     if (!record) return@runBlocking result
     result.copy(
