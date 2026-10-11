@@ -162,6 +162,14 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   saha kayıtları için `UMAY_FIELD_LOGS` ile `FieldLogRecordingTest` (README
   "Saha testi"). Saha kaydı bugünkü kodla yeniden oynatılır ve yürüyüş
   sırasındaki tahminle yan yana gösterilir. Sayfa internete istek yapmaz.
+- [ ] **0.15 Simülatörü sahaya göre ayarlamak** (O). İlk saha kayıtları
+  (0.3) gelince aynı bina simülasyonda kurulur ve hata dağılımları
+  karşılaştırılır: sinyal, adım ve kayma değerleri kayıtlardan alınır.
+  Simülasyon sahayı tutturamıyorsa sayılarına güvenilmez. Yürüyen modeline
+  konuşma süresi, mesafeyi yanlış tahmin, yana kayma eklenir; ayar seçilen
+  senaryolar ile doğrulananlar ayrılır.
+  *Bitti:* bir binada simülasyonun ve sahanın ortalama konum hatası %30
+  içinde.
 - [x] **0.12 Sanal ofis** (B). Sanal açık ofis (duvarlar, masalar, odalar,
   beacon'lar, yer işaretleri) ve uygulamanın söylediklerine göre yürüyen,
   binayı bilmeyen sanal kör kullanıcı (`GuidedWalkTest`). Kamera, telefonun
@@ -457,6 +465,19 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Simülasyonun en iyimser varsayımı kaldırıldı: harita artık
+  binanın kusursuz planı değil, adım sayarak haritalayan sanal bir kişinin
+  uygulamanın kendi koduyla çıkardığı harita olabiliyor (`VirtualSurveyor`).
+  Bu, gerçek bir eksik buldu. Adım boyu %11 yanlış, jiroskobu kayan bir
+  haritacıda geri dönülen kavşaklar 5 m'den fazla kayıyor ve birleşmiyordu.
+  Ofiste 4–6 kavşak birleşmedi, rehberli yürüyüşlerin yalnız 6–19/24'ü
+  vardı. Adım sayarak çıkarılan haritaya döngü kapatma eklendi
+  (`SurveyLoopClosure`): aynı ada geri dönmek aradaki kaymayı geri alıyor,
+  15 m içindeki aynı adlar birleşiyor. Birleşmeyen kavşak 0, varış 23–24/24,
+  yerlerin ortalama hatası 1,4 m'den 0,7 m'ye indi. Tek büyük döngüdeki
+  dönme kayması bununla düzelmiyor (yalnız birleşme kazancı); KURULUM 3.
+  adım buna göre güncellendi.
 
 - **11 Ekim 2026:** Sanal ofis tamamlandı (0.12). Bulunup düzeltilenler:
   - Yönlendirmede işaretin ve engelin uzaklığını hesaplayan kamera

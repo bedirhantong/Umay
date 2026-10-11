@@ -93,7 +93,11 @@ Haritayı gören bir kişi, binada bir kez yürüyerek çıkarır. Haritayı ç�
    tanımaz; yönlendirmedeki uyarılar yalnızca burada işaretlenenler içindir.
 5. Bir **kavşağa ya da merdivene geri döndüğünüzde** ona ilk verdiğiniz adın
    aynısını tekrar verin. Umay ikisini tek yer sayar ve koridorları orada
-   birleştirir. Farklı ad verirseniz koridorlar birleşmez.
+   birleştirir. Farklı ad verirseniz koridorlar birleşmez. Adım sayarak
+   çıkarıyorsanız bu ayrıca haritayı düzeltir: aynı yere geri döndüğünüzü
+   bilen Umay, aradaki yürüyüşte biriken kaymayı geri alır. Bu yüzden her
+   kola girip aynı kavşağa dönmek ve orada adı tekrarlamak, haritayı tek
+   seferde uzun bir yürüyüşle çıkarmaktan daha doğru sonuç verir.
 6. Kat değiştirirken merdivenin ya da asansörün iki ucunu ayrı ayrı
    işaretleyin ("Doğu merdiveni zemin", "Doğu merdiveni 1. kat"). Telefonda
    basınç sensörü varsa kat kendiliğinden değişir; yoksa +/− ile değiştirin.
