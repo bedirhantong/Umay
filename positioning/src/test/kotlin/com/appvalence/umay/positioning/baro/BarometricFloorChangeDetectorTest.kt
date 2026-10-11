@@ -81,6 +81,32 @@ class BarometricFloorChangeDetectorTest {
     }
 
     @Test
+    fun `a new route halfway up the stairs still counts the whole climb`() {
+        val detector = BarometricFloorChangeDetector()
+        detector.feed(steady(0.0, 3))
+        detector.arm(fromFloor = 0, toFloor = 1)
+        detector.feed(ramp(0.0, 1.6, 4), startMs = 3_000L)
+        // Rerouted on the stairs: for a moment the route expects no floor change, then does again.
+        detector.disarm()
+        detector.arm(fromFloor = 0, toFloor = 1)
+
+        assertEquals(1, detector.feed(ramp(1.6, 3.2, 4) + steady(3.2, 4), startMs = 7_000L).size)
+    }
+
+    @Test
+    fun `an old baseline is not reused`() {
+        val detector = BarometricFloorChangeDetector()
+        detector.feed(steady(0.0, 3))
+        detector.arm(fromFloor = 0, toFloor = 1)
+        detector.disarm()
+        // Two minutes on this floor while the weather lowered the pressure by two metres' worth.
+        detector.feed(steady(2.2, 120), startMs = 3_000L)
+        detector.arm(fromFloor = 0, toFloor = 1)
+
+        assertEquals(emptyList(), detector.feed(steady(2.2, 4), startMs = 123_000L))
+    }
+
+    @Test
     fun `nothing is confirmed unless armed`() {
         val detector = BarometricFloorChangeDetector()
 

@@ -98,6 +98,10 @@ internal data class GuidedWalkResult(
  * lift, and the app learns of it the way it does on a phone
  * (FloorChangeConfirmation): from the [barometer], else from footsteps on
  * stairs, else from the walker pressing "Kat değiştirdim" on leaving the lift.
+ *
+ * The app's sentences take time to say ([speechCharsPerSecond], see
+ * [SpokenQueue]); the walker acts on each once it's been said, and walks on
+ * meanwhile, drifting a little off the corridor's centre line ([WalkerModel]).
  */
 internal fun simulateGuidedWalk(
     building: VirtualBuilding,
@@ -116,8 +120,11 @@ internal fun simulateGuidedWalk(
     obstacles: List<VirtualObstacle> = emptyList(),
     survey: SurveyedMap? = null,
     barometer: Boolean = true,
+    speechCharsPerSecond: Double = SpokenQueue.TTS_CHARS_PER_SECOND,
 ): GuidedWalkResult = runBlocking {
     val random = Random(seed)
+    // The walker's own quirks, apart from everything else's randomness.
+    val quirks = Random(seed + 5_000)
     val surveyed = survey ?: SurveyedMap.ideal(
         building.surveyedMap(Random(seed + 1_000), withRadio = aids.beacons, phone = phone, placeFingerprints = aids.beacons && aids.placeFingerprints),
     )
@@ -125,7 +132,11 @@ internal fun simulateGuidedWalk(
     fun mapIdOf(id: String) = surveyed.mapId(id) ?: error("the map has no place for $id")
     val device = VirtualPhone(building, surveyed, mapIdOf(appStartNodeId), walker, aids, config, random, Random(seed + 2_000), phone, Random(seed + 4_000))
     val destination = building.nodesById.getValue(destinationNodeId)
-    val follower = InstructionFollower(building, building.nodesById.getValue(startNodeId), random)
+    val distanceSense = (1.0 + quirks.gaussian() * walker.distanceJudgmentSd).coerceIn(MIN_DISTANCE_SENSE, MAX_DISTANCE_SENSE)
+    val follower = InstructionFollower(building, building.nodesById.getValue(startNodeId), random, distanceSense)
+    val voice = SpokenQueue(speechCharsPerSecond)
+    var veer = 0.0
+    var listenedMs = 0L
     val shortest = AStarPathfinder.findPathAcrossFloors(building.surveyedMap(Random(0), withRadio = false), startNodeId, destinationNodeId)
         ?.zipWithNext { a, b -> hypot(b.x - a.x, b.y - a.y) }?.sum()
         ?: error("no way from $startNodeId to $destinationNodeId in ${building.name}")
@@ -178,6 +189,17 @@ internal fun simulateGuidedWalk(
     var altitude = building.floorOf(startNodeId) * building.floorHeightMeters
     var lastState: NavigationState? = null
     if (record) frames += device.frame(Point(follower.x, follower.y), listOf("Yola çıkıyor: ${follower.startNote}"), truthFloor = follower.floor)
+    // Where the walker really is: beside the corridor's centre line by [veer].
+    fun truth(): Point = follower.beside(veer)
+
+    // How far the walker had walked at each footstep: a sentence's distances count from when its saying began.
+    val walkedAt = ArrayList<Pair<Long, Double>>().apply { add(device.timeMs to 0.0) }
+    fun hearSaid(byMs: Long, notes: MutableList<String>) {
+        for (sentence in voice.heard(byMs)) {
+            val walkedThen = walkedAt.lastOrNull { it.first <= sentence.startedAtMs }?.second ?: 0.0
+            follower.hear(sentence.text, sentence.opensAlert, follower.walkedMeters - walkedThen)?.let(notes::add)
+        }
+    }
 
     fun apply(change: FloorChangeConfirmation.Confirmed?, notes: MutableList<String>) {
         change ?: return
@@ -204,15 +226,36 @@ internal fun simulateGuidedWalk(
     }
 
     while (!follower.arrived && steps < stepBudget) {
+        // Whatever is said by mid-stride is acted on in it.
+        val heardNotes = mutableListOf<String>()
+        hearSaid(device.timeMs + walker.stepIntervalMs / 2, heardNotes)
+        if (follower.arrived) {
+            val stop = truth()
+            arrivalError = if (follower.floor != building.floorOf(destinationNodeId)) Double.MAX_VALUE else hypot(stop.x - destination.x, stop.y - destination.y)
+            break
+        }
         val stride = walker.trueStrideMeters * (1.0 + random.gaussian() * walker.strideNoiseFraction)
+        // Setting off, or at a wall, a door or the lift, with the phone still talking: stand and listen.
+        val listen = (!follower.heardInstruction || follower.atDeadEnd(stride)) && voice.isSpeaking(device.timeMs)
+        if (listen && listenedMs < MAX_LISTEN_MS) {
+            device.standStill(walker.stepIntervalMs)
+            listenedMs += walker.stepIntervalMs
+            if (barometer) apply(floorChanges.onPressure(device.pressureHpa(altitude), device.timeMs), heardNotes)
+            hearSaid(device.timeMs, heardNotes)
+            if (record && heardNotes.isNotEmpty()) frames += device.frame(truth(), heardNotes, truthFloor = follower.floor)
+            continue
+        }
+        listenedMs = 0L
         val move = follower.step(stride, route, obstacles.filter { it.blocking && it.floor == follower.floor })
         if (move.wrongTurn) wrongTurns++
-        val notes = move.notes.toMutableList()
+        val notes = (heardNotes + move.notes).toMutableList()
         val crossing = move.crossing
         val alerts: MutableList<NavigationAlert>
         if (crossing == null) {
             steps++
-            alerts = sense(true, follower.x, follower.y, follower.headingDeg, follower.floor, notes)
+            veer = (veer * VEER_PULL + quirks.gaussian() * walker.veerStepMeters).coerceIn(-walker.maxVeerMeters, walker.maxVeerMeters)
+            val here = truth()
+            alerts = sense(true, here.x, here.y, follower.headingDeg, follower.floor, notes)
         } else {
             // Up or down the stairs step by step, or standing in the lift; then out at the other floor.
             crossings += crossing.from.type
@@ -242,8 +285,9 @@ internal fun simulateGuidedWalk(
             if (!barometer && crossing.from.type == NodeType.ELEVATOR) apply(floorChanges.manual(), notes)
         }
         val state = lastState ?: continue
+        val here = truth()
         if (obstacles.isNotEmpty() && crossing == null) {
-            val seen = sensor.detect(follower.x, follower.y, follower.headingDeg, device.timeMs, follower.floor)
+            val seen = sensor.detect(here.x, here.y, follower.headingDeg, device.timeMs, follower.floor)
             // "Still nothing in view" after nothing is no news to the app (see NavigationOrchestrator.start).
             if (seen.isNotEmpty() || obstaclesInView) {
                 detections.send(seen)
@@ -255,12 +299,12 @@ internal fun simulateGuidedWalk(
             for (alert in alerts) {
                 val obstacle = alert.relatedObstacle ?: continue
                 val real = obstacles.first { it.id == obstacle.id }
-                firstWarning.getOrPut(obstacle.id) { hypot(real.x - follower.x, real.y - follower.y) }
+                firstWarning.getOrPut(obstacle.id) { hypot(real.x - here.x, real.y - here.y) }
                 if (alert.id.startsWith("reroute-")) reroutes++
             }
             for (obstacle in obstacles) {
                 if (obstacle.floor != follower.floor) continue
-                if (obstacle.id in contacted || hypot(obstacle.x - follower.x, obstacle.y - follower.y) > GuidedWalkResult.CONTACT_METERS) continue
+                if (obstacle.id in contacted || hypot(obstacle.x - here.x, obstacle.y - here.y) > GuidedWalkResult.CONTACT_METERS) continue
                 contacted += obstacle.id
                 if (obstacle.id !in firstWarning) {
                     unwarnedContacts++
@@ -275,20 +319,23 @@ internal fun simulateGuidedWalk(
                 alert.id.startsWith("off-route-") -> offRoute++
                 alert.id.startsWith("route-guide-") && firstInstruction == null -> firstInstruction = steps
             }
-            follower.hear(alert.message)?.let(notes::add)
+            voice.say(alert, device.timeMs)
         }
+        walkedAt += device.timeMs to follower.walkedMeters
+        hearSaid(device.timeMs, notes)
         if (follower.arrived) {
-            arrivalError = if (follower.floor != building.floorOf(destinationNodeId)) Double.MAX_VALUE else hypot(follower.x - destination.x, follower.y - destination.y)
+            val stop = truth()
+            arrivalError = if (follower.floor != building.floorOf(destinationNodeId)) Double.MAX_VALUE else hypot(stop.x - destination.x, stop.y - destination.y)
         }
         val current = lastState ?: state
         val mapRoute = current.route.map { it.id }
         // The walker knows real places; a map node the survey left unnamed is no place of theirs.
         route = mapRoute.map { surveyed.buildingId(it) ?: it }
-        val error = device.errorTo(Point(follower.x, follower.y), follower.floor)
+        val error = device.errorTo(truth(), follower.floor)
         if (error == null) wrongFloorSteps++ else errors += error
         if (record) {
             frames += device.frame(
-                truth = Point(follower.x, follower.y),
+                truth = truth(),
                 notes = notes,
                 speech = speech,
                 route = mapRoute.takeIf { it != recordedRoute },
@@ -299,6 +346,11 @@ internal fun simulateGuidedWalk(
         }
     }
     collector.cancel()
+    // Told "arrived" while standing still to listen.
+    if (follower.arrived && arrivalError == null) {
+        val stop = truth()
+        arrivalError = if (follower.floor != building.floorOf(destinationNodeId)) Double.MAX_VALUE else hypot(stop.x - destination.x, stop.y - destination.y)
+    }
 
     val result = GuidedWalkResult(
         arrived = follower.arrived,
@@ -337,6 +389,16 @@ internal fun simulateGuidedWalk(
 
 private const val STATE_TIMEOUT_MS = 5_000L
 
+// Each step the walker's drift off the centre line keeps this much of itself: the cane finds the wall, they correct.
+private const val VEER_PULL = 0.85
+
+// Standing at a dead end to hear the phone out, but not for ever.
+private const val MAX_LISTEN_MS = 10_000L
+
+// However poor a walker's sense of distance, it's not off by more than half, or half again.
+private const val MIN_DISTANCE_SENSE = 0.5
+private const val MAX_DISTANCE_SENSE = 1.5
+
 // A flight of stairs, 3.5 m: about 20 risers, taken a step at a time over the landing.
 private const val STAIR_STEPS = 20
 
@@ -369,14 +431,21 @@ private fun guidedSummary(result: GuidedWalkResult): List<SummaryItem> = listOf(
  * A blind walker new to the building, going only by what the app says:
  * - keeps to the corridor, following it round a bend;
  * - turns where told ("sonra sağa dön", "saat 2 yönüne dön") at the first
- *   junction that has such a turn, once they've walked about half the distance
- *   the instruction gave (nobody turns into the very next opening when told
- *   "about 10 metres, then right");
+ *   junction that has such a turn, once they reckon they've walked about half
+ *   the distance the instruction gave (nobody turns into the very next opening
+ *   when told "about 10 metres, then right"), their reckoning off by their
+ *   distance sense;
  * - turns round when told "geri dön", and stops at "Hedefe ulaştın";
  * - at a junction nobody explained, or at the start with several ways out,
  *   guesses; at a dead end, turns back.
  */
-private class InstructionFollower(private val building: VirtualBuilding, start: MapNode, private val random: Random) {
+private class InstructionFollower(
+    private val building: VirtualBuilding,
+    start: MapNode,
+    private val random: Random,
+    /** The walker's metre, in real ones: told "10 metres", they reckon they've walked it after 10 / this. */
+    private val distanceSense: Double = 1.0,
+) {
     private val neighbors: Map<String, List<MapNode>> = building.edges
         .flatMap { (a, b) -> listOf(a to b, b to a) }
         .groupBy({ it.first }, { building.nodesById.getValue(it.second) })
@@ -401,6 +470,14 @@ private class InstructionFollower(private val building: VirtualBuilding, start: 
     private var plannedTurnAfterMeters = 0.0
     private var turnAround = false
 
+    // The last turn taken at a junction: relative degrees, and where.
+    private var lastTurnDeg: Double? = null
+    private var lastTurnAtMeters = 0.0
+
+    /** Some instruction has been heard (the walker waits for the first before setting off). */
+    var heardInstruction = false
+        private set
+
     var walkedMeters = 0.0
         private set
     var arrived = false
@@ -415,6 +492,18 @@ private class InstructionFollower(private val building: VirtualBuilding, start: 
     }
 
     private val length: Double get() = hypot(to.x - from.x, to.y - from.y)
+
+    /**
+     * The point [offset] metres right of the corridor's centre line here (left if
+     * negative); none near either end, where doors and junctions are found by cane.
+     */
+    fun beside(offset: Double): Point {
+        if (length == 0.0 || offset == 0.0) return Point(x, y)
+        val taper = (minOf(along, length - along) / VEER_TAPER_METERS).coerceIn(0.0, 1.0)
+        val ux = (to.x - from.x) / length
+        val uy = (to.y - from.y) / length
+        return Point(x + uy * offset * taper, y - ux * offset * taper)
+    }
     val x: Double get() = from.x + (to.x - from.x) * along / length
     val y: Double get() = from.y + (to.y - from.y) * along / length
     val headingDeg: Double get() = if (length == 0.0) lastHeadingDeg else bearing(from, to)
@@ -481,6 +570,12 @@ private class InstructionFollower(private val building: VirtualBuilding, start: 
             }
             val (next, note) = chooseAt(junction, cameFrom = from)
             note?.let(notes::add)
+            val turned = normalize(bearing(junction, next) - bearing(from, junction))
+            if (abs(turned) > STRAIGHT_DEG) {
+                lastTurnDeg = turned
+                lastTurnAtMeters = walkedMeters
+            }
+
             if (route != null) {
                 val index = route.indexOf(junction.id)
                 val expected = route.getOrNull(index + 1)
@@ -492,6 +587,16 @@ private class InstructionFollower(private val building: VirtualBuilding, start: 
             remaining = leftover
         }
         return Move(notes, wrongTurn)
+    }
+
+    /**
+     * Whether a [stride] more would reach a place with no way on but back (a wall, a
+     * door, the lift), and nothing heard says to go up or down there.
+     */
+    fun atDeadEnd(stride: Double): Boolean {
+        if (along + stride < length) return false
+        if (floorChangeTo != null && crossingsFrom[to.id] != null) return false
+        return neighbors[to.id].orEmpty().none { it.id != from.id }
     }
 
     private fun blocksAhead(obstacle: VirtualObstacle, stride: Double): Boolean {
@@ -530,8 +635,12 @@ private class InstructionFollower(private val building: VirtualBuilding, start: 
         return guess to "${node.name}: kavşakta yönerge yok, tahminle ${side(relative(guess))} gitti."
     }
 
-    /** Takes in one sentence the app said; returns what the walker made of it, when it changed anything. */
-    fun hear(text: String): String? {
+    /**
+     * Takes in what the app said, a sentence (or a whole alert) at a time; [opensAlert]
+     * unless it goes on from the sentence before ("Sağa dön." then "Yaklaşık 11 metre
+     * ilerle, sonra sola dön."). Returns what the walker made of it, when it changed anything.
+     */
+    fun hear(text: String, opensAlert: Boolean = true, walkedSinceSaidMeters: Double = 0.0): String? {
         if (ARRIVED in text) {
             arrived = true
             return "Vardığını duydu, durdu."
@@ -552,12 +661,23 @@ private class InstructionFollower(private val building: VirtualBuilding, start: 
             return null
         }
         FLOOR_CHANGE.find(text)?.let { floorChangeTo = it.groupValues[1].toInt() }
-        if (WALK !in text && APPROACH !in text) return understood
-        turnNowDeg = when {
+        // "Sola dön.", "Saat 2 yönüne dön.": the turn to make at the very next junction.
+        val now = when {
             text.startsWith(TURN_LEFT_NOW) -> -90.0
             text.startsWith(TURN_RIGHT_NOW) -> 90.0
             else -> CLOCK_NOW.find(text)?.groupValues?.get(1)?.toInt()?.let { hour -> normalize(hour % 12 * 30.0) }
         }
+        if (now != null) {
+            // Heard just after making that very turn: it's the one they made.
+            val justMade = lastTurnDeg?.let { abs(normalize(it - now)) <= TURN_MATCH_DEG && walkedMeters - lastTurnAtMeters <= JUST_TURNED_METERS } == true
+            if (justMade) understood = "Az önce yaptığı dönüş sandı." else turnNowDeg = now
+            plannedTurnDeg = null
+            plannedTurnAfterMeters = 0.0
+        }
+        if (WALK !in text && APPROACH !in text) return understood
+        heardInstruction = true
+        // A new leg forgets an earlier "turn now", unless it's what this alert opened with.
+        if (now == null && opensAlert) turnNowDeg = null
         val turn = when {
             RIGHT in text -> 90.0
             LEFT in text -> -90.0
@@ -566,8 +686,9 @@ private class InstructionFollower(private val building: VirtualBuilding, start: 
         plannedTurnDeg = turn
         if (turn != null) {
             val meters = DISTANCE.find(text)?.groupValues?.get(1)?.toDouble() ?: 0.0
-            plannedTurnAfterMeters = meters * HALF
-            turnNotBeforeMeters = walkedMeters + plannedTurnAfterMeters
+            plannedTurnAfterMeters = meters * HALF / distanceSense
+            // Counted from when they heard the distance, near the sentence's start.
+            turnNotBeforeMeters = walkedMeters - walkedSinceSaidMeters + plannedTurnAfterMeters
         } else {
             plannedTurnAfterMeters = 0.0
         }
@@ -600,6 +721,8 @@ private class InstructionFollower(private val building: VirtualBuilding, start: 
         private const val CANE_REACH_METERS = 0.8
         private const val TURN_MATCH_DEG = 50.0
         private const val STRAIGHT_DEG = 35.0
+        private const val VEER_TAPER_METERS = 1.5
+        private const val JUST_TURNED_METERS = 2.5
     }
 }
 

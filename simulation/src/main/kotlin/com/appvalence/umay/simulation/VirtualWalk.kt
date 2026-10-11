@@ -26,7 +26,29 @@ internal data class WalkerModel(
     val headingNoiseDeg: Double = 3.0,
     val gyroDriftPerStepDeg: Double = 0.05,
     val stepIntervalMs: Long = 550L,
-)
+    /**
+     * How far off the walker's sense of distance is: told "about 10 metres", one
+     * walker's 10 m is another's 8 (a spread around 1, fixed for the walk). Blind
+     * walkers misjudge distances walked by a quarter or so.
+     */
+    val distanceJudgmentSd: Double = 0.25,
+    /**
+     * Guided walks: how far the walker drifts from a corridor's centre line at most,
+     * and how much a step adds; near doors and junctions they find the middle again
+     * with the cane.
+     */
+    val maxVeerMeters: Double = 0.5,
+    val veerStepMeters: Double = 0.1,
+) {
+    companion object {
+        /**
+         * The walker before 0.15: exactly on the corridor's centre line, judging distances
+         * perfectly. With SpokenQueue.INSTANT, for tests of one mechanism that the
+         * walker's quirks would only blur.
+         */
+        val IDEAL = WalkerModel(distanceJudgmentSd = 0.0, maxVeerMeters = 0.0)
+    }
+}
 
 /** What helps the filter along the way; everything off is steps alone. */
 internal data class Aids(
@@ -43,6 +65,12 @@ internal data class Aids(
     val camera: Boolean = false,
     /** The phone hands the filter its beacon list every this many steps (~1 s at normal pace). */
     val scanEverySteps: Int = 2,
+    /**
+     * A compass hint before the first step (NavigationSession.hintHeadingFromCompass, on a
+     * map surveyed with compass calibration): which way the gyro's frame lies on the map,
+     * off by indoor magnetic error.
+     */
+    val compass: Boolean = false,
 )
 
 /** A marker is read when it's this close, within the camera's view and not behind a wall. */
@@ -57,6 +85,10 @@ private const val CAMERA_LOOK_METERS = 2.5
 // Somewhere above sea level, so pressures look like a real building's; and a phone barometer's noise.
 private const val BASE_ALTITUDE_METERS = 100.0
 private const val BAROMETER_NOISE_HPA = 0.02
+
+// A compass hint indoors: steel and wiring bend the field by tens of degrees; the app never claims better than 30°.
+private const val COMPASS_ERROR_DEG = 20.0
+private const val COMPASS_SIGMA_DEG = 30.0
 
 /** Particles drawn per frame in the viewer: enough to show the cloud's shape, few enough to keep the page small. */
 private const val PARTICLES_PER_FRAME = 60
@@ -107,6 +139,9 @@ internal class VirtualPhone(
     private val camera = if (aids.camera) VirtualCamera(building, VirtualCamera.placeMarkers(building), random = Random(random.nextLong())) else null
     private val markerReader = QrMarkerReader()
     private val gyroOffsetDeg = random.nextDouble(0.0, 360.0)
+
+    // Not from the world's noise, so a walk with the compass hint draws the same world as one without.
+    private val compassError = if (aids.compass) filterRandom.gaussian() * COMPASS_ERROR_DEG else 0.0
     private var gyroHeadingDeg = 0.0
     private var steps = 0
 
@@ -156,6 +191,8 @@ internal class VirtualPhone(
         val delta = ((sensed - gyroHeadingDeg + 540.0) % 360.0) - 180.0
         gyroHeadingDeg += delta
         timeMs += walker.stepIntervalMs
+        // The gyro's frame on the map: plan heading = gyro's + gyroOffsetDeg, turned by the survey.
+        if (steps == 0 && aids.compass) filter.observeHeadingOffset(gyroOffsetDeg - surveyed.rotationDeg + compassError, COMPASS_SIGMA_DEG)
         steps++
         estimate = filter.onStep(StepEvent(walker.calibratedStrideMeters, delta, timeMs))
 

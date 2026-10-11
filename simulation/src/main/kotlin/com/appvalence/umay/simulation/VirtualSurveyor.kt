@@ -44,6 +44,9 @@ internal class SurveyedMap(
     }
 
     /** A point of the real plan in the map's frame. */
+    /** How a direction on the plan turns on the map: a heading of h on the plan is h minus this on the map. */
+    val rotationDeg: Double get() = Math.toDegrees(rotationRad)
+
     fun toMap(point: Point): Point {
         val dx = point.x - fromCenter.x
         val dy = point.y - fromCenter.y

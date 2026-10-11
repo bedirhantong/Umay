@@ -173,8 +173,22 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   Simülasyon sahayı tutturamıyorsa sayılarına güvenilmez. Yürüyen modeline
   konuşma süresi, mesafeyi yanlış tahmin, yana kayma eklenir; ayar seçilen
   senaryolar ile doğrulananlar ayrılır.
+  **Kod tarafı yapıldı:**
+  - Yürüyen artık cümleleri söylendikleri sürede duyuyor (saniyede 15
+    harf, `SpokenQueue`). Mesafeyi %25 kadar yanlış tahmin ediyor,
+    koridorun ortasından 0,5 m'ye kadar kayıyor. Telefon konuşurken bir
+    duvara, kapıya ya da asansöre varınca durup dinliyor.
+  - Ayar ile doğrulama ayrıldı. Uygulamanın hiçbir sabiti sanal klinikte
+    (`clinicFloor`, `ValidationWalkTest`) seçilmiyor. Ofiste 36/36 varan
+    yürüyüşler klinikte işaretlerle 32/36; yalnız beacon'la 21/36, pusula
+    ipucuyla 30/36. Uzun koridorda tahmin geride kalıyor. Kapıdan
+    başlayınca yön ilk köşeden önce öğrenilemiyor.
+  - Hâlâ açık: yanlış başlangıç noktasında yer işaretleri gerçekçi
+    yürüyende kurtarmıyor (8/24, işaretsiz de 8/24). Merdivenin 3 m
+    önünden başlayan barometresiz bir yürüyüşte tırmanış "rotadan çıktın"
+    sayılabiliyor (1/6).
   *Bitti:* bir binada simülasyonun ve sahanın ortalama konum hatası %30
-  içinde.
+  içinde (saha kaydı bekliyor).
 - [x] **0.12 Sanal ofis** (B). Sanal açık ofis (duvarlar, masalar, odalar,
   beacon'lar, yer işaretleri) ve uygulamanın söylediklerine göre yürüyen,
   binayı bilmeyen sanal kör kullanıcı (`GuidedWalkTest`). Kamera, telefonun
@@ -522,6 +536,23 @@ Bunlar bir sonraki adımı doğrudan etkiler. Karar verildikçe yukarıdaki
 ## İlerleme kaydı
 
 En yeni üstte.
+
+- **11 Ekim 2026:** Sanal yürüyen gerçekçileşti (0.15) ve iki gerçek hata
+  buldu, düzeltildi:
+  - Yönergeler sırayla okunuyordu (`QUEUE_ADD`). Yeni yönerge, geçilen
+    koridor hakkındaki eski cümlenin bitmesini bekliyordu. "Sola dön."
+    kavşaktan sonra, "Hedefe ulaştın." kapı geçildikten sonra duyuluyordu.
+    Konuşmanın süresiyle 36 yürüyüşten 20'si varıyordu, yavaş konuşmada
+    8'i. Artık yeni yönerge, söylenmeyi bekleyen eski yönergeyi kesiyor
+    (`SpeechQueuePolicy`); engel uyarısını ya da işaret okumayı kesmiyor.
+    Varış 35–36/36.
+  - Merdivende yeni rota hesaplanınca barometre kat değişimini
+    kaçırıyordu: tırmanışı, yarıda yeniden kurulan başlangıçtan
+    ölçüyordu. Kullanıcı üst kattayken uygulama "merdivenle yukarı çık"
+    demeyi sürdürüyordu. Bir dakika içinde aynı kat için yeniden
+    kurulduğunda ilk başlangıç korunuyor.
+  - Yeni, ayarda kullanılmayan bir bina (sanal klinik) uygulamanın
+    ofise göre ayarlandığını gösterdi (yukarıda 0.15).
 
 - **11 Ekim 2026:** Kamerayla haritalama simüle edildi (0.18), iki gerçek
   hata buldu, düzeltildi:

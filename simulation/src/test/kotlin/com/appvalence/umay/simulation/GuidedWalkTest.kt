@@ -99,12 +99,18 @@ class GuidedWalkTest {
         // Markers hung on the nearest wall and read from rendered frames by the app's own
         // reader: walking normally they're hardly ever close and square enough to read, but
         // a walker the app has put in the wrong place wanders past one sooner or later.
+        // The ideal walker, hearing every sentence at once: with a real one's quirks and
+        // speech taking its time, the wandering is so different from walk to walk that 12
+        // of them don't tell a rescue from luck (8 of 24 arrived with markers, 8 without;
+        // roadmap 0.15).
         val wrongStart = { a: String -> if (a == "lobi") "giris" else "lobi" }
         val trips = TRIPS.take(4)
-        val withMarkers = trips.flatMap { (a, b) ->
-            (1..3).map { simulateGuidedWalk(office, a, b, it, phrases = phrases, aids = Aids(markerNodeIds = office.markerNodeIds, camera = true), appStartNodeId = wrongStart(a)) }
-        }
-        val without = trips.flatMap { (a, b) -> (1..3).map { simulateGuidedWalk(office, a, b, it, phrases = phrases, aids = Aids(), appStartNodeId = wrongStart(a)) } }
+        fun walk(a: String, b: String, seed: Int, aids: Aids) = simulateGuidedWalk(
+            office, a, b, seed, walker = WalkerModel.IDEAL, phrases = phrases, aids = aids,
+            appStartNodeId = wrongStart(a), speechCharsPerSecond = SpokenQueue.INSTANT,
+        )
+        val withMarkers = trips.flatMap { (a, b) -> (1..3).map { walk(a, b, it, Aids(markerNodeIds = office.markerNodeIds, camera = true)) } }
+        val without = trips.flatMap { (a, b) -> (1..3).map { walk(a, b, it, Aids()) } }
         assertTrue(withMarkers.sumOf { it.markersRead } > 0, "no marker was ever read")
         val rescued = withMarkers.count { it.reached } - without.count { it.reached }
         assertTrue(rescued >= 3, "markers rescued $rescued more walks of ${withMarkers.size}")

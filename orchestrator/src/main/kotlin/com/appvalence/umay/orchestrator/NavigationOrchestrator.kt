@@ -311,6 +311,7 @@ class NavigationOrchestrator(
                     relatedObstacle = null,
                     createdAtMs = position.timestampMs,
                     cue = GuidanceCue.ARRIVED,
+                    isGuidance = true,
                 )
             }
         }
@@ -356,6 +357,7 @@ class NavigationOrchestrator(
                 reorientTurn != null -> if (reorientTurn.direction == TurnDirection.RIGHT) GuidanceCue.TURN_RIGHT else GuidanceCue.TURN_LEFT
                 else -> legCue(routeTargetIndex)
             },
+            isGuidance = true,
         )
     }
 
@@ -382,6 +384,7 @@ class NavigationOrchestrator(
                 relatedObstacle = null,
                 createdAtMs = position.timestampMs,
                 cue = GuidanceCue.WRONG_WAY,
+                isGuidance = true,
             )
         }
         val nearest = map.floors.firstOrNull { it.floorIndex == position.floor }?.nodes

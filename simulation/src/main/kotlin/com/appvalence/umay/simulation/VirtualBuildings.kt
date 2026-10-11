@@ -5,6 +5,7 @@ import com.appvalence.umay.coremodel.NodeType
 
 /** The buildings the simulations walk through. */
 internal object VirtualBuildings {
+    private const val DOOR_HALF_WIDTH = 0.45
 
     private fun place(id: String, x: Double, y: Double, name: String = id, type: NodeType = NodeType.WAYPOINT) =
         MapNode(id = id, x = x, y = y, type = type, name = name)
@@ -144,6 +145,86 @@ internal object VirtualBuildings {
         ),
         markerNodeIds = setOf("giris", "asansor", "danisma", "tuvalet", "toplanti1", "toplanti2", "mutfak"),
     )
+
+    /**
+     * Held out for validation (roadmap 0.15): no constant of the app is ever tuned
+     * on this building, so a change that only fits the others shows up here. An
+     * L-shaped clinic floor, unlike both: a lobby by the entrance, a 36 m corridor
+     * with doors on both sides, and a 20 m wing to the north at its far end, the
+     * corridors 2.4 m wide between walls. Beacons about every 6–7 m, markers at
+     * the entrance and four doors.
+     *
+     * ```
+     *                                         Kafeterya
+     *                                            │
+     *                              Poliklinik 2 ─k6─┤ ... k12 ─ Tuvalet
+     *  Lobi ─ c6 ─ c12 ─ c18 ─ c24 ─ c30 ─ köşe
+     *   │     │    Eczane │  Vezne  │
+     *  Giriş Poliklinik 1 Laboratuvar Röntgen
+     * ```
+     */
+    fun clinicFloor(radio: RadioModel = RadioModel()): VirtualBuilding {
+        // A wall from [from] to [to] along a line, a 0.9 m door gap at each of [doors].
+        fun wallWithDoors(fixed: Double, from: Double, to: Double, doors: List<Double>, horizontal: Boolean): List<Wall> {
+            val cuts = listOf(from) + doors.sorted().flatMap { listOf(it - DOOR_HALF_WIDTH, it + DOOR_HALF_WIDTH) } + to
+            return cuts.chunked(2).map { (a, b) -> if (horizontal) Wall(a, fixed, b, fixed) else Wall(fixed, a, fixed, b) }
+        }
+        return VirtualBuilding(
+            name = "Sanal klinik katı",
+            nodes = listOf(
+                place("giris", 0.0, -3.0, "Giriş"),
+                place("lobi", 0.0, 0.0, "Lobi"),
+                place("c6", 6.0, 0.0),
+                place("c12", 12.0, 0.0),
+                place("c18", 18.0, 0.0),
+                place("c24", 24.0, 0.0),
+                place("c30", 30.0, 0.0),
+                place("kose", 36.0, 0.0),
+                place("poliklinik1", 6.0, -1.2, "Poliklinik 1", NodeType.DOOR),
+                place("eczane", 12.0, 1.2, "Eczane", NodeType.DOOR),
+                place("laboratuvar", 18.0, -1.2, "Laboratuvar", NodeType.DOOR),
+                place("vezne", 24.0, 1.2, "Vezne", NodeType.DOOR),
+                place("rontgen", 30.0, -1.2, "Röntgen", NodeType.DOOR),
+                place("k6", 36.0, 6.0),
+                place("k12", 36.0, 12.0),
+                place("k18", 36.0, 18.0),
+                place("poliklinik2", 34.8, 6.0, "Poliklinik 2", NodeType.DOOR),
+                place("tuvalet", 37.2, 12.0, "Tuvalet", NodeType.DOOR),
+                place("kafeterya", 36.0, 20.0, "Kafeterya", NodeType.DESTINATION),
+            ),
+            edges = listOf(
+                "giris" to "lobi", "lobi" to "c6", "c6" to "c12", "c12" to "c18", "c18" to "c24", "c24" to "c30", "c30" to "kose",
+                "c6" to "poliklinik1", "c12" to "eczane", "c18" to "laboratuvar", "c24" to "vezne", "c30" to "rontgen",
+                "kose" to "k6", "k6" to "k12", "k12" to "k18", "k18" to "kafeterya",
+                "k6" to "poliklinik2", "k12" to "tuvalet",
+            ),
+            beacons = listOf(
+                VirtualBeacon("c1", -2.0, 2.5),
+                VirtualBeacon("c2", 4.0, 1.1),
+                VirtualBeacon("c3", 10.0, -1.1),
+                VirtualBeacon("c4", 16.0, 1.1),
+                VirtualBeacon("c5", 22.0, -1.1),
+                VirtualBeacon("c6", 28.0, 1.1),
+                VirtualBeacon("c7", 34.0, -1.1),
+                VirtualBeacon("c8", 37.1, 4.0),
+                VirtualBeacon("c9", 34.9, 10.0),
+                VirtualBeacon("c10", 37.1, 16.0),
+            ),
+            radio = radio,
+            walls = listOf(
+                // The lobby, the entrance a gap in its south wall.
+                Wall(-4.0, -3.0, -0.6, -3.0), Wall(0.6, -3.0, 1.5, -3.0), Wall(-4.0, -3.0, -4.0, 4.0), Wall(-4.0, 4.0, 1.5, 4.0),
+                Wall(1.5, -3.0, 1.5, -1.2), Wall(1.5, 1.2, 1.5, 4.0),
+                // The far end of the corridor and the wing's end.
+                Wall(37.2, -1.2, 37.2, 1.2), Wall(34.8, 21.0, 37.2, 21.0),
+            ) +
+                wallWithDoors(-1.2, 1.5, 37.2, listOf(6.0, 18.0, 30.0), horizontal = true) +
+                wallWithDoors(1.2, 1.5, 34.8, listOf(12.0, 24.0), horizontal = true) +
+                wallWithDoors(34.8, 1.2, 21.0, listOf(6.0), horizontal = false) +
+                wallWithDoors(37.2, 1.2, 21.0, listOf(12.0), horizontal = false),
+            markerNodeIds = setOf("giris", "eczane", "laboratuvar", "rontgen", "tuvalet"),
+        )
+    }
 
     /**
      * The open office ([openOffice]) as the ground floor of a two-storey building:
