@@ -36,4 +36,18 @@ class ObstacleGeometryTest {
         val bearing = ObstacleGeometry.estimateBearingDegrees(boundingBoxCenterXPx = 100f, imageWidthPx = 1000)
         assertTrue(bearing < 0.0)
     }
+
+    @Test
+    fun `width comes from the box, the same way as distance`() {
+        // 480 px across 51° (an upright frame): a box 100 px wide at 2 m.
+        val width = ObstacleGeometry.estimateWidthMeters(boundingBoxWidthPx = 100f, imageWidthPx = 480, distanceMeters = 2.0)
+        assertTrue(kotlin.math.abs(width - 0.4) < 0.02, "$width")
+    }
+
+    @Test
+    fun `a box running off the frame has no width to trust`() {
+        assertEquals(null, ObstacleGeometry.widthIfWhollySeen(0f, 200f, 480, 2.0))
+        assertEquals(null, ObstacleGeometry.widthIfWhollySeen(300f, 480f, 480, 2.0))
+        assertTrue(ObstacleGeometry.widthIfWhollySeen(100f, 200f, 480, 2.0)!! > 0.0)
+    }
 }

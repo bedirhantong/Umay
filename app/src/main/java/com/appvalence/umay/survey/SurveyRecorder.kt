@@ -7,6 +7,7 @@ import com.appvalence.umay.common.DeviceCapabilities
 import com.appvalence.umay.common.MotionSensors
 import com.appvalence.umay.common.throttleLatest
 import com.appvalence.umay.coremodel.BleBeaconReading
+import com.appvalence.umay.coremodel.CompassSums
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.Position
@@ -27,6 +28,7 @@ import com.appvalence.umay.positioning.mapping.ArPoseAligner
 import com.appvalence.umay.positioning.mapping.DepthProjector
 import com.appvalence.umay.positioning.mapping.FloorHeightEstimator
 import com.appvalence.umay.positioning.mapping.OccupancyGrid
+import com.appvalence.umay.positioning.compass.HeadingReading
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
 import com.appvalence.umay.positioning.trilateration.BeaconSurveyResult
 import com.appvalence.umay.positioning.trilateration.BeaconSurveySolver
@@ -81,6 +83,8 @@ data class SurveyState(
     val restoredFromDraft: Boolean = false,
     /** Beacon signatures taken every few metres along the path, per floor (see [RadioSampler]). */
     val radioSamples: Map<Int, List<RadioSample>> = emptyMap(),
+    /** How the compass lines up with each floor's drawing, so far (see [CompassSums]). */
+    val compass: Map<Int, CompassSums> = emptyMap(),
 )
 
 /** Says out loud what the surveyor should know without looking at the screen. */
@@ -172,6 +176,9 @@ class SurveyRecorder @Inject constructor(
     // Fed from the footstep collector (main) or the camera one (mapping), never both at once.
     private val radioSampler = RadioSampler()
 
+    // The compass's latest word, read wherever the walk's path is (main or mapping).
+    @Volatile private var latestHeading: HeadingReading? = null
+
     // Camera mapping state: touched only on [mapping].
     private var aligner = ArPoseAligner()
     private val grids = mutableMapOf<Int, OccupancyGrid>()
@@ -218,11 +225,25 @@ class SurveyRecorder @Inject constructor(
                 SurveyMode.CAMERA -> {
                     launch { recordCamera() }
                     launch { watchCamera() }
-                    launch { motion.steps(stepLength).collect { step -> withContext(mapping) { aligner.onStep(step.stepLengthMeters) } } }
+                    launch {
+                        motion.steps(stepLength).collect { step ->
+                            val gyro = latestHeading?.gameHeadingDeg
+                            val reckoned = withContext(mapping) { aligner.onStep(step.stepLengthMeters, gyro) } ?: return@collect
+                            // Tracking is lost: the footsteps carry the live position, for a place named meanwhile.
+                            val floor = _state.value.currentFloor
+                            val position = Position(reckoned.x, reckoned.y, floor, reckoned.headingDeg, STEP_ACCURACY_METERS, PositionSource.PEDESTRIAN_DEAD_RECKONING, step.timestampMs)
+                            _state.update { current ->
+                                val last = current.trajectory.lastOrNull()
+                                val moved = last == null || last.floor != floor || hypot(last.x - position.x, last.y - position.y) >= TRAJECTORY_SPACING_METERS
+                                current.copy(livePosition = position, trajectory = if (moved) current.trajectory + position else current.trajectory)
+                            }
+                        }
+                    }
                     if (screenVisible) camera.resume()
                 }
             }
             launch { scanner.rawReadingUpdates().collect { rawReadings.add(it) } }
+            launch { motion.headings().collect { latestHeading = it } }
             launch {
                 while (true) {
                     _state.update { it.copy(rawReadingCount = rawReadings.size) }
@@ -250,7 +271,14 @@ class SurveyRecorder @Inject constructor(
     private suspend fun recordFootsteps(stepLength: Double) {
         var trackedFloor = _state.value.currentFloor
         var pdr = continueOnFloor(trackedFloor)
-        motion.steps(stepLength).collect { step ->
+        // A fresh step detector's first step carries the sensor's whole heading (its turn
+        // "from zero"), not a turn the walker made: kept, it would rotate everything walked
+        // after "Kayda devam et" by however the sensor happened to start. So a recording,
+        // new or resumed, carries on facing the way the walk last faced.
+        var first = true
+        motion.steps(stepLength).collect { raw ->
+            val step = if (first) raw.copy(headingDeltaDeg = 0.0) else raw
+            first = false
             val floor = _state.value.currentFloor
             if (floor != trackedFloor) {
                 // PDR has no vertical axis: each floor keeps its own (x, y) frame instead of
@@ -261,7 +289,19 @@ class SurveyRecorder @Inject constructor(
             val pose = pdr.integrate(step)
             _state.update { it.copy(trajectory = it.trajectory + pose) }
             sampleRadio(pose)
+            sampleCompass(pose)
         }
+    }
+
+    /**
+     * How far the drawing's heading is from the compass's at this point of the walk, if
+     * the compass is sure of itself and spoke just now. Averaged over the whole floor
+     * into the map's [com.appvalence.umay.coremodel.CompassCalibration], which lets
+     * navigation start out facing the right way.
+     */
+    private fun sampleCompass(position: Position) {
+        val reading = latestHeading?.takeIf { it.magneticReliable && kotlin.math.abs(it.timestampMs - position.timestampMs) <= COMPASS_FRESH_MS } ?: return
+        _state.update { it.copy(compass = it.compass + (position.floor to (it.compass[position.floor] ?: CompassSums()).plus(position.headingDeg, reading.magneticHeadingDeg))) }
     }
 
     /** A beacon signature every few metres of the walk, not only at named places. */
@@ -290,7 +330,7 @@ class SurveyRecorder @Inject constructor(
         var lastSnapshotMs = 0L
         camera.frames.collect { sample ->
             val floor = _state.value.currentFloor
-            val pose = aligner.onTracked(sample.pose)
+            val pose = aligner.onTracked(sample.pose, latestHeading?.gameHeadingDeg)
             val position = Position(pose.x, pose.y, floor, pose.headingDeg, CAMERA_ACCURACY_METERS, PositionSource.MAP_MATCHED, pose.timestampMs)
             _state.update { current ->
                 val last = current.trajectory.lastOrNull()
@@ -298,6 +338,7 @@ class SurveyRecorder @Inject constructor(
                 current.copy(livePosition = position, trajectory = if (moved) current.trajectory + position else current.trajectory)
             }
             sampleRadio(position)
+            sampleCompass(position)
 
             val depth = sample.depth ?: return@collect
             val toSurvey = aligner.transform ?: return@collect
@@ -394,6 +435,7 @@ class SurveyRecorder @Inject constructor(
                 taggedWaypoints = current.taggedWaypoints,
                 wallMaps = current.wallMaps,
                 radioSamples = current.radioSamples,
+                compass = current.compass,
                 savedAtMs = System.currentTimeMillis(),
             ),
         )
@@ -428,6 +470,7 @@ class SurveyRecorder @Inject constructor(
                 taggedWaypoints = draft.taggedWaypoints,
                 wallMaps = draft.wallMaps,
                 radioSamples = draft.radioSamples,
+                compass = draft.compass,
                 rawReadingCount = rawReadings.size,
                 restoredFromDraft = true,
             )
@@ -497,10 +540,16 @@ class SurveyRecorder @Inject constructor(
         // enough that corners survive (see BeaconMapBuilder.CORNER_TOLERANCE_METERS).
         const val TRAJECTORY_SPACING_METERS = 0.25
         const val CAMERA_ACCURACY_METERS = 0.1
+
+        // Footsteps bridging a tracking loss: a few seconds of them, a metre or so out at most.
+        const val STEP_ACCURACY_METERS = 1.0
         const val WALL_MAP_REFRESH_MS = 1_000L
         const val LOSS_ANNOUNCE_DELAY_MS = 2_000L
 
         // At most this much of a walk is lost if the app is ended mid-survey.
         const val DRAFT_INTERVAL_MS = 10_000L
+
+        // The compass reads 5 times a second; an older reading may be from before a turn.
+        const val COMPASS_FRESH_MS = 500L
     }
 }

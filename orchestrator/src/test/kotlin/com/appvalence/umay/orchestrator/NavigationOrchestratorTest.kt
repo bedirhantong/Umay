@@ -54,6 +54,12 @@ private fun personObstacle(id: String, distanceMeters: Double, bearingDeg: Doubl
     relativeVelocityMps = null, confidence = 0.9f, detectedAtMs = detectedAtMs, sensorSource = ObstacleSensorSource.CAMERA_ML,
 )
 
+private fun chairObstacle(id: String, distanceMeters: Double, bearingDeg: Double = 0.0, detectedAtMs: Long = 0L) = DetectedObstacle(
+    id = id, type = ObstacleType.STATIC_OBJECT, distanceMeters = distanceMeters, bearingDeg = bearingDeg,
+    relativeVelocityMps = null, confidence = 0.9f, detectedAtMs = detectedAtMs, sensorSource = ObstacleSensorSource.CAMERA_ML,
+    kind = ObstacleKind.CHAIR,
+)
+
 /**
  * Language-free wording: tests assert what the orchestrator *decided* (which
  * place, how far, which turn, which floor-change method) — how that's said
@@ -61,18 +67,26 @@ private fun personObstacle(id: String, distanceMeters: Double, bearingDeg: Doubl
  */
 private object TokenPhrases : GuidancePhrases {
     private fun meters(distance: Double) = "%.1f".format(java.util.Locale.ROOT, distance)
-    override fun walkToward(placeName: String, distanceMeters: Double, thenTurn: TurnDirection?) =
-        "WALK $placeName ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
-    override fun walkAhead(distanceMeters: Double, thenTurn: TurnDirection?) =
-        "AHEAD ${meters(distanceMeters)} ${thenTurn ?: "STRAIGHT"}"
+    override fun walkToward(placeName: String, distanceMeters: Double, thenTurn: Turn?) =
+        "WALK $placeName ${meters(distanceMeters)} ${thenTurn?.direction ?: "STRAIGHT"}"
+    override fun walkAhead(distanceMeters: Double, thenTurn: Turn?) =
+        "AHEAD ${meters(distanceMeters)} ${thenTurn?.direction ?: "STRAIGHT"}"
     override fun followWall(side: TurnDirection) = "WALL $side"
+    override fun turnNow(turn: Turn) = "TURN_NOW ${turn.direction}"
+    override fun turnAround() = "TURN_AROUND"
+    override fun passObstacle(side: TurnDirection) = "PASS $side"
     override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =
         "CHANGE_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor $arrivalPlaceName"
+    override fun thenChangeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int) =
+        "THEN_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor"
     override fun hazardAhead(type: NodeType) = if (type in setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)) "HAZARD $type" else null
     override fun arrived() = "ARRIVED"
     override fun noRoute() = "NO_ROUTE"
     override fun rerouted() = "REROUTED"
+    override fun noStepFreeRoute() = "NO_STEP_FREE_ROUTE"
+    override fun offRoute() = "OFF_ROUTE"
+    override fun wrongWay() = "WRONG_WAY"
     override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double) =
         "OBSTACLE $priority $kind ${meters(distanceMeters)}"
 }
@@ -195,10 +209,10 @@ class NavigationOrchestratorTest {
         val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(floorIndex = 0, nodes = nodes, edges = edges)))
         val feedback = RecordingFeedbackController()
 
-        // User is at B, facing toward C (north, heading 0), where a person is standing
-        // directly on the B-C edge — far enough away to not itself be a CRITICAL/WARNING alert.
+        // User is at B, facing toward C (north, heading 0), where a chair stands directly on
+        // the B-C edge — far enough away to not itself be a CRITICAL/WARNING alert.
         val userPosition = position(0.0, 10.0, headingDeg = 0.0)
-        val blockingObstacle = personObstacle("p1", distanceMeters = 5.0, bearingDeg = 0.0)
+        val blockingObstacle = chairObstacle("c1", distanceMeters = 5.0, bearingDeg = 0.0)
 
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(userPosition),
@@ -217,6 +231,160 @@ class NavigationOrchestratorTest {
         assertEquals(listOf("B", "D", "C"), states.last().route.map { it.id })
         assertTrue(feedback.emitted.any { it.priority == AlertPriority.INFO })
     }
+
+    @Test
+    fun `a person on the route is warned about, never routed around`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 10.0, headingDeg = 0.0)),
+            perception = FakeObstacleDetector(listOf(listOf(personObstacle("p1", distanceMeters = 3.0, bearingDeg = 0.0)))),
+            map = rerouteMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+            phrases = TokenPhrases,
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(listOf("A", "B", "C"), states.last().route.map { it.id })
+        assertTrue(feedback.emitted.any { it.message.startsWith("OBSTACLE WARNING PERSON") })
+        assertTrue(feedback.emitted.none { it.id.startsWith("reroute-") })
+    }
+
+    private fun rerouteMapWithWalls(corridorHalfWidth: Double) = rerouteMap.copy(
+        floors = rerouteMap.floors.map { it.copy(occupancy = corridor(-corridorHalfWidth, corridorHalfWidth)) },
+    )
+
+    @Test
+    fun `room beside a chair keeps the route and says which side to pass`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 10.0, headingDeg = 0.0)),
+            perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 5.0, bearingDeg = 3.0).copy(widthMeters = 0.5)))),
+            map = rerouteMapWithWalls(1.5),
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+            phrases = TokenPhrases,
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(listOf("A", "B", "C"), states.last().route.map { it.id })
+        assertTrue(feedback.emitted.none { it.id.startsWith("reroute-") })
+        // A little right of centre: more room on the left.
+        assertEquals("PASS LEFT", feedback.emitted.single { it.id.startsWith("pass-") }.message)
+    }
+
+    @Test
+    fun `no room beside it, or no wall map to tell, still means a new route`() = runTest {
+        for (map in listOf(rerouteMapWithWalls(0.6), rerouteMap)) {
+            val feedback = RecordingFeedbackController()
+            val orchestrator = NavigationOrchestrator(
+                positioning = FakePositioningEngine(position(0.0, 10.0, headingDeg = 0.0)),
+                perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 5.0).copy(widthMeters = 0.5)))),
+                map = map,
+                feedback = feedback,
+                startNodeId = "A",
+                destinationNodeId = "C",
+                phrases = TokenPhrases,
+            )
+
+            val states = orchestrator.start().toList()
+
+            assertEquals(listOf("B", "D", "C"), states.last().route.map { it.id })
+        }
+    }
+
+    @Test
+    fun `the new route's first leg says which way to turn when it starts to one side`() = runTest {
+        // At B facing north toward C, a chair on B-C: the new route goes east to D first.
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(position(0.0, 10.0, headingDeg = 0.0, timestampMs = 0L), position(0.0, 10.3, headingDeg = 0.0, timestampMs = 1L))
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 5.0)))),
+            map = rerouteMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+            phrases = TokenPhrases,
+        )
+
+        orchestrator.start().toList()
+
+        val leg = feedback.emitted.last { it.id.startsWith("route-guide-") }
+        assertTrue(leg.message.startsWith("TURN_NOW RIGHT "), leg.message)
+        assertEquals(GuidanceCue.TURN_RIGHT, leg.cue)
+    }
+
+    @Test
+    fun `the new route's first leg says to turn around when it starts behind`() = runTest {
+        // Walking north from B toward C, a chair ahead on B-C: the only other way goes back
+        // through A, so the new route's first leg is behind the walker.
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(position(0.0, 11.0, headingDeg = 0.0, timestampMs = 0L), position(0.0, 11.5, headingDeg = 0.0, timestampMs = 1L))
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 4.0)))),
+            map = behindMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "C",
+            phrases = TokenPhrases,
+        )
+
+        orchestrator.start().toList()
+
+        val leg = feedback.emitted.last { it.id.startsWith("route-guide-") }
+        assertTrue(leg.message.startsWith("TURN_AROUND "), leg.message)
+        assertEquals(GuidanceCue.WRONG_WAY, leg.cue)
+    }
+
+    // A --- B --- C, with a way round from A by E: going round starts back at A.
+    private val behindMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(
+            FloorMap(
+                floorIndex = 0,
+                nodes = listOf(
+                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR),
+                    MapNode("B", 0.0, 10.0, NodeType.CORRIDOR),
+                    MapNode("C", 0.0, 20.0, NodeType.DESTINATION),
+                    MapNode("E", 15.0, 0.0, NodeType.CORRIDOR),
+                ),
+                edges = listOf(
+                    MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+                    MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+                    MapEdge("A", "E", accessible = true, distanceMeters = 15.0),
+                    MapEdge("E", "C", accessible = true, distanceMeters = 25.0),
+                ),
+            ),
+        ),
+    )
+
+    // A --- B --- C, with a way round from B by D.
+    private val rerouteMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(
+            FloorMap(
+                floorIndex = 0,
+                nodes = listOf(
+                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR),
+                    MapNode("B", 0.0, 10.0, NodeType.CORRIDOR),
+                    MapNode("C", 0.0, 20.0, NodeType.DESTINATION),
+                    MapNode("D", 10.0, 10.0, NodeType.CORRIDOR),
+                ),
+                edges = listOf(
+                    MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+                    MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+                    MapEdge("B", "D", accessible = true, distanceMeters = 10.0),
+                    MapEdge("D", "C", accessible = true, distanceMeters = 14.0),
+                ),
+            ),
+        ),
+    )
 
     @Test
     fun `announces the first leg instruction on the first position update`() = runTest {
@@ -333,6 +501,68 @@ class NavigationOrchestratorTest {
 
         val guidance = feedback.emitted.single { it.id.startsWith("route-guide-") }
         assertTrue(guidance.message.endsWith("WALL LEFT"), guidance.message)
+    }
+
+    // A T: the route goes north from Giris to Oda; a side corridor leads west from the junction.
+    private val tMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(
+            FloorMap(
+                0,
+                listOf(
+                    MapNode("G", 0.0, 0.0, NodeType.WAYPOINT, name = "Giris"),
+                    MapNode("K", 0.0, 10.0, NodeType.WAYPOINT, name = "Kavsak"),
+                    MapNode("O", 0.0, 25.0, NodeType.WAYPOINT, name = "Oda"),
+                    MapNode("Y", -15.0, 10.0, NodeType.WAYPOINT, name = "Yan"),
+                ),
+                listOf(MapEdge("G", "K", true, 10.0), MapEdge("K", "O", true, 15.0), MapEdge("K", "Y", true, 15.0)),
+            ),
+        ),
+    )
+
+    private suspend fun walk(positions: List<Position>): List<com.appvalence.umay.coremodel.NavigationAlert> {
+        val feedback = RecordingFeedbackController()
+        NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = tMap,
+            feedback = feedback,
+            startNodeId = "G",
+            destinationNodeId = "O",
+            phrases = TokenPhrases,
+        ).start().toList()
+        return feedback.emitted
+    }
+
+    @Test
+    fun `a wrong turn into the side corridor gets a new route from there`() = runTest {
+        val north = (0..10).map { position(0.0, it.toDouble(), timestampMs = 1_000L * it) }
+        val west = (1..10).map { position(-it.toDouble(), 10.0, headingDeg = 270.0, timestampMs = 11_000L + 1_000L * it) }
+
+        val alerts = walk(north + west)
+
+        val offRoute = alerts.single { it.id.startsWith("off-route-") }
+        assertEquals("OFF_ROUTE", offRoute.message)
+        // …followed by guidance for the new route: turn round, back toward the junction.
+        assertTrue(alerts.any { it.createdAtMs > offRoute.createdAtMs && it.message.startsWith("TURN_AROUND WALK Kavsak") }, alerts.map { it.message }.toString())
+    }
+
+    @Test
+    fun `turning back along the route is told to turn around, without replanning`() = runTest {
+        val north = (0..12).map { position(0.0, it * 0.7, timestampMs = 1_000L * it) }
+        val back = (1..8).map { position(0.0, 8.4 - it * 0.7, timestampMs = 13_000L + 1_000L * it) }
+
+        val alerts = walk(north + back)
+
+        assertEquals(1, alerts.count { it.id.startsWith("wrong-way-") })
+        assertTrue(alerts.none { it.id.startsWith("off-route-") })
+    }
+
+    @Test
+    fun `walking the route raises neither`() = runTest {
+        val alerts = walk((0..25).map { position(if (it % 2 == 0) 0.8 else -0.8, it.toDouble(), timestampMs = 1_000L * it) })
+
+        assertTrue(alerts.none { it.id.startsWith("off-route-") || it.id.startsWith("wrong-way-") })
     }
 
     @Test
@@ -604,6 +834,80 @@ class NavigationOrchestratorTest {
     )
 
     @Test
+    fun `avoiding stairs with no other way says so once and still routes over the stairs`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, floor = 0, timestampMs = 0L),
+            position(0.0, 1.0, floor = 0, timestampMs = 1_000L),
+        )
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(positions),
+            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
+            map = stairsMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+            phrases = TokenPhrases,
+            avoidStairs = true,
+        )
+
+        val states = orchestrator.start().toList()
+
+        assertEquals(listOf("A", "B", "C", "D"), states.last().route.map { it.id })
+        assertEquals(1, feedback.emitted.count { it.message == "NO_STEP_FREE_ROUTE" })
+        // Said before the first leg, so the walker hears it before heading for the stairs.
+        assertEquals("NO_STEP_FREE_ROUTE", feedback.emitted.first().message)
+    }
+
+    @Test
+    fun `avoiding stairs says nothing extra when the route has none`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(
+            positioning = FakePositioningEngine(position(0.0, 0.0, floor = 0, timestampMs = 0L)),
+            perception = FakeObstacleDetector(listOf(emptyList())),
+            map = twoFloorMap,
+            feedback = feedback,
+            startNodeId = "A",
+            destinationNodeId = "D",
+            phrases = TokenPhrases,
+            avoidStairs = true,
+        )
+
+        orchestrator.start().toList()
+
+        assertTrue(feedback.emitted.none { it.message == "NO_STEP_FREE_ROUTE" })
+    }
+
+    @Test
+    fun `the leg to a staircase says what's done there`() = runTest {
+        val feedback = RecordingFeedbackController()
+        orchestratorFor(stairsMap, listOf(position(0.0, 0.0)), feedback, "D").start().toList()
+
+        val leg = feedback.emitted.first { it.id.startsWith("route-guide-") }.message
+        assertTrue(leg.endsWith("THEN_FLOOR STAIRS UP 1"), leg)
+    }
+
+    @Test
+    fun `a barometer can hear the crossing at the end of this leg before it's pending`() = runTest {
+        val states = orchestratorFor(stairsMap, listOf(position(0.0, 0.0)), RecordingFeedbackController(), "D").start().toList()
+
+        assertEquals(null, states.last().pendingFloorChange)
+        assertEquals("C", states.last().upcomingFloorChange?.targetNodeId)
+    }
+
+    @Test
+    fun `confirmed onto the next floor before guidance got there, the route carries on up there`() = runTest {
+        // Still 6 m short of the stairs by the estimate when the barometer moved positioning upstairs.
+        val positions = listOf(position(0.0, 4.0, floor = 0, timestampMs = 0L), position(0.0, 3.0, floor = 1, timestampMs = 1_000L))
+        val feedback = RecordingFeedbackController()
+        val states = orchestratorFor(stairsMap, positions, feedback, "D").start().toList()
+
+        assertEquals(null, states.last().pendingFloorChange)
+        assertEquals("D", states.last().route[states.last().nextRouteIndex].id)
+        assertTrue(feedback.emitted.last { it.id.startsWith("route-guide-") }.message.startsWith("APPROACH"))
+    }
+
+    @Test
     fun `approaching a STAIRS-tagged node gets a hazard prefix and WARNING priority`() = runTest {
         val feedback = RecordingFeedbackController()
         val orchestrator = NavigationOrchestrator(
@@ -746,6 +1050,54 @@ class NavigationOrchestratorTest {
 
         val guidance = feedback.emitted.filter { it.id.startsWith("route-guide-") }
         assertEquals(listOf(GuidanceCue.TURN_RIGHT, GuidanceCue.NONE), guidance.map { it.cue })
+    }
+
+    // North to B, right (east) to C, left (north) to D.
+    private val twoTurnMap = BuildingMap(
+        id = "test-building",
+        floors = listOf(
+            FloorMap(
+                0,
+                listOf(
+                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR, name = "A"),
+                    MapNode("B", 0.0, 10.0, NodeType.CORRIDOR, name = "Donus"),
+                    MapNode("C", 10.0, 10.0, NodeType.CORRIDOR, name = "Kose"),
+                    MapNode("D", 10.0, 20.0, NodeType.DESTINATION, name = "D"),
+                ),
+                listOf(
+                    MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
+                    MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
+                    MapEdge("C", "D", accessible = true, distanceMeters = 10.0),
+                ),
+            ),
+        ),
+    )
+
+    @Test
+    fun `a leg announced just before the corner it starts with says to turn there first`() = runTest {
+        // Simulated walks in a virtual office found that without this, the walker heard
+        // only "10 m, then left" two metres before the corner and walked straight past it.
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(position(0.0, 0.0, timestampMs = 0L), position(0.0, 8.5, timestampMs = 1L))
+        orchestratorFor(twoTurnMap, positions, feedback, "D").start().toList()
+
+        val legs = feedback.emitted.filter { it.id.startsWith("route-guide-") }
+        assertEquals("WALK Donus 10.0 RIGHT", legs.first().message)
+        assertEquals("TURN_NOW RIGHT WALK Kose 10.1 LEFT", legs.last().message)
+        assertEquals(GuidanceCue.TURN_RIGHT, legs.last().cue)
+    }
+
+    @Test
+    fun `a repeat further along the leg no longer says to turn`() = runTest {
+        val feedback = RecordingFeedbackController()
+        val positions = listOf(
+            position(0.0, 0.0, timestampMs = 0L),
+            position(0.0, 8.5, timestampMs = 1L),
+            position(6.0, 10.0, timestampMs = NavigationOrchestrator.ROUTE_GUIDANCE_REPEAT_INTERVAL_MS + 2),
+        )
+        orchestratorFor(twoTurnMap, positions, feedback, "D").start().toList()
+
+        assertEquals("WALK Kose 4.0 LEFT", feedback.emitted.last { it.id.startsWith("route-guide-") }.message)
     }
 
     @Test

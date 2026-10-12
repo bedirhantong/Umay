@@ -12,8 +12,10 @@ import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.PositionStream
 import com.appvalence.umay.coremodel.RssiEvent
 import com.appvalence.umay.coremodel.SessionStartEvent
+import com.appvalence.umay.coremodel.StatusEvent
 import com.appvalence.umay.coremodel.StepEvent
 import com.appvalence.umay.positioning.ble.BleBeaconScanner
+import com.appvalence.umay.positioning.compass.CompassHint
 import com.appvalence.umay.positioning.engine.FingerprintPositioningEngine
 import com.appvalence.umay.positioning.engine.PositionFusionEngine
 import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
@@ -99,6 +101,11 @@ object FieldLogReplay {
                     filters.forEachIndexed { i, filter ->
                         if (filter.onBeaconReadings(readings, event.t) != null) particleCorrections[i]++
                     }
+                }
+
+                // A starting direction the compass gave the live filter: the replay's get it too.
+                is StatusEvent -> CompassHint.fromLogStatus(event.status)?.let { (offset, sigma) ->
+                    filters.forEach { it.observeHeadingOffset(offset, sigma) }
                 }
 
                 is FloorChangeEvent -> if (event.phase != FloorChangePhase.PROMPTED) {

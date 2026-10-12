@@ -47,6 +47,7 @@ jobs:
           :cloud:testDebugUnitTest
           :cloud-firebase:testDebugUnitTest
           :server:test
+          :simulation:testDebugUnitTest
           :app:testStandardDebugUnitTest
 
       # The institution build promises that nothing leaves the device; this fails the

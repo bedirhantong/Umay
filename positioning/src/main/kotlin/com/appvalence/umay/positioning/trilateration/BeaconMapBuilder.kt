@@ -11,6 +11,7 @@ import com.appvalence.umay.coremodel.RadioFingerprint
 import com.appvalence.umay.coremodel.RadioSample
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.mapping.PathSimplifier
+import com.appvalence.umay.positioning.mapping.SurveyLoopClosure
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.hypot
@@ -77,6 +78,11 @@ object BeaconMapBuilder {
         trajectory: List<Position> = emptyList(),
         radioSamples: Map<Int, List<RadioSample>> = emptyMap(),
     ): BuildingMap {
+        // A survey walked by footsteps drifts; the camera's doesn't, much (and its wall map
+        // is drawn in the camera's frame, which correcting only the path would break).
+        val footsteps = taggedWaypoints.none { it.trajectoryIndex != null }
+        val samePlaceMeters = if (footsteps) LOOP_CLOSURE_METERS else SAME_PLACE_METERS
+
         // A place named again on coming back to it (the junction of a T-shaped corridor,
         // the foot of the stairs on the way back down) is the same place: one node, so
         // the walk's branches join there.
@@ -86,10 +92,61 @@ object BeaconMapBuilder {
                 val other = taggedWaypoints[j]
                 canonical[j] == j && other.floor == waypoint.floor &&
                     normalizedName(other.name) == normalizedName(waypoint.name) &&
-                    hypot(other.x - waypoint.x, other.y - waypoint.y) <= SAME_PLACE_METERS
+                    hypot(other.x - waypoint.x, other.y - waypoint.y) <= samePlaceMeters
             }
             if (earlier != null) canonical[i] = earlier
         }
+        if (footsteps) {
+            val closed = closeLoops(taggedWaypoints, canonical, trajectory, radioSamples)
+            return buildFromWaypointsClosed(buildingId, closed.first, canonical, beaconResults, maxEdgeDistanceMeters, anchorName, trajectory, closed.second)
+        }
+        return buildFromWaypointsClosed(buildingId, taggedWaypoints, canonical, beaconResults, maxEdgeDistanceMeters, anchorName, trajectory, radioSamples)
+    }
+
+    /**
+     * A footsteps survey's drift taken out ([SurveyLoopClosure]): every named place where
+     * the walk came back to it pulls the walk in between straight, and the radio samples
+     * taken along the way move with it.
+     */
+    private fun closeLoops(
+        tags: List<TaggedWaypoint>,
+        canonical: IntArray,
+        trajectory: List<Position>,
+        radioSamples: Map<Int, List<RadioSample>>,
+    ): Pair<List<TaggedWaypoint>, Map<Int, List<RadioSample>>> {
+        val corrections = SurveyLoopClosure.corrections(tags.mapIndexed { i, tag -> SurveyLoopClosure.Stop(tag.x, tag.y, tag.floor, canonical[i]) })
+        val corrected = tags.mapIndexed { i, tag -> tag.copy(x = tag.x + corrections[i].first, y = tag.y + corrections[i].second) }
+        if (trajectory.isEmpty()) return corrected to radioSamples
+        // Each tag and each radio sample was taken at a point of the path, in order: find it.
+        fun locate(points: List<Triple<Double, Double, Int>>): List<Int> {
+            var from = 0
+            return points.map { (x, y, floor) ->
+                val at = (from until trajectory.size).firstOrNull { k -> trajectory[k].x == x && trajectory[k].y == y && trajectory[k].floor == floor } ?: -1
+                if (at >= 0) from = at
+                at
+            }
+        }
+        val pathCorrections = SurveyLoopClosure.spread(trajectory.size, locate(tags.map { Triple(it.x, it.y, it.floor) }), corrections)
+        val samples = radioSamples.mapValues { (floor, list) ->
+            val at = locate(list.map { Triple(it.x, it.y, floor) })
+            list.mapIndexed { i, sample ->
+                val c = at[i].takeIf { it >= 0 }?.let(pathCorrections::get) ?: return@mapIndexed sample
+                sample.copy(x = sample.x + c.first, y = sample.y + c.second)
+            }
+        }
+        return corrected to samples
+    }
+
+    private fun buildFromWaypointsClosed(
+        buildingId: String,
+        taggedWaypoints: List<TaggedWaypoint>,
+        canonical: IntArray,
+        beaconResults: List<BeaconSurveyResult>,
+        maxEdgeDistanceMeters: Double,
+        anchorName: (floorIndex: Int, number: Int) -> String,
+        trajectory: List<Position>,
+        radioSamples: Map<Int, List<RadioSample>>,
+    ): BuildingMap {
         // Assigned once, up front, so the same id can be used both inside each
         // floor's node list and when detecting cross-floor transitions below.
         val nodeIds = taggedWaypoints.indices.associateWith { UUID.randomUUID().toString() }
@@ -250,9 +307,14 @@ object BeaconMapBuilder {
     // Half a corridor's width: a walk that wanders less than this is still "straight".
     const val CORNER_TOLERANCE_METERS = 0.5
 
-    // Dead reckoning drifts a few metres between visits; two places of the same name
-    // farther apart than this are different places that happen to share a name.
+    // The camera barely drifts between visits; two places of the same name farther apart
+    // than this are different places that happen to share a name.
     const val SAME_PLACE_METERS = 5.0
+
+    // Footsteps drift several metres over a long survey before the walk comes back to a
+    // place (simulated surveys: 4–6 junctions of an office stayed apart at 5 m), and
+    // loop closure then pulls them together.
+    const val LOOP_CLOSURE_METERS = 15.0
 
     // A fixed penalty, not a measured distance — stairs/elevators cost real time and
     // effort A* should weigh against a same-floor detour, but there's no PDR distance

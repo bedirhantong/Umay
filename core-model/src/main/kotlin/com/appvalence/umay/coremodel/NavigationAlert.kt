@@ -22,6 +22,9 @@ enum class GuidanceCue {
     OBSTACLE_CRITICAL,
     REROUTED,
     NO_ROUTE,
+
+    /** Walking away from the next route point: turn around. */
+    WRONG_WAY,
 }
 
 data class NavigationAlert(
@@ -31,4 +34,9 @@ data class NavigationAlert(
     val relatedObstacle: DetectedObstacle?,
     val createdAtMs: Long,
     val cue: GuidanceCue = GuidanceCue.NONE,
+    /**
+     * Says where to go from here (the next leg, "arrived", "turn back"): a newer one
+     * makes any older one still waiting to be said, or half said, out of date.
+     */
+    val isGuidance: Boolean = false,
 )

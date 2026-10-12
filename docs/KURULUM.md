@@ -77,6 +77,11 @@ Haritayı gören bir kişi, binada bir kez yürüyerek çıkarır. Haritayı ç�
   bileşeni istemiyorsa "Adım sayarak" modunu kullanın.
 - Adım sayarak çıkaracaksanız önce **Ayarlar → Adım uzunluğu** ile adımınızı
   ölçün; haritanın bütün mesafeleri buna dayanır.
+- Telefonun pusulası kalibre olsun: haritaya başlamadan telefonu havada
+  birkaç kez 8 çizerek çevirin. Umay haritalarken pusulanın binaya göre
+  farkını da kaydeder; kör kullanıcı yola çıkarken telefonunun hangi yöne
+  baktığını buradan bilir. Pusula binada çok sapıyorsa bu kendiliğinden
+  kullanılmaz.
 - Bina olabildiğince boş olsun (sabah erken ya da mesai sonrası). Kapıları
   açık bırakmak duvar haritasını iyileştirir; kapalıysa kapıyı "Kapı" olarak
   işaretlemek yeterlidir, Umay duvarda açıklığı kendisi açar.
@@ -93,12 +98,20 @@ Haritayı gören bir kişi, binada bir kez yürüyerek çıkarır. Haritayı ç�
    tanımaz; yönlendirmedeki uyarılar yalnızca burada işaretlenenler içindir.
 5. Bir **kavşağa ya da merdivene geri döndüğünüzde** ona ilk verdiğiniz adın
    aynısını tekrar verin. Umay ikisini tek yer sayar ve koridorları orada
-   birleştirir. Farklı ad verirseniz koridorlar birleşmez.
+   birleştirir. Farklı ad verirseniz koridorlar birleşmez. Adım sayarak
+   çıkarıyorsanız bu ayrıca haritayı düzeltir: aynı yere geri döndüğünüzü
+   bilen Umay, aradaki yürüyüşte biriken kaymayı geri alır. Bu yüzden her
+   kola girip aynı kavşağa dönmek ve orada adı tekrarlamak, haritayı tek
+   seferde uzun bir yürüyüşle çıkarmaktan daha doğru sonuç verir.
 6. Kat değiştirirken merdivenin ya da asansörün iki ucunu ayrı ayrı
    işaretleyin ("Doğu merdiveni zemin", "Doğu merdiveni 1. kat"). Telefonda
    basınç sensörü varsa kat kendiliğinden değişir; yoksa +/− ile değiştirin.
 7. Binanın kullanıcıların gideceği her koridorunu yürüyün. Yürünmeyen bir
-   koridor haritada yoktur.
+   koridor haritada yoktur, ve bu yalnızca o koridora rota çizilemeyeceği
+   anlamına gelmez: biri oraya girerse Umay onun yerini kaybeder. Gerçek
+   yürüyüş kayıtlarıyla yapılan ölçümde haritanın yürüyüşün %63–71'ini
+   kapsaması, konum hatasını 2–3 metreden 11–13 metreye çıkardı. Holler ve
+   geniş alanlar için ortasından ve kenarlarından birer kez yürüyün.
 8. Bitince "Kaydı durdur"a basın, binaya bir ad verip kaydedin.
 
 Kayıt sırasında başka bir uygulamaya geçmek kaydı bozmaz. Uygulama kapansa
@@ -125,19 +138,35 @@ bir sayfa hazırlar: ortasında 15 cm'lik bir QR kod, altında yerin adı.
 
 - Sayfaları **gerçek boyutta** (%100, "sayfaya sığdır" kapalı) yazdırın; Umay
   uzaklığı QR kodun 15 cm olduğunu bilerek hesaplar. Bir sayfayı cetvelle ölçün.
-- Her sayfayı adı yazan yerin duvarına, **göz hizasında** (yerden 1,3–1,6 m),
-  yürüme yönünden görülecek şekilde yapıştırın. Parlak ve kırışık olmayan kâğıt
-  ya da laminasyon kullanın.
+- Her sayfayı adı yazan yerin duvarına, **göğüs–göz hizasında** (yerden
+  1,3–1,6 m), insanların **yakınından geçtiği** ve yüzünü döndüğü yere
+  yapıştırın: kapının yanı, kavşağın köşesi, asansör düğmesinin yanı.
+  Parlak ve kırışık olmayan kâğıt ya da laminasyon kullanın.
+- Telefon 15 cm'lik bir işareti **yaklaşık 2 metreden** (pil tasarrufunda 1
+  metreden) ve en çok 45° yandan okuyabiliyor (simülasyonda ölçüldü, telefonda
+  doğrulanacak). Koridorun karşı duvarındaki ya da yandan bakılan bir işaret
+  yürürken okunmaz.
 - Kritik yerlere öncelik verin: giriş, danışma, asansör ve merdiven önleri,
   kavşaklar, tuvaletler.
-- Kamerası açık bir telefon işareti birkaç metreden görünce kullanıcı nerede
-  olduğunu kesin olarak öğrenir; yola çıkmadan **Kamerayla bul** da işaretten
-  başlar. İşaretlerin içinde yalnızca yerin kimliği vardır, bina ya da kişi
+- Kamerası açık bir telefon işareti görünce kullanıcı nerede olduğunu kesin
+  olarak öğrenir. Bu en çok konum karıştığında işe yarar: simülasyonda yanlış
+  yerden yola çıkan yürüyüşlerin varışı 24'te 3'ten 14'e çıktı. Yola çıkmadan
+  **Kamerayla bul** da işaretten başlar: kullanıcı işaretin önünde durmalı. İşaretlerin içinde yalnızca yerin kimliği vardır, bina ya da kişi
   hakkında bilgi yoktur.
 - Harita yeniden çıkarılırsa yer kimlikleri değişir: işaretleri yeniden yazdırıp
   değiştirin. Haritayı düzenleyiciyle düzeltmek kimlikleri değiştirmez.
 
 ---
+
+### Bir bölümü yeniden çıkarmak
+
+Masalar, dolaplar ya da bir koridor değiştiyse bütün binayı baştan yürümek
+gerekmez. **Beacon Tarayıcı**'da yeni bir yürüyüş başlatın; haritada olan bir
+yerde başlayıp haritada olan bir yerde bitirin ve bu ikisine haritadaki
+adlarını aynen verin. Arada yeni yerler işaretleyebilirsiniz. Yürüyüş bitince
+**Var olan bir haritaya bölüm olarak ekle**'yi seçip binayı işaretleyin.
+Umay bölümü ortak yerlere göre haritaya oturtur; "Yeniden yürünen yolun
+eskisini kaldır" açıksa o iki yer arasındaki eski yol yenisiyle değişir.
 
 ## 5. Beacon'ları denetlemek
 

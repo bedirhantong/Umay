@@ -45,8 +45,17 @@ data class ArToSurvey(val rotationDeg: Double, val tx: Double, val ty: Double) {
  * leaving the screen): ARCore usually resumes in the same frame, possibly with a
  * legitimate correction, but can also come back somewhere implausible. A resumed
  * pose is believed when it's within reach of where the walk left off — given the
- * footsteps counted meanwhile — and otherwise re-anchored there, keeping the
- * plan's existing orientation. Either way the trajectory never teleports.
+ * footsteps counted meanwhile — and otherwise re-anchored there. Either way the
+ * trajectory never teleports.
+ *
+ * It can come back turned, too: then everything walked afterwards would be
+ * drawn at an angle to what came before (simulated camera surveys: a map's
+ * places metres out, its walls scrambled). The phone's gyro keeps turning with
+ * the walker while the camera is lost: given its heading at the last tracked
+ * pose and when tracking came back, a resumed heading that disagrees with the gyro's turn
+ * meanwhile by more than [MAX_YAW_JUMP_DEG] has the plan turned back to match,
+ * and the resumed pose re-anchored where the footsteps, in the gyro's
+ * directions, lead.
  */
 class ArPoseAligner(
     private val startX: Double = 0.0,
@@ -68,37 +77,57 @@ class ArPoseAligner(
     private var last: SurveyPose? = null
     private var walkedWhileLostMeters = 0.0
 
-    fun onTracked(pose: ArPose): SurveyPose {
+    // The gyro's heading at the last tracked pose; while lost, the footsteps' path since.
+    private var gyroAtLastDeg: Double? = null
+    private var lostDx = 0.0
+    private var lostDy = 0.0
+
+    /** [gyroHeadingDeg]: the phone's gyro heading now (any fixed frame, the same throughout), if known. */
+    fun onTracked(pose: ArPose, gyroHeadingDeg: Double? = null): SurveyPose {
         val previous = last
         var current = transform
         if (current == null) {
             val rotation = startHeadingDeg?.let { normalizeDegrees(it - pose.headingDeg) } ?: 0.0
             current = ArToSurvey(rotation, 0.0, 0.0).anchoredAt(pose.x, pose.z, startX, startY)
         } else if (previous != null) {
+            val atLast = gyroAtLastDeg
+            if (!isTracking && atLast != null && gyroHeadingDeg != null) {
+                val expectedHeading = previous.headingDeg + signedDegrees(gyroHeadingDeg - atLast)
+                val yawJump = signedDegrees(current.heading(pose.headingDeg) - expectedHeading)
+                if (abs(yawJump) > MAX_YAW_JUMP_DEG) {
+                    // Back in a turned frame: turn the plan back, and put the walker where the
+                    // footsteps taken meanwhile, with their turns, lead.
+                    current = ArToSurvey(normalizeDegrees(current.rotationDeg - yawJump), 0.0, 0.0)
+                        .anchoredAt(pose.x, pose.z, previous.x + lostDx, previous.y + lostDy)
+                }
+            }
             val candidateX = current.x(pose.x, pose.z)
             val candidateY = current.y(pose.x, pose.z)
-            val jump = hypot(candidateX - previous.x, candidateY - previous.y)
             val elapsedSeconds = (pose.timestampMs - previous.timestampMs).coerceAtLeast(0) / 1000.0
-            val reach = jumpMarginMeters + if (isTracking) {
-                elapsedSeconds * MAX_WALKING_SPEED_MPS
+            // With the gyro's turns the footsteps say where the walker is; without, only how far they got.
+            val guided = !isTracking && gyroAtLastDeg != null && gyroHeadingDeg != null
+            val jump = if (guided) {
+                hypot(candidateX - previous.x - lostDx, candidateY - previous.y - lostDy)
             } else {
-                walkedWhileLostMeters * WALKED_DISTANCE_SLACK
+                hypot(candidateX - previous.x, candidateY - previous.y)
+            }
+            val reach = jumpMarginMeters + when {
+                isTracking -> elapsedSeconds * MAX_WALKING_SPEED_MPS
+                guided -> walkedWhileLostMeters * GUIDED_DISTANCE_SLACK
+                else -> walkedWhileLostMeters * WALKED_DISTANCE_SLACK
             }
             if (jump > reach) {
                 // Not a correction ARCore could have made: put the walker where the steps
                 // taken since the last good pose say they are.
-                val headingRad = Math.toRadians(previous.headingDeg)
-                current = current.anchoredAt(
-                    pose.x,
-                    pose.z,
-                    previous.x + walkedWhileLostMeters * sin(headingRad),
-                    previous.y + walkedWhileLostMeters * cos(headingRad),
-                )
+                current = current.anchoredAt(pose.x, pose.z, previous.x + lostDx, previous.y + lostDy)
             }
         }
         transform = current
         isTracking = true
         walkedWhileLostMeters = 0.0
+        gyroAtLastDeg = gyroHeadingDeg
+        lostDx = 0.0
+        lostDy = 0.0
         return SurveyPose(current.x(pose.x, pose.z), current.y(pose.x, pose.z), current.heading(pose.headingDeg), pose.timestampMs).also { last = it }
     }
 
@@ -106,15 +135,40 @@ class ArPoseAligner(
         isTracking = false
     }
 
-    /** A footstep: only counts while tracking is lost, to judge how far a resumed pose may have moved. */
-    fun onStep(lengthMeters: Double) {
-        if (!isTracking) walkedWhileLostMeters += lengthMeters
+    /**
+     * A footstep, with the gyro's heading at it if known: only counts while tracking is
+     * lost, to judge where a resumed pose should be. Returns where the footsteps have
+     * the walker meanwhile (the last tracked pose's timestamp), so that a place named
+     * during a loss isn't put where tracking stopped; null while tracking.
+     */
+    fun onStep(lengthMeters: Double, gyroHeadingDeg: Double? = null): SurveyPose? {
+        if (isTracking) return null
+        val from = last ?: return null
+        walkedWhileLostMeters += lengthMeters
+        val atLast = gyroAtLastDeg
+        val turned = if (atLast != null && gyroHeadingDeg != null) signedDegrees(gyroHeadingDeg - atLast) else 0.0
+        val heading = normalizeDegrees(from.headingDeg + turned)
+        lostDx += lengthMeters * sin(Math.toRadians(heading))
+        lostDy += lengthMeters * cos(Math.toRadians(heading))
+        return SurveyPose(from.x + lostDx, from.y + lostDy, heading, from.timestampMs)
     }
+
+    private fun signedDegrees(deg: Double): Double = ((deg % 360.0) + 540.0) % 360.0 - 180.0
 
     companion object {
         const val DEFAULT_JUMP_MARGIN_METERS = 1.0
         const val MAX_WALKING_SPEED_MPS = 2.5
         const val WALKED_DISTANCE_SLACK = 1.5
+
+        /** Footsteps in the gyro's directions: their length a tenth or so out, their turns a few degrees. */
+        const val GUIDED_DISTANCE_SLACK = 0.25
+
+        /**
+         * A turned frame, not a correction: a gyro drifts well under a degree over a few
+         * seconds' loss, and ARCore's own corrections are no bigger; a frame turned more
+         * than this skews every metre walked after it (9° is 3 m across a 20 m floor).
+         */
+        const val MAX_YAW_JUMP_DEG = 5.0
     }
 }
 

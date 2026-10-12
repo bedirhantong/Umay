@@ -218,11 +218,55 @@ class BeaconMapBuilderTest {
 
         assertEquals(4, floor.nodes.size)
         val junction = floor.nodes.single { it.name == "Kavşak" }
-        assertEquals(0.4, junction.x, 1e-9)
+        // Between the two visits: loop closure pulls them together, spreading the difference
+        // over the walk in between.
+        assertTrue(junction.x in 0.0..0.8, "junction at ${junction.x}")
         assertEquals(-65.0, junction.fingerprint.single().rssi, 1e-9)
         val junctionLinks = floor.edges.count { it.fromId == junction.id || it.toId == junction.id }
         assertEquals(3, junctionLinks)
         assertEquals(3, floor.edges.size)
+    }
+
+    @Test
+    fun `a footsteps survey's start, named again 5 m off by drift, is still one place`() {
+        // A 20 m square walked round and back to the start, the heading creeping 5° a
+        // stretch and the stride 5% long: dead reckoning ends 5 m from where it began.
+        val truth = listOf(0.0 to 0.0, 0.0 to 20.0, 20.0 to 20.0, 20.0 to 0.0, 0.0 to 0.0)
+        var x = 0.0
+        var y = 0.0
+        var heading = 0.0
+        val raw = mutableListOf(0.0 to 0.0)
+        for ((a, b) in truth.zipWithNext()) {
+            heading += 5.0
+            val bearing = Math.toDegrees(kotlin.math.atan2(b.first - a.first, b.second - a.second)) + heading
+            val length = kotlin.math.hypot(b.first - a.first, b.second - a.second) * 1.05
+            x += length * kotlin.math.sin(Math.toRadians(bearing))
+            y += length * kotlin.math.cos(Math.toRadians(bearing))
+            raw += x to y
+        }
+        val names = listOf("Giriş", "Kuzey", "Köşe", "Güney", "Giriş")
+        val waypoints = raw.mapIndexed { i, (px, py) -> tag(names[i], px, py) }
+        assertTrue(kotlin.math.hypot(raw.last().first, raw.last().second) > 3.0, "no drift to take out")
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints).floors.single()
+
+        // Before loop closure, 5 m apart was two places, and the square never closed.
+        assertEquals(4, floor.nodes.size, "the start, named again, is one place")
+        // Pulling the two visits together mustn't bend the rest out of shape: how far apart
+        // each two places are, against the truth (the drawing may sit turned as a whole).
+        // A single loop's turning drift isn't undone by moving places, so no better either.
+        fun shapeError(points: List<Pair<Double, Double>>): Double {
+            val pairs = points.indices.flatMap { i -> (i + 1 until points.size).map { j -> i to j } }
+            return pairs.map { (i, j) ->
+                val drawn = kotlin.math.hypot(points[i].first - points[j].first, points[i].second - points[j].second)
+                val real = kotlin.math.hypot(truth[i].first - truth[j].first, truth[i].second - truth[j].second)
+                kotlin.math.abs(drawn - real)
+            }.average()
+        }
+        val closed = names.dropLast(1).map { name -> floor.nodes.single { it.name == name }.let { it.x to it.y } }
+        val before = shapeError(raw.dropLast(1))
+        val after = shapeError(closed)
+        assertTrue(after < before * 1.2, "distances between places off by %.2f m on average, %.2f m before".format(after, before))
     }
 
     @Test

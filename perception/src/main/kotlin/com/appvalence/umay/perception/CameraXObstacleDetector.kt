@@ -4,10 +4,14 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
+import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -102,6 +106,14 @@ class CameraXObstacleDetector(
         frameThrottle.minIntervalMs = intervalMs
     }
 
+    // Read on the analyzer thread, set from the main one.
+    @Volatile private var markerFrameWidth = CameraOptics.MARKER_FRAME_WIDTH_PX
+
+    /** Reads markers in less detail (about a metre's reach instead of two) while saving power. */
+    fun setSavingPower(saving: Boolean) {
+        markerFrameWidth = if (saving) CameraOptics.MARKER_FRAME_WIDTH_SAVING_PX else CameraOptics.MARKER_FRAME_WIDTH_PX
+    }
+
     /** The camera's current view, upright — null before the first frame or after [unbind]. See [SignTextReader]. */
     fun latestFrameOrNull(): Bitmap? = latestFrame.get()
 
@@ -165,6 +177,7 @@ class CameraXObstacleDetector(
         val analysis = ImageAnalysis.Builder()
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setResolutionSelector(analysisResolution())
             .build()
             .also { it.setAnalyzer(executor) { imageProxy -> analyzeFrame(imageProxy, detector) } }
         imageAnalysis = analysis
@@ -249,7 +262,7 @@ class CameraXObstacleDetector(
                         centerYPx = (detection.top + detection.bottom) / 2,
                         distanceMeters = ObstacleClasses.distanceMeters(obstacleClass, detection.top, detection.bottom, uprightBitmap.height),
                         bearingDeg = ObstacleGeometry.estimateBearingDegrees(centerX, uprightBitmap.width),
-                    ) to (obstacleClass to detection.score)
+                    ) to Triple(obstacleClass, detection.score, detection.left to detection.right)
                 }
                 .sortedByDescending { it.second.second }
                 .take(MAX_RESULTS)
@@ -258,7 +271,7 @@ class CameraXObstacleDetector(
 
             val tracked = tracker.update(rawDetections.map { it.first }, timestampMs = detectionDoneMs)
             val result = tracked.mapIndexed { index, t ->
-                val (obstacleClass, score) = rawDetections[index].second
+                val (obstacleClass, score, box) = rawDetections[index].second
                 DetectedObstacle(
                     id = t.id,
                     type = obstacleClass.type,
@@ -269,6 +282,7 @@ class CameraXObstacleDetector(
                     detectedAtMs = detectionDoneMs,
                     sensorSource = ObstacleSensorSource.CAMERA_ML,
                     kind = obstacleClass.kind,
+                    widthMeters = ObstacleGeometry.widthIfWhollySeen(box.first, box.second, uprightBitmap.width, t.distanceMeters),
                 )
             }
 
@@ -283,9 +297,9 @@ class CameraXObstacleDetector(
         }
     }
 
-    /** Analyzer thread only. A grayscale copy at most [MARKER_FRAME_WIDTH] wide is plenty for a 15 cm code. */
+    /** Analyzer thread only. A grayscale copy at most [markerFrameWidth] wide. */
     private fun readMarkers(frame: Bitmap, timestampMs: Long): List<MarkerSighting> {
-        val scale = minOf(1f, MARKER_FRAME_WIDTH.toFloat() / frame.width)
+        val scale = minOf(1f, markerFrameWidth.toFloat() / frame.width)
         val small = if (scale < 1f) Bitmap.createScaledBitmap(frame, (frame.width * scale).toInt(), (frame.height * scale).toInt(), true) else frame
         val size = small.width * small.height
         if (luminance.size != size) {
@@ -324,6 +338,16 @@ class CameraXObstacleDetector(
 
         // Markers don't move: three looks a second is plenty, and decoding isn't free.
         const val MARKER_INTERVAL_MS = 350L
-        private const val MARKER_FRAME_WIDTH = 640
     }
 }
+
+/** The analysis frame size asked of the camera (see [CameraOptics.ANALYSIS_WIDTH_PX]), or the nearest below it. */
+internal fun analysisResolution(): ResolutionSelector = ResolutionSelector.Builder()
+    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+    .setResolutionStrategy(
+        ResolutionStrategy(
+            Size(CameraOptics.ANALYSIS_WIDTH_PX, CameraOptics.ANALYSIS_HEIGHT_PX),
+            ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+        ),
+    )
+    .build()

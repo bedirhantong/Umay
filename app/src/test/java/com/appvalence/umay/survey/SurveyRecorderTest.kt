@@ -8,7 +8,9 @@ import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.RadioFingerprint
+import com.appvalence.umay.coremodel.CompassSums
 import com.appvalence.umay.coremodel.StepEvent
+import com.appvalence.umay.positioning.compass.HeadingReading
 import com.appvalence.umay.positioning.ble.BleScanState
 import com.appvalence.umay.positioning.mapping.ArPose
 import com.appvalence.umay.positioning.mapping.DepthFrame
@@ -208,6 +210,58 @@ class SurveyRecorderTest {
         val trajectory = recorder.state.value.trajectory
         assertEquals(5, trajectory.size)
         assertEquals(5 * 0.7, trajectory.last().y, 1e-9)
+        recorder.stop()
+    }
+
+    @Test
+    fun `a resumed footstep walk keeps its heading, whatever the new step detector starts from`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start()
+        // A step detector's first step is "from zero" to wherever the sensor reads (137°).
+        motion.steps.emit(StepEvent(0.7, headingDeltaDeg = 137.0, timestampMs = ++stepTime))
+        motion.steps.emit(StepEvent(0.7, headingDeltaDeg = 90.0, timestampMs = ++stepTime)) // a real right turn
+        advanceUntilIdle()
+        recorder.stop()
+        advanceUntilIdle()
+
+        recorder.start()
+        motion.steps.emit(StepEvent(0.7, headingDeltaDeg = 251.0, timestampMs = ++stepTime)) // the new detector's start
+        advanceUntilIdle()
+
+        val headings = recorder.state.value.trajectory.map { it.headingDeg }
+        assertEquals(listOf(0.0, 90.0, 90.0), headings)
+        recorder.stop()
+    }
+
+    @Test
+    fun `the compass is compared with the walk's heading at every step, and kept in the draft`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start()
+        motion.steps.emit(StepEvent(0.7, headingDeltaDeg = 0.0, timestampMs = System.currentTimeMillis()))
+        advanceUntilIdle()
+        // Facing the drawing's 0° (its first step), the compass reads 340°: the drawing is 20° clockwise of north.
+        motion.headings.emit(HeadingReading(System.currentTimeMillis(), gameHeadingDeg = 0.0, magneticHeadingDeg = 340.0, magneticReliable = true))
+        advanceUntilIdle()
+        repeat(CompassSums.MIN_SAMPLES) { motion.steps.emit(StepEvent(0.7, headingDeltaDeg = 0.0, timestampMs = System.currentTimeMillis())) }
+        advanceUntilIdle()
+
+        val calibration = recorder.state.value.compass.getValue(0).calibration()!!
+        assertEquals(20.0, calibration.offsetDeg, 1e-6)
+        recorder.stop()
+        advanceUntilIdle()
+        assertEquals(recorder.state.value.compass, drafts.draft!!.compass)
+    }
+
+    @Test
+    fun `an unsure compass isn't sampled`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start()
+        motion.headings.emit(HeadingReading(System.currentTimeMillis(), 0.0, 340.0, magneticReliable = false))
+        advanceUntilIdle()
+        repeat(5) { motion.steps.emit(StepEvent(0.7, 0.0, System.currentTimeMillis())) }
+        advanceUntilIdle()
+
+        assertTrue(recorder.state.value.compass.isEmpty())
         recorder.stop()
     }
 

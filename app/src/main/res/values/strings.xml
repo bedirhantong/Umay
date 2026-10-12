@@ -40,6 +40,14 @@
         <item quantity="one">%d kat</item>
         <item quantity="other">%d kat</item>
     </plurals>
+    <plurals name="count_new_places">
+        <item quantity="one">%d yeni yer</item>
+        <item quantity="other">%d yeni yer</item>
+    </plurals>
+    <plurals name="count_replaced_ways">
+        <item quantity="one">%d yol yenilendi</item>
+        <item quantity="other">%d yol yenilendi</item>
+    </plurals>
     <plurals name="count_points">
         <item quantity="one">%d nokta</item>
         <item quantity="other">%d nokta</item>
@@ -159,6 +167,10 @@
     <string name="voice_query_listening">Dinliyorum.</string>
     <string name="voice_query_answer_with_distance">%1$s, yaklaşık %2$s uzakta.</string>
     <string name="voice_query_answer_no_distance">%1$s var, ama şu an ne kadar uzakta olduğunu söyleyemiyorum.</string>
+    <string name="voice_query_where_at">Şu an %1$s yanındasın.</string>
+    <string name="voice_query_where_between">%1$s ile %2$s arasındasın: %1$s yaklaşık %3$s, %2$s yaklaşık %4$s uzakta.</string>
+    <string name="voice_query_where_next">Sıradaki yönerge: %1$s</string>
+    <string name="voice_query_where_unknown">Henüz nerede olduğunu bilmiyorum. Birkaç adım yürüdükten sonra tekrar sor.</string>
     <string name="voice_query_not_understood">Anlayamadım, farklı bir şekilde sorabilir misin?</string>
     <string name="voice_query_no_speech">Bir şey duyamadım.</string>
     <string name="voice_query_not_available">Bu cihazda konuşarak soru sorma kullanılamıyor: telefonda Türkçe konuşmayı internetsiz tanıyan bir hizmet yok. Sesin cihazından çıkmaması için internet üzerinden tanıma kullanılmıyor.</string>
@@ -213,6 +225,19 @@
     <string name="say_walk_then_left">%1$s yönünde yaklaşık %2$s ilerle, sonra sola dön.</string>
     <string name="say_wall_left">Duvar solunda; onu takip edebilirsin.</string>
     <string name="say_wall_right">Duvar sağında; onu takip edebilirsin.</string>
+    <!-- A clock hour is a direction, not a count. -->
+    <string name="say_walk_then_clock" tools:ignore="PluralsCandidate">%1$s yönünde yaklaşık %2$s ilerle, sonra saat %3$d yönüne dön.</string>
+    <string name="say_walk_ahead_then_clock" tools:ignore="PluralsCandidate">Yaklaşık %1$s ilerle, sonra saat %2$d yönüne dön.</string>
+    <string name="say_wall_clock" tools:ignore="PluralsCandidate">Duvar saat %1$d yönünde; onu takip edebilirsin.</string>
+    <string name="say_turn_left_now">Sola dön.</string>
+    <string name="say_turn_right_now">Sağa dön.</string>
+    <string name="say_turn_clock_now" tools:ignore="PluralsCandidate">Saat %1$d yönüne dön.</string>
+    <string name="say_turn_around">Geri dön.</string>
+    <string name="say_pass_left">Engelin solundan geçebilirsin.</string>
+    <string name="say_pass_right">Engelin sağından geçebilirsin.</string>
+    <string name="say_pass_clock" tools:ignore="PluralsCandidate">Engeli saat %1$d yönünden geçebilirsin.</string>
+    <string name="say_off_route">Rotadan çıktın. Bulunduğun yerden yeni rota hesaplandı.</string>
+    <string name="say_wrong_way">Ters yöne gidiyorsun gibi görünüyor, geri dön.</string>
     <string name="say_walk_ahead">Yaklaşık %1$s düz ilerle.</string>
     <string name="say_walk_ahead_then_right">Yaklaşık %1$s ilerle, sonra sağa dön.</string>
     <string name="say_walk_ahead_then_left">Yaklaşık %1$s ilerle, sonra sola dön.</string>
@@ -223,6 +248,12 @@
     <string name="say_floor_elevator_down">Asansörle aşağı in: %1$s, %2$s.</string>
     <string name="say_floor_either_up">Merdiven ya da asansörle yukarı çık: %1$s, %2$s.</string>
     <string name="say_floor_either_down">Merdiven ya da asansörle aşağı in: %1$s, %2$s.</string>
+    <string name="say_then_floor_stairs_up">Oradan merdivenle yukarı çık, %1$s.</string>
+    <string name="say_then_floor_stairs_down">Oradan merdivenle aşağı in, %1$s.</string>
+    <string name="say_then_floor_elevator_up">Oradan asansörle yukarı çık, %1$s.</string>
+    <string name="say_then_floor_elevator_down">Oradan asansörle aşağı in, %1$s.</string>
+    <string name="say_then_floor_either_up">Oradan merdiven ya da asansörle yukarı çık, %1$s.</string>
+    <string name="say_then_floor_either_down">Oradan merdiven ya da asansörle aşağı in, %1$s.</string>
     <string name="say_hazard_stairs">Dikkat, merdiven var.</string>
     <string name="say_hazard_door">Önünde bir kapı var.</string>
     <string name="say_hazard_ramp">Önünde bir rampa var.</string>
@@ -230,6 +261,7 @@
     <string name="say_arrived">Hedefe ulaştın.</string>
     <string name="say_no_route">Bu iki nokta arasında bir rota bulunamadı.</string>
     <string name="say_rerouted">Önündeki engel yüzünden rota değişti.</string>
+    <string name="say_no_step_free_route">Merdivensiz bir yol bulunamadı; rota merdivenden geçiyor.</string>
     <!-- %1$s / %2$s: what it is, as below ("biri", "bir sandalye"). -->
     <string name="say_obstacle_critical">Dur! Hemen önünde %1$s var.</string>
     <string name="say_obstacle_warning">Dikkat, yaklaşık %1$s önünde %2$s var.</string>
@@ -344,6 +376,17 @@
     <string name="survey_saved">Kaydedildi: %1$s, %2$s, %3$s.</string>
     <string name="survey_save_failed">Kaydedilemedi, cihazda yer kalmamış olabilir. Tekrar dene.</string>
     <string name="survey_save">Haritayı kaydet</string>
+    <string name="survey_section_title">Ya da var olan bir haritaya bölüm olarak ekle</string>
+    <string name="survey_section_body">Yerleri değişen bir bölümü yeniden yürüdüysen: haritada olan bir yerde başla ve haritada olan bir yerde bitir, ikisine de haritadaki adlarını ver. Bölüm bu yerlere göre haritaya oturtulur.</string>
+    <string name="survey_section_replace">Yeniden yürünen yolun eskisini kaldır</string>
+    <string name="survey_section_add">Bölümü haritaya ekle</string>
+    <string name="survey_section_added">%1$s haritasına eklendi: %2$s, %3$s.</string>
+    <plurals name="survey_section_too_few">
+        <item quantity="one">Bölüm, haritanın %2$s planında yalnızca %1$d yerden geçiyor. En az iki tanesi haritadaki adlarıyla işaretlenmeli.</item>
+        <item quantity="other">Bölüm, haritanın %2$s planında yalnızca %1$d yerden geçiyor. En az iki tanesi haritadaki adlarıyla işaretlenmeli.</item>
+    </plurals>
+    <string name="survey_section_unknown_floor">Haritada %1$s yok. Bölümü yürürken katı haritadakiyle aynı ayarla.</string>
+    <string name="survey_section_does_not_fit">Bölüm haritaya oturmuyor: ortak yerleri arasındaki uzaklıklar haritadakinden çok farklı. Doğru bina mı, yerlerin adları doğru mu?</string>
     <plurals name="survey_discovered">
         <item quantity="one">%1$d keşfedilen iBeacon</item>
         <item quantity="other">%1$d keşfedilen iBeacon</item>
@@ -462,6 +505,19 @@
     <string name="files_log_chooser">Saha kaydını paylaş</string>
     <string name="files_logs_share_failed">Kayıtlar paylaşılamadı.</string>
     <string name="files_log_share_failed">Kayıt paylaşılamadı.</string>
+    <string name="files_log_no_marks">“Buradayım” işareti yok; doğruluk ölçülmedi.</string>
+    <plurals name="files_log_accuracy">
+        <item quantity="one">%1$d işaret · hata %2$.1f m (%4$s)</item>
+        <item quantity="other">%1$d işaret · ortalama %2$.1f m · en kötü %3$.1f m (%4$s)</item>
+    </plurals>
+    <plurals name="files_log_marks_wrong_floor_only">
+        <item quantity="one">%1$d işaret; uygulama başka katta sanıyordu.</item>
+        <item quantity="other">%1$d işaret; hepsinde uygulama başka katta sanıyordu.</item>
+    </plurals>
+    <plurals name="files_log_wrong_floor">
+        <item quantity="one">%1$d işarette kat yanlıştı.</item>
+        <item quantity="other">%1$d işarette kat yanlıştı.</item>
+    </plurals>
     <string name="files_log_share_description">Bu kaydı paylaş</string>
     <string name="files_log_delete_description">Bu kaydı sil</string>
     <string name="files_log_delete_title">Kayıt silinsin mi?</string>
@@ -567,7 +623,13 @@
     <string name="haptic_arrived">Hedefe vardın: uzun, sonra kısa</string>
     <string name="haptic_rerouted">Rota değişti: kısa, sonra uzun</string>
     <string name="haptic_no_route">Rota bulunamadı: tek uzun titreşim</string>
+    <string name="haptic_wrong_way">Ters yöndesin: uzun, kısa, uzun</string>
     <string name="settings_screen_title">Yönlendirme sırasında</string>
+    <string name="settings_route_title">Rota</string>
+    <string name="settings_avoid_stairs">Merdiven kullanma</string>
+    <string name="settings_avoid_stairs_body">Rota merdiven yerine asansör ve rampadan geçer. Binada merdivensiz bir yol yoksa merdivenli rota kullanılır ve bu yola çıkmadan söylenir.</string>
+    <string name="settings_clock_directions">Yönleri saatle söyle</string>
+    <string name="settings_clock_directions_body">“Sonra sağa dön” yerine “sonra saat 3 yönüne dön” denir. Saat 12 tam önün, 3 sağın, 6 arkan, 9 solundur; aradaki saatler çapraz yönlerdir.</string>
     <string name="settings_keep_screen_on">Ekranı açık tut</string>
     <string name="settings_keep_screen_on_body">Ekran kapansa da konum ve yönergeler devam eder, ama kamera durur ve engel algılanmaz. Ekranı açık tutarsan engel algılama da sürer; pil daha çok harcanır. TalkBack açıkken pil için ekran en düşük parlaklığa indirilir.</string>
     <string name="settings_about_title">Hakkında</string>

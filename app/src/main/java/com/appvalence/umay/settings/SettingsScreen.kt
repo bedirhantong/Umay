@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
@@ -117,22 +118,28 @@ fun SettingsScreen(onReplayTour: () -> Unit, modifier: Modifier = Modifier, view
             HapticSettings(viewModel, state.hapticsEnabled)
         }
 
+        SettingsCard(icon = Icons.Filled.Accessible, title = stringResource(R.string.settings_route_title)) {
+            SettingsSwitch(
+                label = stringResource(R.string.settings_avoid_stairs),
+                body = stringResource(R.string.settings_avoid_stairs_body),
+                checked = state.avoidStairs,
+                onCheckedChange = viewModel::setAvoidStairs,
+            )
+            SettingsSwitch(
+                label = stringResource(R.string.settings_clock_directions),
+                body = stringResource(R.string.settings_clock_directions_body),
+                checked = state.clockDirections,
+                onCheckedChange = viewModel::setClockDirections,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+
         SettingsCard(icon = Icons.Filled.LightMode, title = stringResource(R.string.settings_screen_title)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .toggleable(value = state.keepScreenOn, role = Role.Switch, onValueChange = viewModel::setKeepScreenOn),
-            ) {
-                Text(text = stringResource(R.string.settings_keep_screen_on), style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = state.keepScreenOn, onCheckedChange = null)
-            }
-            Text(
-                text = stringResource(R.string.settings_keep_screen_on_body),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
+            SettingsSwitch(
+                label = stringResource(R.string.settings_keep_screen_on),
+                body = stringResource(R.string.settings_keep_screen_on_body),
+                checked = state.keepScreenOn,
+                onCheckedChange = viewModel::setKeepScreenOn,
             )
         }
 
@@ -216,6 +223,7 @@ private val HAPTIC_GUIDE = listOf(
     GuidanceCue.ARRIVED to R.string.haptic_arrived,
     GuidanceCue.REROUTED to R.string.haptic_rerouted,
     GuidanceCue.NO_ROUTE to R.string.haptic_no_route,
+    GuidanceCue.WRONG_WAY to R.string.haptic_wrong_way,
 )
 
 /**
@@ -425,3 +433,30 @@ private fun resultMessage(context: Context, result: StepLengthCalibration.Result
 }
 
 private fun centimeters(meters: Double): Int = (meters * 100).roundToInt()
+
+/** An on/off setting: the whole row toggles it, with what it does spelled out below. */
+@Composable
+private fun SettingsSwitch(
+    label: String,
+    body: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+    ) {
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
+        Switch(checked = checked, onCheckedChange = null)
+    }
+    Text(
+        text = body,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}

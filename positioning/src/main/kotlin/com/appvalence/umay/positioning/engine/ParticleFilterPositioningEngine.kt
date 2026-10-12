@@ -85,6 +85,11 @@ class ParticleFilterPositioningEngine(
             }
         }
 
+    /** How the gyro turns onto the map, from the compass; see [GraphParticleFilter.observeHeadingOffset]. */
+    fun observeHeadingOffset(offsetDeg: Double, sigmaDeg: Double) {
+        synchronized(lock) { filter.observeHeadingOffset(offsetDeg, sigmaDeg) }
+    }
+
     /** A floor change confirmed by the barometer or the user: restart at [arrivalNodeId]. */
     fun changeFloor(arrivalNodeId: String, timestampMs: Long) {
         synchronized(lock) { filter.changeFloor(arrivalNodeId, timestampMs) }

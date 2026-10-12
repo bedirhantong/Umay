@@ -2,6 +2,7 @@ package com.appvalence.umay.orchestrator
 
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.isCorridorBend
+import com.appvalence.umay.coremodel.isPlace
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
 import java.util.Locale
@@ -10,6 +11,13 @@ import kotlin.math.hypot
 /** What a free-form question resolved to, or that it didn't. */
 sealed interface BuildingQueryResult {
     data class Found(val node: MapNode, val distanceMeters: Double?) : BuildingQueryResult
+
+    /**
+     * "Neredeyim?": the nearest place on the walker's floor and, unless standing at it,
+     * the next nearest, with their distances. Null places: no position yet, or no place
+     * on this floor.
+     */
+    data class WhereAmI(val nearest: MapNode?, val nearestMeters: Double, val second: MapNode?, val secondMeters: Double) : BuildingQueryResult
     data object NotUnderstood : BuildingQueryResult
 }
 
@@ -42,6 +50,8 @@ object BuildingQueryMatcher {
         val normalizedQuestion = normalize(question)
         if (normalizedQuestion.isBlank()) return BuildingQueryResult.NotUnderstood
 
+        if (WHERE_AM_I.any { it in normalizedQuestion }) return whereAmI(nodes, nodeFloor, from)
+
         val questionTokens = tokens(normalizedQuestion)
         val typeMatches = TYPE_KEYWORDS.entries
             .firstOrNull { (_, keywords) -> keywords.any { it in questionTokens } }
@@ -64,6 +74,18 @@ object BuildingQueryMatcher {
         }
         val distance = from?.takeIf { nodeFloor[best.id] == it.floor }?.let { hypot(best.x - it.x, best.y - it.y) }
         return BuildingQueryResult.Found(best, distance)
+    }
+
+    private fun whereAmI(nodes: List<MapNode>, nodeFloor: Map<String, Int>, from: Position?): BuildingQueryResult {
+        if (from == null) return BuildingQueryResult.WhereAmI(null, 0.0, null, 0.0)
+        val byDistance = nodes
+            .filter { it.isPlace && nodeFloor[it.id] == from.floor }
+            .map { it to hypot(it.x - from.x, it.y - from.y) }
+            .sortedBy { it.second }
+        val nearest = byDistance.getOrNull(0) ?: return BuildingQueryResult.WhereAmI(null, 0.0, null, 0.0)
+        // At a place, that's the whole answer; between two, both say where.
+        val second = byDistance.getOrNull(1)?.takeIf { nearest.second > AT_PLACE_METERS }
+        return BuildingQueryResult.WhereAmI(nearest.first, nearest.second, second?.first, second?.second ?: 0.0)
     }
 
     // Jaccard similarity over word sets, but a word "matches" another it merely shares a
@@ -93,6 +115,10 @@ object BuildingQueryMatcher {
     private val WHITESPACE = Regex("\\s+")
 
     private const val MATCH_THRESHOLD = 0.34
+    private const val AT_PLACE_METERS = 2.0
+
+    // "Neredeyim", "ben neredeyim", "şu an nerdeyim", "konumum ne", "hangi yerdeyim".
+    private val WHERE_AM_I = listOf("neredeyim", "nerdeyim", "nerdeyiz", "neredeyiz", "konumum", "hangi yerdeyim", "hangi kattayım", "hangi kattayim")
     private const val MIN_SHARED_PREFIX_LENGTH = 3
 
     private val TYPE_KEYWORDS: Map<NodeType, List<String>> = mapOf(

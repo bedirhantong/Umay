@@ -43,4 +43,10 @@ data class NavigationState(
     val route: List<MapNode>,
     val pendingFloorChange: FloorChangeHint? = null,
     val nextRouteIndex: Int = 1,
+    /**
+     * The floor change at the end of the leg being walked, before it's pending: the
+     * staircase or lift the walker is heading for. Lets a barometer notice the change
+     * even if guidance hasn't caught up with the walker yet (see FloorChangeConfirmation).
+     */
+    val upcomingFloorChange: FloorChangeHint? = null,
 )

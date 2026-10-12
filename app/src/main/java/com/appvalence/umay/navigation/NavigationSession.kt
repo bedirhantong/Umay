@@ -24,6 +24,7 @@ import com.appvalence.umay.coremodel.GuidanceEvent
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.MarkerSighting
 import com.appvalence.umay.coremodel.NavigationAlert
+import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionEvent
 import com.appvalence.umay.coremodel.PositionStream
 import com.appvalence.umay.coremodel.PressureEvent
@@ -37,6 +38,7 @@ import com.appvalence.umay.feedback.TtsFeedbackController
 import com.appvalence.umay.fieldlog.FieldLogFiles
 import com.appvalence.umay.fieldlog.FieldLogRecorder
 import com.appvalence.umay.orchestrator.BuildingQueryMatcher
+import com.appvalence.umay.orchestrator.FloorChangeConfirmation
 import com.appvalence.umay.orchestrator.BuildingQueryResult
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
@@ -45,6 +47,7 @@ import com.appvalence.umay.perception.CameraAimJudge
 import com.appvalence.umay.perception.CameraFailure
 import com.appvalence.umay.perception.CameraPower
 import com.appvalence.umay.perception.CameraPowerPolicy
+import com.appvalence.umay.perception.CameraOptics
 import com.appvalence.umay.perception.CameraXObstacleDetector
 import com.appvalence.umay.perception.MlKitSignTextReader
 import com.appvalence.umay.perception.SignTextReader
@@ -52,6 +55,8 @@ import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.baro.BarometricFloorChangeDetector
 import com.appvalence.umay.positioning.ble.BeaconScanTargets
 import com.appvalence.umay.positioning.ble.BleBeaconScanner
+import com.appvalence.umay.positioning.compass.CompassHint
+import com.appvalence.umay.positioning.compass.HeadingSensors
 import com.appvalence.umay.positioning.engine.ParticleFilterPositioningEngine
 import com.appvalence.umay.positioning.engine.PositioningEngine
 import com.appvalence.umay.positioning.fingerprint.FingerprintMatcher
@@ -75,10 +80,12 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Everything the navigation screen (and the notification) shows about a running session. */
 data class NavigationSessionUi(
@@ -189,8 +196,7 @@ class NavigationSession internal constructor(
     // fallback if the pressure change doesn't register (a split-level half floor, say).
     val hasBarometer: Boolean = BarometerSensor.isAvailable(appContext)
     private val barometer = BarometerSensor(appContext)
-    private val floorChangeDetector = BarometricFloorChangeDetector()
-    private var barometerConfirmedTargetId: String? = null
+    private val floorChanges = FloorChangeConfirmation(hasBarometer)
 
     // Field-test log for this one session (see FieldLogRecorder) — null unless recording
     // was switched on in "Dosyalar". Everything records through `recorder?.`, so with
@@ -239,7 +245,8 @@ class NavigationSession internal constructor(
             feedback = feedback,
             startNodeId = startNodeId,
             destinationNodeId = destinationNode.id,
-            phrases = ResourceGuidancePhrases(appContext),
+            phrases = ResourceGuidancePhrases(appContext, clockDirections = settings.clockDirections),
+            avoidStairs = settings.avoidStairs,
         )
     }
 
@@ -269,9 +276,30 @@ class NavigationSession internal constructor(
         )
 
         scope.launch { runGuidance() }
+        scope.launch { hintHeadingFromCompass() }
         if (recorder != null) scope.launch { logRssi(recorder) }
         if (hasBarometer) scope.launch { watchBarometer() }
         scope.launch { conditions.power().collect { applyCameraPower(CameraPowerPolicy.decide(it.thermalStatus, it.batteryPercent, it.charging)) } }
+    }
+
+    /**
+     * Which way the walker faces, from the compass, if the map knows how its floor lines
+     * up with it (see CompassHint): positioning would otherwise learn it from the first
+     * steps, slowly at a junction or in an open space. Read for a moment while the walk
+     * starts; without a compass, or one unsure of itself, it goes without.
+     */
+    private suspend fun hintHeadingFromCompass() {
+        val calibration = buildingMap.floors.firstOrNull { it.floorIndex == startFloorIndex }?.compass ?: return
+        val hint = CompassHint(calibration)
+        withTimeoutOrNull(CompassHint.WAIT_MS) {
+            HeadingSensors(appContext).readings().first { reading ->
+                hint.add(reading)
+                hint.isReady
+            }
+        }
+        val (offset, sigma) = hint.offset() ?: return
+        positioningEngine.observeHeadingOffset(offset, sigma)
+        recorder?.record(StatusEvent(System.currentTimeMillis(), CompassHint.logStatus(offset, sigma)))
     }
 
     private suspend fun runGuidance() {
@@ -289,7 +317,7 @@ class NavigationSession internal constructor(
                         state = newState,
                         phase = phase,
                         instruction = guidance?.message ?: it.instruction,
-                        barometerClimbMeters = floorChangeDetector.climbedMeters(),
+                        barometerClimbMeters = floorChanges.climbedMeters(),
                     )
                 }
 
@@ -310,23 +338,7 @@ class NavigationSession internal constructor(
                     lastPromptedFloorChange = hint?.targetNodeId
                 }
 
-                val hint = newState.pendingFloorChange
-                if (hint == null) {
-                    floorChangeDetector.disarm()
-                    barometerConfirmedTargetId = null
-                } else if (hasBarometer) {
-                    // Don't re-arm for a crossing the barometer already confirmed: the hint
-                    // lingers until the next footstep produces a position on the new floor.
-                    if (hint.targetNodeId != barometerConfirmedTargetId) {
-                        floorChangeDetector.arm(fromFloor = newState.position.floor, toFloor = hint.targetFloor)
-                    }
-                } else if (hint.autoConfirm) {
-                    // No barometer: a STAIRS crossing confirms itself once enough footsteps have
-                    // piled up (see NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT) — no tap
-                    // needed, which matters since a blind user's hands may well be full on a
-                    // staircase. Elevators never set autoConfirm; those wait for the button.
-                    confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_AUTOMATICALLY)
-                }
+                floorChanges.onState(newState)?.let(::confirmFloorChange)
             }
         } catch (e: CancellationException) {
             throw e // normal teardown (session stopped) — not a failure
@@ -364,26 +376,19 @@ class NavigationSession internal constructor(
                 lastLoggedAtMs = reading.timestampMs
                 recorder.record(PressureEvent(reading.timestampMs, reading.hPa))
             }
-            if (floorChangeDetector.onPressure(reading.hPa, reading.timestampMs)) {
-                val current = _ui.value.state ?: return@collect
-                val hint = current.pendingFloorChange ?: return@collect
-                barometerConfirmedTargetId = hint.targetNodeId
-                confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_BY_BAROMETER)
-            }
+            floorChanges.onPressure(reading.hPa, reading.timestampMs)?.let(::confirmFloorChange)
         }
     }
 
-    private fun confirmFloorChange(targetNodeId: String, targetFloor: Int, phase: FloorChangePhase) {
-        if (targetNodeId !in allNodesById) return
-        positioningEngine.changeFloor(targetNodeId, System.currentTimeMillis())
-        recorder?.record(FloorChangeEvent(System.currentTimeMillis(), phase, targetNodeId, targetFloor))
+    private fun confirmFloorChange(change: FloorChangeConfirmation.Confirmed) {
+        if (change.targetNodeId !in allNodesById) return
+        positioningEngine.changeFloor(change.targetNodeId, System.currentTimeMillis())
+        recorder?.record(FloorChangeEvent(System.currentTimeMillis(), change.phase, change.targetNodeId, change.targetFloor))
     }
 
     /** The "Kat değiştirdim" button. */
     fun confirmFloorChangeManually() {
-        val current = _ui.value.state ?: return
-        val hint = current.pendingFloorChange ?: return
-        confirmFloorChange(hint.targetNodeId, hint.targetFloor, FloorChangePhase.CONFIRMED_MANUALLY)
+        floorChanges.manual()?.let(::confirmFloorChange)
     }
 
     /**
@@ -464,6 +469,7 @@ class NavigationSession internal constructor(
                                 },
                             )
                         }
+                        is BuildingQueryResult.WhereAmI -> answerQuestion(whereAmIAnswer(result, position))
                         BuildingQueryResult.NotUnderstood -> answerQuestion(appContext.getString(R.string.voice_query_not_understood))
                     }
                 }
@@ -481,6 +487,19 @@ class NavigationSession internal constructor(
                 )
             }
         }
+    }
+
+    private fun whereAmIAnswer(result: BuildingQueryResult.WhereAmI, position: Position?): String {
+        val nearest = result.nearest ?: return appContext.getString(R.string.voice_query_where_unknown)
+        val second = result.second
+        val here = if (second == null) {
+            appContext.getString(R.string.voice_query_where_at, nearest.name)
+        } else {
+            appContext.getString(R.string.voice_query_where_between, nearest.name, second.name, formatMeters(result.nearestMeters), formatMeters(result.secondMeters))
+        }
+        // On a walk, where to go from here is the other half of the answer.
+        val next = position?.let(orchestrator::currentInstruction)
+        return listOfNotNull(here, next?.let { appContext.getString(R.string.voice_query_where_next, it) }).joinToString(" ")
     }
 
     private fun formatMeters(distanceMeters: Double): String {
@@ -521,6 +540,7 @@ class NavigationSession internal constructor(
         val previous = cameraPower
         cameraPower = power
         detector.setFrameInterval(if (power == CameraPower.REDUCED) CameraPowerPolicy.REDUCED_FRAME_INTERVAL_MS else CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS)
+        detector.setSavingPower(power == CameraPower.REDUCED)
         recorder?.record(StatusEvent(System.currentTimeMillis(), "CAMERA_${power.name}"))
         when {
             power == CameraPower.OFF -> {
@@ -673,6 +693,13 @@ class NavigationSession internal constructor(
                 "GraphParticleFilter.minFingerprintIntervalMs" to particleConfig.minFingerprintIntervalMs.toDouble(),
                 "GraphParticleFilter.reseedDistanceMeters" to particleConfig.reseedDistanceMeters,
                 "GraphParticleFilter.reseedFraction" to particleConfig.reseedFraction,
+                "GraphParticleFilter.radioSigmaDb" to particleConfig.radioSigmaDb,
+                "GraphParticleFilter.radioEvidenceWeight" to particleConfig.radioEvidenceWeight,
+                "GraphParticleFilter.maxReadingAgeMs" to particleConfig.maxReadingAgeMs.toDouble(),
+                "GraphParticleFilter.fingerprintConsistencyMargin" to particleConfig.fingerprintConsistencyMargin,
+                "GraphParticleFilter.cornerSnapMeters" to particleConfig.cornerSnapMeters,
+                "GraphParticleFilter.markerReseedSlackMeters" to particleConfig.markerReseedSlackMeters,
+                "GraphParticleFilter.arrivalSpreadMeters" to particleConfig.arrivalSpreadMeters,
                 "GraphParticleFilter.MAX_TURN_AT_NODE_DEG" to GraphParticleFilter.MAX_TURN_AT_NODE_DEG,
                 "NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS" to NavigationOrchestrator.WAYPOINT_ARRIVAL_METERS,
                 "NavigationOrchestrator.ARRIVAL_DISTANCE_METERS" to NavigationOrchestrator.ARRIVAL_DISTANCE_METERS,
@@ -686,9 +713,14 @@ class NavigationSession internal constructor(
                 "hapticsEnabled" to if (settings.hapticsEnabled) 1.0 else 0.0,
                 "speechRate" to settings.speechRate.toDouble(),
                 "keepScreenOn" to if (settings.keepScreenOnDuringNavigation) 1.0 else 0.0,
+                "avoidStairs" to if (settings.avoidStairs) 1.0 else 0.0,
+                "clockDirections" to if (settings.clockDirections) 1.0 else 0.0,
                 "BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS" to BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS,
                 "BarometricFloorChangeDetector.CONFIRM_FRACTION" to BarometricFloorChangeDetector.CONFIRM_FRACTION,
                 "BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS" to BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS,
+                "CameraOptics.LONG_SIDE_FOV_DEGREES" to CameraOptics.LONG_SIDE_FOV_DEGREES,
+                "CameraOptics.ANALYSIS_WIDTH_PX" to CameraOptics.ANALYSIS_WIDTH_PX.toDouble(),
+                "CameraOptics.MARKER_FRAME_WIDTH_PX" to CameraOptics.MARKER_FRAME_WIDTH_PX.toDouble(),
                 "CameraXObstacleDetector.NUM_THREADS" to CameraXObstacleDetector.NUM_THREADS.toDouble(),
                 "CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS" to CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS.toDouble(),
             ) + listOfNotNull(
