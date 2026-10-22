@@ -165,6 +165,7 @@ class SurveyRecorder @Inject constructor(
     @param:DefaultDispatcher private val default: CoroutineDispatcher,
     // Camera mapping state below is touched only here, one frame at a time.
     @param:SerialDispatcher private val mapping: CoroutineDispatcher,
+    private val diagnostics: SurveyDiagnostics = NoSurveyDiagnostics,
 ) {
     private val _state = MutableStateFlow(SurveyState())
     val state: StateFlow<SurveyState> = _state.asStateFlow()
@@ -191,6 +192,7 @@ class SurveyRecorder @Inject constructor(
     private val grids = mutableMapOf<Int, OccupancyGrid>()
     private val dirtyFloors = mutableSetOf<Int>()
     private var frameGuard = MappingFrameGuard()
+    private val frameCounts = FrameCounts()
     private val reconstructors = mutableMapOf<Int, SpatialReconstructor>()
 
     init {
@@ -219,6 +221,7 @@ class SurveyRecorder @Inject constructor(
         val walkMode = if (current.trajectory.isEmpty() && current.taggedWaypoints.isEmpty()) mode else current.mode
         if (walkMode == SurveyMode.CAMERA && current.alignmentRequired) return
         val stepLength = settings.stepLengthMeters
+        diagnostics.log("start", "mode" to walkMode.name, "resumed" to (current.trajectory.isNotEmpty() || current.taggedWaypoints.isNotEmpty()))
         _state.update { it.copy(isRecording = true, stepLengthMeters = stepLength, mode = walkMode, restoredFromDraft = false) }
         scanner.start(null)
         foreground.recordingStarted()
@@ -336,12 +339,17 @@ class SurveyRecorder @Inject constructor(
     private suspend fun recordCamera(): Unit = withContext(mapping) {
         var lastSnapshotMs = 0L
         camera.frames.collect { sample ->
-            if (sample.acquiredAtElapsedMs?.let { android.os.SystemClock.elapsedRealtime() - it > 500 } == true) return@collect
-            if (_state.value.alignmentRequired) return@collect
+            frameCounts.received++
+            if (sample.acquiredAtElapsedMs?.let { android.os.SystemClock.elapsedRealtime() - it > 500 } == true) { frameCounts.stale++; return@collect }
+            if (_state.value.alignmentRequired) { frameCounts.afterAlignmentLost++; return@collect }
             val floor = _state.value.currentFloor
             val toSurvey = frameGuard.accept(sample.coordinateFrameId, sample.pose)
             if (toSurvey == null) {
-                if (frameGuard.alignmentRequired) _state.update { it.copy(alignmentRequired = true, livePosition = null) }
+                frameCounts.guardRejected++
+                if (frameGuard.alignmentRequired) {
+                    diagnostics.log("alignment_required", "session" to sample.coordinateFrameId, "x" to sample.pose.x, "z" to sample.pose.z, "tMs" to sample.pose.timestampMs)
+                    _state.update { it.copy(alignmentRequired = true, livePosition = null) }
+                }
                 return@collect
             }
             // Trajectory continuity heuristics are not permitted to change the reconstruction frame.
@@ -358,11 +366,11 @@ class SurveyRecorder @Inject constructor(
             sampleRadio(position)
             sampleCompass(position)
 
-            val depth = sample.depth ?: return@collect
+            val depth = sample.depth ?: run { frameCounts.noDepth++; return@collect }
             val engine = reconstructors.getOrPut(floor) {
                 SpatialReconstructor(sample.coordinateFrameId, grids.getOrPut(floor) { OccupancyGrid() })
             }
-            engine.integrate(depth, toSurvey, sample.pose.y, sample.upwardPlaneHeights)
+            if (engine.integrate(depth, toSurvey, sample.pose.y, sample.upwardPlaneHeights)) frameCounts.integrated++ else frameCounts.notIntegrated++
             dirtyFloors += floor
             if (pose.timestampMs - lastSnapshotMs >= WALL_MAP_REFRESH_MS) {
                 lastSnapshotMs = pose.timestampMs
@@ -375,6 +383,7 @@ class SurveyRecorder @Inject constructor(
         var lossAnnounced = false
         var lossJob: Job? = null
         camera.status.collect { status ->
+            diagnostics.log("camera", "status" to status.toString())
             _state.update { it.copy(cameraStatus = status) }
             if (status == ArCameraStatus.Tracking) {
                 lossJob?.cancel()
@@ -402,6 +411,16 @@ class SurveyRecorder @Inject constructor(
         val updated = dirtyFloors.mapNotNull { floor -> grids[floor]?.snapshot()?.let { floor to it } }.toMap()
         dirtyFloors.clear()
         val geometry = reconstructors.mapValues { (_, engine) -> engine.snapshot() }
+        geometry.forEach { (floor, map) ->
+            diagnostics.log(
+                "map",
+                "floor" to floor, "walls" to map.walls.size, "openings" to map.openings.size, "regions" to map.observedRegions.size,
+                "depthFrames" to map.integratedFrames, "floorFrames" to map.floor?.independentFrames, "floorHeight" to map.floor?.worldHeight,
+                "issues" to map.issues.joinToString("+"),
+                "received" to frameCounts.received, "stale" to frameCounts.stale, "guardRejected" to frameCounts.guardRejected,
+                "noDepth" to frameCounts.noDepth, "integrated" to frameCounts.integrated, "notIntegrated" to frameCounts.notIntegrated,
+            )
+        }
         _state.update { it.copy(wallMaps = it.wallMaps + updated, spatialMaps = it.spatialMaps + geometry) }
     }
 
@@ -420,6 +439,7 @@ class SurveyRecorder @Inject constructor(
         val job = recordingJob ?: return
         job.cancel()
         recordingJob = null
+        diagnostics.log("stop", "trajectory" to _state.value.trajectory.size, "tags" to _state.value.taggedWaypoints.size)
         scanner.stop()
         foreground.recordingStopped()
         // Paused, not closed: resuming the walk continues in the same camera frame.
@@ -534,6 +554,7 @@ class SurveyRecorder @Inject constructor(
             val position = current.trajectory.lastOrNull { it.floor == current.currentFloor } ?: return false
             TaggedWaypoint(name, position.x, position.y, position.floor, fingerprint, type)
         }
+        diagnostics.log("tag", "name" to name, "type" to type.name, "x" to waypoint.x, "y" to waypoint.y, "floor" to waypoint.floor, "trajectoryIndex" to current.trajectory.size)
         _state.update { it.copy(taggedWaypoints = it.taggedWaypoints + waypoint) }
         return true
     }
@@ -591,6 +612,12 @@ class SurveyRecorder @Inject constructor(
 
     fun clearDiscovered() {
         _state.update { it.copy(discovered = emptyMap()) }
+    }
+
+    /** Camera frames by what became of them, for [SurveyDiagnostics]. Touched only on [mapping]. */
+    private class FrameCounts {
+        var received = 0; var stale = 0; var afterAlignmentLost = 0; var guardRejected = 0
+        var noDepth = 0; var integrated = 0; var notIntegrated = 0
     }
 
     companion object {

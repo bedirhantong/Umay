@@ -133,5 +133,8 @@ abstract class BindingsModule {
     abstract fun surveyDrafts(impl: FileSurveyDrafts): SurveyDrafts
 
     @Binds
+    abstract fun surveyDiagnostics(impl: com.appvalence.umay.survey.FileSurveyDiagnostics): com.appvalence.umay.survey.SurveyDiagnostics
+
+    @Binds
     abstract fun surveyForeground(impl: AndroidSurveyForeground): SurveyForeground
 }
