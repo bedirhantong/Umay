@@ -92,8 +92,10 @@ boş kalır ve **Kod hazır** yazar; ne doğrulanacağı yanında belirtilir.
 
 Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla.
 
-- [ ] **0.1 Release derlemesi** (K). R8 küçültmeli `assembleRelease`
-  ARCore ve yeni serileştirilebilir sınıflarla derleniyor ve açılıyor.
+- [ ] **0.1 Release derlemesi** (K). **Kod hazır:** R8 küçültmeli
+  `assembleStandardRelease` ve `assembleInstitutionRelease` derleniyor
+  (5,2 ve 3,7 MB); native kütüphaneler 16 KB hizalı (`zipalign -P 16`
+  doğruladı). Telefonda açılması bekliyor.
   *Bitti:* imzasız release APK telefonda harita çıkarma ve yönlendirme
   ekranlarını açıyor.
 - [ ] **0.2 Kamerayla harita çıkarmayı telefonda dene** (K). Bu, Faz 3 ve
@@ -488,9 +490,9 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   harita önizlemesi). TalkBack, büyük yazı ve yüksek kontrastla telefonda
   denetim bekliyor. Bütün ekranlar TalkBack,
   büyük yazı ve yüksek kontrastla denetlendi.
-- [ ] **5.5 Mağaza hazırlığı** (K). 16 KB sayfa boyutu çözüldü: insan
-  algılama LiteRT'ye taşındı, APK'daki bütün native kütüphaneler 16 KB
-  hizalı. Veri güvenliği özeti `docs/GIZLILIK.md`'de. Veri güvenliği formu, ARCore açıklaması,
+- [ ] **5.5 Mağaza hazırlığı** (K). 16 KB sayfa boyutu çözüldü:
+  engel algılama kaldırıldığı için TensorFlow/LiteRT APK'da yok, kalan bütün
+  native kütüphaneler 16 KB hizalı. Veri güvenliği özeti `docs/GIZLILIK.md`'de. Veri güvenliği formu, ARCore açıklaması,
   güvenlik uyarıları, 16 KB sayfa boyutu (`libtask_vision_jni.so`, Şubat
   2027 son tarih).
 
