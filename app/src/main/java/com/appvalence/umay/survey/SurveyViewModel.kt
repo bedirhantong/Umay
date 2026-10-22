@@ -32,7 +32,10 @@ import javax.inject.Inject
 
 /** The result of saving a surveyed map. */
 sealed interface SurveySaveResult {
-    data class Saved(val points: Int, val connections: Int, val floors: Int) : SurveySaveResult
+    data class Saved(val points: Int, val connections: Int, val floors: Int) : SurveySaveResult {
+        /** Places saved but nothing joins them: navigation would find no route (a camera map whose floor was never seen well enough). */
+        val hasNoRoutes: Boolean get() = points >= 2 && connections == 0
+    }
     data object Failed : SurveySaveResult
 
     /** The walk was merged into an existing map as a re-surveyed section (see MapSections). */

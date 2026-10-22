@@ -18,26 +18,35 @@ object ObservedRoutes {
         })
     }
 
+    /** Half a walker's width plus a margin, as in [OpenSpaceLinks.CLEARANCE_METERS]: floor seen this far either side. */
+    const val CLEARANCE_METERS = 0.4
+
     private fun clear(r: OccupancyRaster, cells: ByteArray, a: MapNode, b: MapNode, walls: List<WallSegment>): Boolean {
         val length = hypot(b.x-a.x,b.y-a.y)
         if (!length.isFinite() || length <= 0 || length > 100) return false
-        val samples = ceil(length/(r.cellSizeMeters/2)).toInt()
-        val clearance = 0.4 + r.cellSizeMeters * sqrt(0.5)
-        val radius = ceil(clearance/r.cellSizeMeters).toInt()
+        val cell = r.cellSizeMeters
+        val reach = ceil(CLEARANCE_METERS/cell).toInt() + 1
+        // The ends stand at places, often in a doorway or against a wall, and where the surveyor stood
+        // the floor under the phone was never in view: judge the stretch between them (a short edge, its middle).
+        val from = min(CLEARANCE_METERS, length/2)
+        val to = length - from
+        val samples = if (to > from) ceil((to-from)/(cell/2)).toInt() else 0
         for (i in 0..samples) {
-            val t = i.toDouble()/samples
-            val px = a.x+(b.x-a.x)*t; val py = a.y+(b.y-a.y)*t
+            val along = if (samples == 0) length/2 else from + (to-from)*i/samples
+            val px = a.x+(b.x-a.x)*along/length; val py = a.y+(b.y-a.y)*along/length
             if (walls.any { wall ->
                 val dx = wall.end.x-wall.start.x; val dy = wall.end.y-wall.start.y
                 val squared = dx*dx+dy*dy
-                val along = if (squared > 0) (((px-wall.start.x)*dx+(py-wall.start.y)*dy)/squared).coerceIn(0.0,1.0) else 0.0
-                hypot(px-wall.start.x-along*dx,py-wall.start.y-along*dy) <= 0.4
+                val onWall = if (squared > 0) (((px-wall.start.x)*dx+(py-wall.start.y)*dy)/squared).coerceIn(0.0,1.0) else 0.0
+                hypot(px-wall.start.x-onWall*dx,py-wall.start.y-onWall*dy) < CLEARANCE_METERS
             }) return false
-            val column = floor((px-r.originX)/r.cellSizeMeters).toInt()
-            val row = floor((a.y+(b.y-a.y)*t-r.originY)/r.cellSizeMeters).toInt()
-            for (dx in -radius..radius) for (dy in -radius..radius) {
-                if (hypot(dx.toDouble(),dy.toDouble())*r.cellSizeMeters > clearance) continue
+            val column = floor((px-r.originX)/cell).toInt()
+            val row = floor((py-r.originY)/cell).toInt()
+            for (dx in -reach..reach) for (dy in -reach..reach) {
                 val x = column+dx; val y = row+dy
+                // A cell counts when its centre is within reach: a doorway of 0.8 m is 8 cells, none of them half-seen.
+                val centreX = r.originX+(x+0.5)*cell; val centreY = r.originY+(y+0.5)*cell
+                if (hypot(centreX-px,centreY-py) > CLEARANCE_METERS) continue
                 if (x !in 0 until r.width || y !in 0 until r.height || cells[y*r.width+x] != OccupancyRaster.FREE) return false
             }
         }

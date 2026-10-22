@@ -92,6 +92,33 @@ class SpatialReconstructorTest {
         assertNull(jumping.accept("a",ArPose(10.0,1.35,0.0,0.0,100)))
     }
 
+    @Test fun `a long tracking loss in one session is not a jump`() {
+        val guard = MappingFrameGuard()
+        guard.accept("a", ArPose(0.0, 1.35, 0.0, 0.0, 1_000))
+        // Ten seconds covered, about twelve metres walked: ordinary walking, not a restart.
+        assertNotNull(guard.accept("a", ArPose(12.0, 1.35, 0.0, 0.0, 11_000)))
+        assertFalse(guard.alignmentRequired)
+    }
+
+    @Test fun `poses stamped on different clocks are compared on one`() {
+        val guard = MappingFrameGuard()
+        guard.accept("a", ArPose(0.0, 1.35, 0.0, 0.0, 1_000, timestampNs = 1_000_000_000L))
+        // No nanosecond stamp on the second: their milliseconds decide, and a step forward is fine.
+        assertNotNull(guard.accept("a", ArPose(0.5, 1.35, 0.0, 0.0, 1_500)))
+    }
+
+    @Test fun `a floor that drifts a few centimetres is the same floor, not new evidence from scratch`() {
+        val engine = SpatialReconstructor("a")
+        val identity = ArToSurvey(0.0, 0.0, 0.0)
+        for (i in 1..5) assertTrue(engine.integrate(frame(i.toLong()), identity, 1.35, listOf(0.0)) || i < 3)
+        // ARCore settles its estimate of the ground 10 cm higher (between the 8 cm "same" and 12 cm "different" limits).
+        val shifted = pose.copyOf().apply { this[13] = 1.45f }
+        val drifted = DepthFrame(96, 72, frame(0).depthMm, frame(0).confidence, 55f, 55f, 48f, 30f, shifted, 6)
+        assertTrue(engine.integrate(drifted, identity, 1.45, listOf(0.1)), "the first frame after the drift is still used")
+        assertEquals(6, engine.snapshot().floor!!.independentFrames, "the five earlier frames still count, plus this one")
+        assertFalse(ReconstructionIssue.FLOOR_UNRESOLVED in engine.snapshot().issues)
+    }
+
     @Test fun `endpoint observations do not certify a ray over an unseen obstacle as free`() {
         val grid = OccupancyGrid()
         repeat(5) { grid.addSurfaceFrame(listOf(0.05 to 3.05),listOf(0.05 to 4.05)) }

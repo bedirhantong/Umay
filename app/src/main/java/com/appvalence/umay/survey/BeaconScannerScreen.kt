@@ -829,7 +829,7 @@ private fun SaveMapCard(
                 Text(
                     text = when (result) {
                         is SurveySaveResult.Saved -> stringResource(
-                            R.string.survey_saved,
+                            if (result.hasNoRoutes) R.string.survey_saved_no_routes else R.string.survey_saved,
                             countText(R.plurals.count_points, result.points),
                             countText(R.plurals.count_connections, result.connections),
                             countText(R.plurals.count_floors, result.floors),
@@ -847,7 +847,7 @@ private fun SaveMapCard(
                         SurveySaveResult.SectionDoesNotFit -> stringResource(R.string.survey_section_does_not_fit)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (result is SurveySaveResult.Saved || result is SurveySaveResult.SectionAdded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+                    color = if ((result is SurveySaveResult.Saved && !result.hasNoRoutes) || result is SurveySaveResult.SectionAdded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }

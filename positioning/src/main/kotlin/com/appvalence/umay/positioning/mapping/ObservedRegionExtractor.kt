@@ -63,7 +63,7 @@ object ObservedRegionExtractor {
                 if (edges.size >= MAX_BOUNDARY_EDGES) { valid = false; truncated = true; return }
                 // Each boundary vertex must have exactly one incoming and one outgoing edge.
                 // Overwriting either edge at a diagonal pinch can silently fill UNKNOWN cells.
-                if (from in edges || !incoming.add(to)) { valid = false; return }
+                if (from in edges || !incoming.add(to)) { valid = false; truncated = true; return }
                 edges[from] = to
                 if (complete && (at(outsideX, outsideY) != OccupancyRaster.OCCUPIED ||
                     !wallNear(raster, walls, from, to))) complete = false

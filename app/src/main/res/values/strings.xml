@@ -335,6 +335,7 @@
     <string name="survey_building_name">Bina adı</string>
     <string name="survey_building_name_hint">Aynı isimde kayıtlı bir bina varsa haritası bununla güncellenir.</string>
     <string name="survey_saved">Kaydedildi: %1$s, %2$s, %3$s.</string>
+    <string name="survey_saved_no_routes">Kaydedildi: %1$s, %2$s, %3$s. Yerler arasında bağlantı yok, bu haritayla yönlendirme yapılamaz. Kamerayla çıkardıysan zemin yeterince görülmemiş olabilir: ışığı olan bir yerde, kamerayı zemine ve duvarlara gezdirerek yeniden dene.</string>
     <string name="survey_save_failed">Kaydedilemedi, cihazda yer kalmamış olabilir. Tekrar dene.</string>
     <string name="survey_save">Haritayı kaydet</string>
     <string name="survey_section_title">Ya da var olan bir haritaya bölüm olarak ekle</string>

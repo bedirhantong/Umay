@@ -15,15 +15,23 @@ class MappingFrameGuard {
         val previous = last
         if (sessionId != null && sessionId != id) { alignmentRequired = true; return null }
         if (previous != null) {
-            val time = pose.timestampNs?.div(1_000_000) ?: pose.timestampMs
-            val before = previous.timestampNs?.div(1_000_000) ?: previous.timestampMs
+            // One clock for both poses: nanoseconds only when both have them.
+            val bothNanos = pose.timestampNs != null && previous.timestampNs != null
+            val time = if (bothNanos) pose.timestampNs!! / 1_000_000 else pose.timestampMs
+            val before = if (bothNanos) previous.timestampNs!! / 1_000_000 else previous.timestampMs
             if (time <= before) return null
-            val seconds = ((time-before)/1000.0).coerceAtMost(2.0)
+            // Poses are not delivered while tracking is lost, so a walker can be well away when the first one
+            // comes back in the same session: allow for as long as ARCore keeps relocalising (not just 2 s).
+            val seconds = ((time-before)/1000.0).coerceAtMost(MAX_GAP_SECONDS)
             val displacement = hypot(hypot(pose.x-previous.x, pose.z-previous.z), pose.y-previous.y)
             if (displacement > 1.0 + 2.5*seconds) { alignmentRequired = true; return null }
         }
         sessionId = id
         last = pose
         return (transform ?: ArToSurvey(0.0, -pose.x, pose.z).also { transform = it })
+    }
+
+    private companion object {
+        const val MAX_GAP_SECONDS = 30.0
     }
 }

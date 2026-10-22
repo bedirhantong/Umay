@@ -61,6 +61,8 @@ class SpatialReconstructor(val frameId: String, val grid: OccupancyGrid = Occupa
     private val rejected = mutableListOf<WallSegment>()
     private val confirmed = mutableListOf<WallSegment>()
     private var lastWalls = emptyList<WallSegment>()
+    // Worked out when the walls are (snapshot), not again for every depth frame.
+    private var lastProbes = emptyList<OpeningDetector.Probe>()
     private val openingEvidence = OpeningRayEvidence()
 
     fun review(index: Int, accept: Boolean) {
@@ -88,10 +90,15 @@ class SpatialReconstructor(val frameId: String, val grid: OccupancyGrid = Occupa
         val height = candidate.map { it.height }.average()
         val rms = sqrt(candidate.sumOf { (it.height-height).pow(2) } / candidate.size)
         val previous = floorCandidate
-        // A different floor height is never silently substituted underneath existing walls.
-        if (previous != null && previous.independentFrames >= 3 && abs(previous.worldHeight-height) > 0.12) {
-            floorConflict = true
-            return null
+        if (previous != null && previous.independentFrames >= 3) {
+            // A different floor height is never silently substituted underneath existing walls.
+            if (abs(previous.worldHeight-height) > 0.12) {
+                floorConflict = true
+                return null
+            }
+            // A settled floor stays at its height while ARCore's estimate wanders a few centimetres:
+            // the evidence already gathered keeps counting rather than starting again from one frame.
+            return previous.copy(independentFrames = previous.independentFrames + 1).also { floorCandidate = it }
         }
         return FloorSurface(height, if (previous != null && abs(previous.worldHeight-height) < 0.08) previous.independentFrames + 1 else 1, rms)
             .also { floorCandidate = it }
@@ -152,7 +159,7 @@ class SpatialReconstructor(val frameId: String, val grid: OccupancyGrid = Occupa
                     depth.cameraPose[13] - surface.worldHeight,
                 ),
                 hits = rayHits,
-                probes = OpeningDetector.probes(lastWalls),
+                probes = lastProbes,
                 frame = frames,
             )
         }
@@ -163,6 +170,7 @@ class SpatialReconstructor(val frameId: String, val grid: OccupancyGrid = Occupa
         val walls = StructuralWalls.extract(voxels.values.toList()).filter { wall -> rejected.none { same(it, wall) } }
             .map { wall -> if (confirmed.any { same(it, wall) }) wall.copy(evidence = GeometryEvidence.OPERATOR_CONFIRMED) else wall }
         lastWalls = walls
+        lastProbes = OpeningDetector.probes(walls)
         val issues = mutableSetOf(ReconstructionIssue.PARTIAL_COVERAGE)
         if ((floorCandidate?.independentFrames ?: 0) < 3) issues += ReconstructionIssue.FLOOR_UNRESOLVED
         if (floorConflict) { issues += ReconstructionIssue.CONFLICTING_SURFACES; issues += ReconstructionIssue.FLOOR_UNRESOLVED }
