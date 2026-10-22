@@ -222,6 +222,27 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   simülatörün radyo modeline göre değil, saha kayıtlarına (0.3) göre
   ayarlanmalı.
   *Bitti:* klinikte yalnız beacon'la en az 30/36, ofiste kötüleşme yok.
+- [ ] **0.20 Kamerayla çıkan harita yönlendirilebilir mi?** (O). Sanal
+  kamera haritacısı (`VirtualCameraSurveyor`, `reconstruct = true`) artık
+  uygulamanın bugün çalıştırdığı hattan geçiyor: `MappingFrameGuard`,
+  `SpatialReconstructor` (160 × 120 güvenli derinlik) ve `ObservedRoutes`.
+  İlk ölçüm: sanal ofiste 23 yürünmüş kenardan **hiçbiri kalmıyor**, 20
+  yerin hiçbirine rota yok. Sebep gürültü ya da duvar değil, tamamen
+  *görülmemiş* zemin: kenarın 0,4 m çevresindeki hücrelerin hepsi "görülmüş
+  zemin" olmalı, oysa bir hücrenin zemin sayılması üç ayrı karede görülmesine
+  bağlı ve kamera yürüyenin altını ve yakın yanını (yaklaşık 2,6 m'den
+  yakını) hiç görmüyor. `ObservedRoutes` testi sınırlı iyileştirme aldı
+  (kapı eşiği, uç bölgeleri, tek hücrelik örnekleme boşluğu) ve 2 kenar
+  kalıyor. Denenip geri alınanlar (sanal derinlikle ayarlamak yanıltır):
+  zemin için bütün pikselleri oylamak (serbest hücre 3 kat), yürünen yolun
+  0,3 m çevresini zemin saymak, eşiği 0,3 m yapmak: en iyisi 23'ten 7 kenar.
+  Ayrıca 297 karede `EVIDENCE_LIMIT_REACHED` (30 bin voxel sınırı) doluyor.
+  Karar bekleyen: yürünmüş bir kenar, hiç *görülmemiş* (ama duvar da
+  görülmemiş) zeminden geçebilir mi? Geçemezse kanıt toplama telefonun
+  gerçek derinliğiyle yeniden kurulmalı; geçerse yürünen yol kanıt sayılır.
+  *Bitti:* gerçek telefonda çıkarılan bir katta yürünen kenarların
+  çoğu kalıyor, sanal ofiste en az %80'i; hiçbir kalan kenar duvardan
+  geçmiyor (`ReconstructedSurveyTest` bunu zaten sınıyor).
 - [ ] **0.14 Foto-gerçekçi ofis kopyası** (B). Gerçek bir ofisin telefon
   videosundan Gaussian splatting ile 3B kopya (nerfstudio ya da Mac'te
   OpenSplat; tek seferlik GPU işi). Kareleri 0.12'nin sanal kamerası yerine

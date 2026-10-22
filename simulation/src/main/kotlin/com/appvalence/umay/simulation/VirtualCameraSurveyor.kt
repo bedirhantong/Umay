@@ -15,8 +15,11 @@ import com.appvalence.umay.positioning.mapping.ArToSurvey
 import com.appvalence.umay.positioning.mapping.DepthFrame
 import com.appvalence.umay.positioning.mapping.DepthProjector
 import com.appvalence.umay.positioning.mapping.FloorHeightEstimator
+import com.appvalence.umay.positioning.mapping.MappingFrameGuard
+import com.appvalence.umay.positioning.mapping.ObservedRoutes
 import com.appvalence.umay.positioning.mapping.OccupancyGrid
 import com.appvalence.umay.positioning.mapping.OpenSpaceLinks
+import com.appvalence.umay.positioning.mapping.SpatialReconstructor
 import com.appvalence.umay.positioning.mapping.SurveyPose
 import com.appvalence.umay.positioning.mapping.WallMapBudget
 import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
@@ -55,6 +58,12 @@ internal data class ArTrackingModel(
  * the app's own code, exactly as SurveyRecorder and SurveyViewModel run it:
  * ArPoseAligner, DepthProjector into an OccupancyGrid, BeaconMapBuilder,
  * WallMapBudget, MapDoors, OpenSpaceLinks.
+ *
+ * With `reconstruct = true` it runs the pipeline the app runs today instead:
+ * MappingFrameGuard's fixed frame, SpatialReconstructor on dense depth with
+ * confidence, and a map built as SurveyViewModel.buildMap builds it, with
+ * ObservedRoutes deciding which walked edges survive. Wrong relocalisations
+ * (`jumpOnResume`) are not modelled there: the app stops mapping at one.
  */
 internal object VirtualCameraSurveyor {
 
@@ -66,6 +75,8 @@ internal object VirtualCameraSurveyor {
         val wallRecall: Double,
         val trackingLosses: Int,
         val frameJumps: Int,
+        /** With `reconstruct`: the floor as it was before ObservedRoutes chose which walked edges to keep. */
+        val beforeRestriction: com.appvalence.umay.coremodel.FloorMap? = null,
     )
 
     fun survey(
@@ -75,6 +86,7 @@ internal object VirtualCameraSurveyor {
         walker: WalkerModel = WalkerModel(),
         tracking: ArTrackingModel = ArTrackingModel(),
         phone: PhoneRadio = PhoneRadio(),
+        reconstruct: Boolean = false,
     ): Survey {
         require(building.floors.size == 1) { "the virtual camera surveyor walks one floor; ${building.name} has ${building.floors.size}" }
         val random = Random(seed)
@@ -83,6 +95,8 @@ internal object VirtualCameraSurveyor {
         val aligner = ArPoseAligner()
         val grid = OccupancyGrid()
         val floorHeight = FloorHeightEstimator()
+        val guard = MappingFrameGuard()
+        val reconstructor = SpatialReconstructor("simulated-session", grid)
         // Where ARCore's world sits relative to the building's plan: anywhere at all.
         var arFrame = ArToSurvey(random.nextDouble(0.0, 360.0), random.nextDouble(-50.0, 50.0), random.nextDouble(-50.0, 50.0))
         var yawDrift = 0.0
@@ -106,9 +120,11 @@ internal object VirtualCameraSurveyor {
 
         // The building's walls and furniture as rays meet them: everything the depth camera can see.
         fun depthFrame(x: Double, y: Double, headingDeg: Double, reported: ArPose): DepthFrame {
-            val width = 32
-            val height = 24
-            val focal = 25f
+            // The reconstruction pipeline gets what a phone's depth sensor gives: more pixels, with confidence.
+            // 160 × 120 is what ARCore's depth gives on a typical phone; the older grid pipeline made do with less.
+            val width = if (reconstruct) 160 else 32
+            val height = if (reconstruct) 120 else 24
+            val focal = if (reconstruct) 125f else 25f
             val depth = ShortArray(width * height)
             val h = Math.toRadians(headingDeg)
             for (row in 0 until height) for (column in 0 until width) {
@@ -131,7 +147,8 @@ internal object VirtualCameraSurveyor {
                 (-sin(rh)).toFloat(), 0f, cos(rh).toFloat(), 0f,
                 reported.x.toFloat(), reported.y.toFloat(), reported.z.toFloat(), 1f,
             )
-            return DepthFrame(width, height, depth, null, focal, focal, width / 2f, height / 2f, pose)
+            val confidence = if (reconstruct) ByteArray(width * height) { 255.toByte() } else null
+            return DepthFrame(width, height, depth, confidence, focal, focal, width / 2f, height / 2f, pose, timestampNs = t * 1_000_000L)
         }
 
         // Tracking lost: the footsteps carry the live position and the path, as SurveyRecorder does.
@@ -179,12 +196,19 @@ internal object VirtualCameraSurveyor {
             }
             // The pose ARCore reports: the true one, drifted and jittered, in its own frame.
             val drifted = arPoseOf(arFrame, odoX, odoY, headingDeg + yawDrift, t, random, tracking.positionNoiseMeters)
-            val pose = aligner.onTracked(drifted, gyro)
+            val aligned = aligner.onTracked(drifted, gyro)
+            // The app plots the path and the walls in the guard's fixed frame and uses the aligner only for footsteps.
+            val fixed = if (reconstruct) (guard.accept("simulated-session", drifted) ?: return) else null
+            val pose = fixed?.let { SurveyPose(it.x(drifted.x, drifted.z), it.y(drifted.x, drifted.z), it.heading(drifted.headingDeg), drifted.timestampMs) } ?: aligned
             val position = Position(pose.x, pose.y, 0, pose.headingDeg, 0.1, PositionSource.MAP_MATCHED, t)
             live = position
             val last = trajectory.lastOrNull()
             if (last == null || hypot(last.x - position.x, last.y - position.y) >= TRAJECTORY_SPACING_METERS) trajectory += position
             sampler.offer(position, scanner.hear(x, y, t))?.let(radio::add)
+            if (fixed != null) {
+                reconstructor.integrate(depthFrame(x, y, headingDeg, drifted), fixed, drifted.y, listOf(0.0))
+                return
+            }
             val toSurvey = aligner.transform ?: return
             val floorY = floorHeight.update(drifted.y, listOf(0.0))
             DepthProjector.integrate(depthFrame(x, y, headingDeg, drifted), floorY, toSurvey, grid)
@@ -233,12 +257,19 @@ internal object VirtualCameraSurveyor {
         // What SurveyViewModel does with a finished camera walk.
         val built = BeaconMapBuilder.buildFromWaypoints(building.name, tags, trajectory = trajectory, radioSamples = mapOf(0 to radio))
         val walls = grid.snapshot()?.let { WallMapBudget.fit(mapOf(0 to it))[0] }
-        val map = built.copy(floors = built.floors.map { OpenSpaceLinks.add(MapDoors.apply(it.copy(occupancy = walls))) })
+        var beforeRestriction: com.appvalence.umay.coremodel.FloorMap? = null
+        val map = built.copy(floors = built.floors.map {
+            if (reconstruct) {
+                val observed = OpenSpaceLinks.add(it.copy(occupancy = walls, reconstruction = reconstructor.snapshot()))
+                beforeRestriction = observed
+                ObservedRoutes.restrict(observed)
+            } else OpenSpaceLinks.add(MapDoors.apply(it.copy(occupancy = walls)))
+        })
         val byName = map.floors.flatMap { it.nodes }.groupBy { it.name }
         val ids = building.nodes.mapNotNull { node -> byName[node.name]?.firstOrNull()?.let { node.id to it.id } }.toMap()
         val surveyed = SurveyedMap.fitted(map, building, ids)
         val (precision, recall) = wallAgreement(building, surveyed, map.floors.single().occupancy)
-        return Survey(surveyed, precision, recall, losses, jumps)
+        return Survey(surveyed, precision, recall, losses, jumps, beforeRestriction)
     }
 
     /** The pose ARCore would report for a camera at plan ([x], [y]) facing [headingDeg], in [frame]'s world. */

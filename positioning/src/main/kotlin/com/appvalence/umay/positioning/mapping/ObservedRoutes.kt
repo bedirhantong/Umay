@@ -21,6 +21,9 @@ object ObservedRoutes {
     /** Half a walker's width plus a margin, as in [OpenSpaceLinks.CLEARANCE_METERS]: floor seen this far either side. */
     const val CLEARANCE_METERS = 0.4
 
+    /** Of a cell's eight neighbours, how many must be seen floor for it to count as an isolated gap in it. */
+    private const val SURROUNDED_BY_FLOOR = 6
+
     private fun clear(r: OccupancyRaster, cells: ByteArray, a: MapNode, b: MapNode, walls: List<WallSegment>): Boolean {
         val length = hypot(b.x-a.x,b.y-a.y)
         if (!length.isFinite() || length <= 0 || length > 100) return false
@@ -47,9 +50,29 @@ object ObservedRoutes {
                 // A cell counts when its centre is within reach: a doorway of 0.8 m is 8 cells, none of them half-seen.
                 val centreX = r.originX+(x+0.5)*cell; val centreY = r.originY+(y+0.5)*cell
                 if (hypot(centreX-px,centreY-py) > CLEARANCE_METERS) continue
-                if (x !in 0 until r.width || y !in 0 until r.height || cells[y*r.width+x] != OccupancyRaster.FREE) return false
+                if (!floorAt(r, cells, x, y)) return false
             }
         }
         return true
+    }
+
+    /**
+     * Floor that was seen — or a single unseen cell with floor all round it: the depth camera samples
+     * the ground more thinly the farther it looks, leaving isolated gaps inside floor it plainly saw.
+     * Anything bigger than that, and any wall cell, still blocks.
+     */
+    private fun floorAt(r: OccupancyRaster, cells: ByteArray, x: Int, y: Int): Boolean {
+        if (x !in 0 until r.width || y !in 0 until r.height) return false
+        return when (cells[y*r.width+x]) {
+            OccupancyRaster.FREE -> true
+            OccupancyRaster.UNKNOWN -> {
+                var free = 0
+                for (dx in -1..1) for (dy in -1..1) {
+                    if ((dx != 0 || dy != 0) && x+dx in 0 until r.width && y+dy in 0 until r.height && cells[(y+dy)*r.width+x+dx] == OccupancyRaster.FREE) free++
+                }
+                free >= SURROUNDED_BY_FLOOR
+            }
+            else -> false
+        }
     }
 }

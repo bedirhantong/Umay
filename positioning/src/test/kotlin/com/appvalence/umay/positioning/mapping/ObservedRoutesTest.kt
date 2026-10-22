@@ -9,9 +9,21 @@ class ObservedRoutesTest {
         val map = FloorMap(0,listOf(MapNode("a",0.55,0.55,NodeType.WAYPOINT),MapNode("b",1.35,0.55,NodeType.WAYPOINT)),
             listOf(MapEdge("a","b",true,0.8)),OccupancyRaster.of(0.2,0.0,0.0,10,10,cells),reconstruction=SpatialMap(coordinateFrameId="a"))
         assertEquals(1,ObservedRoutes.restrict(map).edges.size)
-        cells[2*10+4] = OccupancyRaster.UNKNOWN
+        // A gap bigger than one cell in the floor the edge crosses is unseen ground, and blocks it.
+        for (index in listOf(2*10+4, 2*10+5, 3*10+4, 3*10+5)) cells[index] = OccupancyRaster.UNKNOWN
         assertTrue(ObservedRoutes.restrict(map.copy(occupancy=OccupancyRaster.of(0.2,0.0,0.0,10,10,cells))).edges.isEmpty())
         assertTrue(ObservedRoutes.restrict(map.copy(occupancy=null)).edges.isEmpty())
+    }
+
+    @Test fun `one unseen cell inside seen floor is a sampling gap, not unseen ground`() {
+        val cells = ByteArray(100) { OccupancyRaster.FREE }
+        cells[2*10+4] = OccupancyRaster.UNKNOWN
+        val map = FloorMap(0,listOf(MapNode("a",0.55,0.55,NodeType.WAYPOINT),MapNode("b",1.35,0.55,NodeType.WAYPOINT)),
+            listOf(MapEdge("a","b",true,0.8)),OccupancyRaster.of(0.2,0.0,0.0,10,10,cells),reconstruction=SpatialMap(coordinateFrameId="a"))
+        assertEquals(1,ObservedRoutes.restrict(map).edges.size)
+        // Never a wall cell, though: that is something seen, in the way.
+        cells[2*10+4] = OccupancyRaster.OCCUPIED
+        assertTrue(ObservedRoutes.restrict(map.copy(occupancy=OccupancyRaster.of(0.2,0.0,0.0,10,10,cells))).edges.isEmpty())
     }
 
     /** Two rooms 6 m x 3 m in all, joined by a doorway [doorMeters] wide in the wall at x = 3.0 m. Cells are 0.1 m. */
