@@ -11,7 +11,6 @@ import kotlin.test.assertNull
 class FloorChangeConfirmationTest {
     private fun state(hint: FloorChangeHint?, floor: Int = 0) = NavigationState(
         position = Position(0.0, 0.0, floor, 0.0, 1.0, PositionSource.MAP_MATCHED, 0L),
-        obstacles = emptyList(),
         alerts = emptyList(),
         route = emptyList(),
         pendingFloorChange = hint,

@@ -36,6 +36,8 @@ object MapDoors {
     fun apply(map: BuildingMap): BuildingMap = map.copy(floors = map.floors.map(::apply))
 
     fun apply(floor: FloorMap): FloorMap {
+        // A default-width doorway cut is a legacy editing heuristic, not observed geometry.
+        if (floor.reconstruction != null) return floor
         val nodesById = floor.nodes.associateBy { it.id }
         val previous = floor.doors.associateBy { it.nodeId }
         val doors = floor.nodes.filter { it.type == NodeType.DOOR }.mapNotNull { door ->

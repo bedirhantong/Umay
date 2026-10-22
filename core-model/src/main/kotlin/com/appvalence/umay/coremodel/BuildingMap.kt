@@ -59,6 +59,7 @@ data class FloorMap(
     // How the compass lines up with this floor's map, measured during the survey; null
     // for maps surveyed before this, or where the compass was too inconsistent.
     val compass: CompassCalibration? = null,
+    val reconstruction: SpatialMap? = null,
 )
 
 /** The beacons heard at one spot of a floor during the survey (see [FloorMap.radioMap]). */

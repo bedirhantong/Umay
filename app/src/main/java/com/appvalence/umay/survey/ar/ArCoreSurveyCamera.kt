@@ -39,6 +39,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.UUID
+import android.os.SystemClock
 import java.nio.ByteOrder
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -75,7 +77,14 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
     private var session: Session? = null
     private var gl: OffscreenGlContext? = null
     private var running = false
+    private var coordinateFrameId = ""
     private var depthEnabled = false
+    private var requestedDepthMode = Config.DepthMode.RAW_DEPTH_ONLY
+
+    /** Device validation can compare native depth computation modes; emitted observations stay raw. */
+    internal constructor(context: Context, depthMode: Config.DepthMode) : this(context) {
+        requestedDepthMode = depthMode
+    }
     private var lastPoseEmittedMs = 0L
     private var lastDepthAttemptMs = 0L
     private var lastDepthTimestampNs = 0L
@@ -185,19 +194,23 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
 
         // Raw depth, not the smoothed kind: the smoothing fills holes with guesses,
         // which on a wall map would draw walls that aren't there.
-        depthEnabled = session.isDepthModeSupported(Config.DepthMode.RAW_DEPTH_ONLY)
+        depthEnabled = session.isDepthModeSupported(requestedDepthMode)
         session.configure(
             Config(session)
                 .setUpdateMode(Config.UpdateMode.BLOCKING)
                 .setPlaneFindingMode(Config.PlaneFindingMode.HORIZONTAL)
                 .setLightEstimationMode(Config.LightEstimationMode.DISABLED)
                 .setFocusMode(Config.FocusMode.AUTO)
-                .setDepthMode(if (depthEnabled) Config.DepthMode.RAW_DEPTH_ONLY else Config.DepthMode.DISABLED),
+                .setDepthMode(if (depthEnabled) requestedDepthMode else Config.DepthMode.DISABLED),
         )
         session.setCameraTextureName(glContext.cameraTexture)
         // Nothing is displayed, but ARCore wants a geometry before the first update.
         session.setDisplayGeometry(Surface.ROTATION_0, 1, 1)
         _supportsDepth.value = depthEnabled
+        coordinateFrameId = UUID.randomUUID().toString()
+        lastDepthTimestampNs = 0L
+        lastDepthAttemptMs = 0L
+        lastPoseEmittedMs = 0L
         this.session = session
         return session
     }
@@ -235,21 +248,24 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
         }
         _status.value = ArCameraStatus.Tracking
 
+        val elapsed = SystemClock.elapsedRealtime()
         val now = System.currentTimeMillis()
-        val depthDue = depthEnabled && now - lastDepthAttemptMs >= DEPTH_INTERVAL_MS
-        if (!depthDue && now - lastPoseEmittedMs < POSE_INTERVAL_MS) return
-        lastPoseEmittedMs = now
+        val depthDue = depthEnabled && elapsed - lastDepthAttemptMs >= DEPTH_INTERVAL_MS
+        if (!depthDue && elapsed - lastPoseEmittedMs < POSE_INTERVAL_MS) return
+        lastPoseEmittedMs = elapsed
 
         val pose = camera.pose
         val zAxis = pose.zAxis
         // The camera looks along its −Z; on the plan (AR x, −z) that's (−zx, zz).
         val headingDeg = Math.toDegrees(atan2(-zAxis[0].toDouble(), zAxis[2].toDouble()))
-        val arPose = ArPose(pose.tx().toDouble(), pose.ty().toDouble(), pose.tz().toDouble(), (headingDeg + 360.0) % 360.0, now)
+        // ARCore's timestamp epoch is unspecified. Preserve it for frame ordering;
+        // BLE association uses arrival wall time with acquisition latency as an explicit limitation.
+        val arPose = ArPose(pose.tx().toDouble(), pose.ty().toDouble(), pose.tz().toDouble(), (headingDeg + 360.0) % 360.0, now, timestampNs = frame.timestamp)
 
         var depth: DepthFrame? = null
         var planeHeights = emptyList<Double>()
         if (depthDue) {
-            lastDepthAttemptMs = now
+            lastDepthAttemptMs = elapsed
             depth = readDepth(frame)
             if (depth != null) {
                 planeHeights = session.getAllTrackables(Plane::class.java)
@@ -257,7 +273,7 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
                     .map { it.centerPose.ty().toDouble() }
             }
         }
-        _frames.tryEmit(ArFrameSample(arPose, planeHeights, depth))
+        _frames.tryEmit(ArFrameSample(arPose, planeHeights, depth, coordinateFrameId, elapsed))
     }
 
     private fun readDepth(frame: Frame): DepthFrame? {
@@ -271,9 +287,12 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
             if (image.timestamp == lastDepthTimestampNs) return null
             lastDepthTimestampNs = image.timestamp
             val confidence = try {
-                frame.acquireRawDepthConfidenceImage().use(::copyConfidence)
+                frame.acquireRawDepthConfidenceImage().use { confidenceImage ->
+                    if (confidenceImage.timestamp != image.timestamp || confidenceImage.width != image.width || confidenceImage.height != image.height) return null
+                    copyConfidence(confidenceImage)
+                }
             } catch (e: NotYetAvailableException) {
-                null
+                return null
             }
 
             val width = image.width
@@ -296,6 +315,7 @@ class ArCoreSurveyCamera @Inject constructor(@param:ApplicationContext private v
                 cx = principal[0] * scaleX,
                 cy = principal[1] * scaleY,
                 cameraPose = cameraPose,
+                timestampNs = image.timestamp,
             )
         }
     }
@@ -374,6 +394,7 @@ private class OffscreenGlContext private constructor(
         EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
         EGL14.eglDestroySurface(display, surface)
         EGL14.eglDestroyContext(display, context)
+        EGL14.eglTerminate(display)
     }
 
     companion object {

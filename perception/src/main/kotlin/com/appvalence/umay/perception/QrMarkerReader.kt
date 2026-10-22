@@ -17,13 +17,12 @@ import kotlin.math.tan
 /**
  * Finds Umay's place markers ([PlaceMarkers]) in a grayscale camera frame and
  * tells how far each one is, from how big it looks: the printed size is known,
- * so it's the same pinhole estimate as for people, using the distance between
+ * so it's a pinhole estimate, using the distance between
  * the QR code's finder patterns. Other QR codes are ignored. The camera's view
  * is [CameraOptics]' assumption unless [horizontalFovDegrees] says otherwise.
  *
  * A 15 cm code is read from about a metre in a 480-pixel-wide frame, two at
- * 960 — what navigation reads in (CameraOptics.MARKER_FRAME_WIDTH_PX) —
- * measured on rendered frames (the simulation module's MarkerRangeTest);
+ * 960, measured on rendered frames (the simulation module's MarkerRangeTest);
  * beyond about 45° off its face it isn't read at all.
  *
  * Pure JVM (ZXing), so it's tested with generated images. Not thread-safe.

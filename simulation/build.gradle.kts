@@ -23,6 +23,7 @@ android {
 
 dependencies {
     implementation(project(":orchestrator"))
+    implementation(project(":perception"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 

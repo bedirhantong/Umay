@@ -225,12 +225,8 @@ sunucusu** bölümünden sunucuya yükler; ziyaretçi telefonları oradan indiri
   görünüyorsun, buradan mı başlıyorsun?"
 - Yer işaretleri asılıysa: bulunduğu yeri bilmiyorsa **Kamerayla bul**'a
   basıp telefonu göğüs hizasında tutarak yavaşça kendi etrafında dönmek.
-- Telefon cepteyken de yönlendirme sürer. Önündeki insan, sandalye, masa gibi
-  engellerin uyarısı ve yer işaretlerinin görülmesi için telefon göğüs
-  hizasında, kamerası önüne bakarak tutulmalı; bir göğüs askısı elleri serbest
-  bırakır. Kamera yere ya da tavana bakarsa Umay bunu söyler.
-- Telefon çok ısınırsa ya da pil azalırsa Umay kamerayı kısar ve bunu söyler;
-  yönlendirme adım ve beacon'larla sürer.
+- Telefon cepteyken de yönlendirme sürer; yönlendirme kamera kullanmaz, adım
+  sensörleri ve beacon'larla çalışır. Umay engelleri ve insanları algılamaz.
 - Telefonda internetsiz Türkçe konuşma sesi yüklü olmalı. Umay eksikse bunu
   söyler ve yükleme ekranını açar.
 - Umay bir yardımcıdır; baston ya da rehber köpeğin yerini tutmaz.

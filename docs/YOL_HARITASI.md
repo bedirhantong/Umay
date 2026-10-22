@@ -29,9 +29,8 @@ Kullanıcının gözünden akış:
 
    Kurumda beacon'lar konumu kabaca kendiliğinden de verir.
 3. **Gideceği yeri seçer.** Seçimi TalkBack ile listeden ya da sesle yapar.
-4. **İlerler.** Telefon göğüs hizasında, kamera önüne bakar. Uygulama sesli
-   ve titreşimli yönergeler verir, önüne çıkan engellere karşı uyarır. Telefon
-   cepteyken de adım ve beacon'larla yönlendirme sürer.
+4. **İlerler.** Uygulama sesli ve titreşimli yönergeler verir. Yönlendirme
+   kamera kullanmaz; telefon cepteyken de adım ve beacon'larla sürer.
 
 ### Değişmez ilkeler
 
@@ -52,20 +51,25 @@ Kullanıcının gözünden akış:
 
 ## Bugünkü durum
 
+> **Kapsam kararı (2026-10):** Umay yalnızca haritayı çıkarır ve yönlendirir.
+> Kamerayla engel ve insan algılama, tabela okuma, yürürken kameranın ısı/pil/
+> tutuş denetimi ve engele göre rota değiştirme koddan **kaldırıldı**. Aşağıda
+> bunlara ait maddeler (3.3'ün yürürken işaret okuma kısmı, 4.1, 4.4, 4.5, 4.10)
+> artık yapılmayacak; geçmiş kaydı olarak duruyor. Kamera yalnızca harita
+> çıkarırken (ARCore) ve yola çıkmadan önce QR işaretten başlangıç bulurken
+> kullanılır.
+
 | Alan | Durum | Nerede |
 |---|---|---|
 | Adım sayarak harita çıkarma, isimli yerler, beacon parmak izi | Çalışıyor | `main` |
 | Graf üzerinde A* rota, sesli ve titreşimli yönergeler, katlar arası geçiş | Çalışıyor | `main` |
-| Kamerayla insan algılama, tabela okuma, "Bir şey sor" | Çalışıyor | `main` |
+| "Bir şey sor" | Çalışıyor | `main` |
 | Ekran kapalıyken ve cepteyken yönlendirme | Çalışıyor | `main` |
 | Koridor grafiği üzerinde parçacık filtresi (konum) | Yazıldı, **sahada ölçülmedi** | `feat/graph-particle-filter` |
 | Saha kaydını eski ve yeni motorla yeniden oynatma | Yazıldı | `feat/graph-particle-filter` |
 | Kamerayla (ARCore) harita çıkarma, 2D duvar haritası, köşe noktaları | Yazıldı, **telefonda hiç çalışmadı** | `feat/ar-survey` |
 | Yer işaretleriyle (QR) konum bulma, "Kamerayla bul" | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
-| Kamerayla engel uyarısı: insan ve eşyalar (sandalye, masa, bank…) | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
-| 16 KB sayfa boyutu uyumu (LiteRT) | Yapıldı | `feat/ar-survey` |
 | Açık alanda kestirme bağlantılar, duvara dayalı yönerge | Yazıldı, **sahada doğrulanmadı** | `feat/ar-survey` |
-| Isı, pil ve telefonun tutuşuna göre kamera | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | Kurum harita sunucusu | Yazıldı, HTTP testleri geçiyor | `feat/ar-survey` |
 | Kapıların harita parçası olması | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | Harita düzenleme | Yazıldı, **TalkBack ile denenmedi** | `feat/ar-survey` |

@@ -89,7 +89,8 @@ class MapEditorViewModel @Inject constructor(private val buildings: BuildingRepo
         val current = _state.value
         val original = current.original ?: return
         // A place made (or unmade) a door gets (or loses) its gap in the walls.
-        val map = current.map?.let(MapDoors::apply) ?: return
+        val edited = current.map?.let(MapDoors::apply) ?: return
+        val map = edited.copy(floors = edited.floors.map(com.appvalence.umay.positioning.mapping.ObservedRoutes::restrict))
         if (current.saving || !current.hasChanges) return
         _state.update { it.copy(saving = true, message = null) }
         viewModelScope.launch {

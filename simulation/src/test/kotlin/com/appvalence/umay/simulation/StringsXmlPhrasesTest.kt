@@ -1,7 +1,5 @@
 package com.appvalence.umay.simulation
 
-import com.appvalence.umay.coremodel.AlertPriority
-import com.appvalence.umay.coremodel.ObstacleKind
 import com.appvalence.umay.orchestrator.Turn
 import com.appvalence.umay.orchestrator.TurnDirection
 import kotlin.test.Test
@@ -15,7 +13,6 @@ class StringsXmlPhrasesTest {
         assertEquals("Mutfak yönünde yaklaşık 10 metre ilerle, sonra sağa dön.", phrases.walkToward("Mutfak", 9.6, Turn(90.0)))
         assertEquals("Sola dön.", phrases.turnNow(Turn(-80.0)))
         assertEquals("Hedefe yaklaşık 1 metre kaldı.", phrases.approachDestination(0.2))
-        assertEquals("Dur! Hemen önünde bir sandalye var.", phrases.obstacle(AlertPriority.CRITICAL, ObstacleKind.CHAIR, 1.0))
         assertEquals("Duvar solunda; onu takip edebilirsin.", phrases.followWall(TurnDirection.LEFT))
     }
 

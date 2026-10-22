@@ -2,9 +2,7 @@ package com.appvalence.umay.navigation
 
 import android.content.Context
 import com.appvalence.umay.R
-import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.NodeType
-import com.appvalence.umay.coremodel.ObstacleKind
 import com.appvalence.umay.orchestrator.FloorChangeMethod
 import com.appvalence.umay.orchestrator.GuidancePhrases
 import com.appvalence.umay.orchestrator.Turn
@@ -64,12 +62,6 @@ class ResourceGuidancePhrases(context: Context, private val clockDirections: Boo
     override fun turnAround(): String =
         if (clockDirections) resources.getString(R.string.say_turn_clock_now, 6) else resources.getString(R.string.say_turn_around)
 
-    override fun passObstacle(side: TurnDirection): String = when {
-        clockDirections -> resources.getString(R.string.say_pass_clock, if (side == TurnDirection.LEFT) 11 else 1)
-        side == TurnDirection.LEFT -> resources.getString(R.string.say_pass_left)
-        else -> resources.getString(R.string.say_pass_right)
-    }
-
     override fun approachDestination(distanceMeters: Double): String =
         resources.getString(R.string.say_approach_destination, meters(distanceMeters))
 
@@ -101,42 +93,13 @@ class ResourceGuidancePhrases(context: Context, private val clockDirections: Boo
 
     override fun arrived(): String = resources.getString(R.string.say_arrived)
 
-    override fun noRoute(): String = resources.getString(R.string.say_no_route)
+    override fun positionUncertain(): String = resources.getString(R.string.say_position_uncertain)
 
-    override fun rerouted(): String = resources.getString(R.string.say_rerouted)
+    override fun noRoute(): String = resources.getString(R.string.say_no_route)
 
     override fun noStepFreeRoute(): String = resources.getString(R.string.say_no_step_free_route)
 
     override fun offRoute(): String = resources.getString(R.string.say_off_route)
 
     override fun wrongWay(): String = resources.getString(R.string.say_wrong_way)
-
-    // A critical warning is kept as short as possible — it has to be over before the
-    // person takes another step — so it says *stop*, not how many meters away.
-    override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String {
-        val what = resources.getString(obstacleName(kind))
-        return when (priority) {
-            AlertPriority.CRITICAL -> resources.getString(R.string.say_obstacle_critical, what)
-            AlertPriority.WARNING -> resources.getString(R.string.say_obstacle_warning, meters(distanceMeters), what)
-            AlertPriority.INFO -> resources.getString(R.string.say_obstacle_info, meters(distanceMeters), what)
-        }
-    }
-
-    private fun obstacleName(kind: ObstacleKind): Int = when (kind) {
-        ObstacleKind.PERSON -> R.string.obstacle_person
-        ObstacleKind.BICYCLE -> R.string.obstacle_bicycle
-        ObstacleKind.MOTORCYCLE -> R.string.obstacle_motorcycle
-        ObstacleKind.FIRE_HYDRANT -> R.string.obstacle_fire_hydrant
-        ObstacleKind.BENCH -> R.string.obstacle_bench
-        ObstacleKind.DOG -> R.string.obstacle_dog
-        ObstacleKind.SUITCASE -> R.string.obstacle_suitcase
-        ObstacleKind.CHAIR -> R.string.obstacle_chair
-        ObstacleKind.COUCH -> R.string.obstacle_couch
-        ObstacleKind.POTTED_PLANT -> R.string.obstacle_potted_plant
-        ObstacleKind.BED -> R.string.obstacle_bed
-        ObstacleKind.TABLE -> R.string.obstacle_table
-        ObstacleKind.TOILET -> R.string.obstacle_toilet
-        ObstacleKind.REFRIGERATOR -> R.string.obstacle_refrigerator
-        ObstacleKind.UNKNOWN -> R.string.obstacle_unknown
-    }
 }

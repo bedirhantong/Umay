@@ -67,6 +67,10 @@ object MapSections {
     }
 
     private fun mergeFloor(map: BuildingMap, floor: FloorMap, section: FloorMap, replaceOld: Boolean): FloorMerge {
+        // This legacy section fitter allows scale changes and only two named points.
+        // That is not a validated rigid alignment for spatial evidence; retain both scans separately.
+        if (floor.reconstruction != null || section.reconstruction != null)
+            return FloorMerge.Failed(Result.DoesNotFit(floor.floorIndex, 1.0))
         val placesByName = floor.nodes.filter { it.isPlace }.groupBy { normalized(it.name) }
         // Section node id -> map node id, for the places both have (named the same, once on the map).
         val shared = section.nodes.filter { it.isPlace }.mapNotNull { node ->

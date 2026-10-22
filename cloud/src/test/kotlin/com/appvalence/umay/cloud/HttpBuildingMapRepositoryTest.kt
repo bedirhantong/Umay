@@ -85,7 +85,7 @@ class HttpBuildingMapRepositoryTest {
     fun `server answers become typed failures`() = runTest {
         assertEquals(RemoteMapFailure.NotFound, repository().downloadBuildingMap("yok-1234").exceptionOrNull()!!.asRemoteMapFailure())
         assertEquals(RemoteMapFailure.NotOwner, repository(publish = "wrong").publishBuildingMap(office).exceptionOrNull()!!.asRemoteMapFailure())
-        stored["eski-1"] = BuildingMapJson.encode(office).replaceFirst("\"formatVersion\": 2", "\"formatVersion\": 99")
+        stored["eski-1"] = BuildingMapJson.encode(office).replaceFirst("\"formatVersion\": ${BuildingMapJson.FORMAT_VERSION}", "\"formatVersion\": 99")
         assertEquals(RemoteMapFailure.NewerFormat, repository().downloadBuildingMap("eski-1").exceptionOrNull()!!.asRemoteMapFailure())
     }
 

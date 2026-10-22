@@ -1,6 +1,7 @@
 package com.appvalence.umay.survey
 
 import android.content.Context
+import android.util.AtomicFile
 import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.coremodel.SurveyDraft
 import com.appvalence.umay.coremodel.SurveyDraftJson
@@ -44,21 +45,22 @@ class FileSurveyDrafts @Inject constructor(
     private val lock = Mutex()
 
     override suspend fun load(): RestoredSurvey? = locked {
-        val draft = runCatching { draftFile.readText() }.getOrNull()?.let(SurveyDraftJson::decode) ?: return@locked null
+        val draft = runCatching { AtomicFile(draftFile).openRead().bufferedReader().use { it.readText() } }.getOrNull()?.let(SurveyDraftJson::decode) ?: return@locked null
         val readings = runCatching { readingsFile.useLines { SurveyDraftJson.decodeReadings(it) } }.getOrDefault(emptyList())
         RestoredSurvey(draft, readings)
     }
 
     override suspend fun save(draft: SurveyDraft) {
         locked {
-            runCatching {
-                directory.mkdirs()
-                val temporary = File(directory, "$DRAFT_FILE.tmp")
-                temporary.writeText(SurveyDraftJson.encode(draft))
-                if (!temporary.renameTo(draftFile)) {
-                    draftFile.delete()
-                    temporary.renameTo(draftFile)
-                }
+            directory.mkdirs()
+            val atomic = AtomicFile(draftFile)
+            val output = atomic.startWrite()
+            try {
+                output.write(SurveyDraftJson.encode(draft).toByteArray(Charsets.UTF_8))
+                atomic.finishWrite(output)
+            } catch (error: Exception) {
+                atomic.failWrite(output)
+                throw error
             }
         }
     }
@@ -66,10 +68,8 @@ class FileSurveyDrafts @Inject constructor(
     override suspend fun appendReadings(readings: List<BleBeaconReading>) {
         if (readings.isEmpty()) return
         locked {
-            runCatching {
-                directory.mkdirs()
-                readingsFile.appendText(SurveyDraftJson.encodeReadings(readings) + "\n")
-            }
+            directory.mkdirs()
+            readingsFile.appendText("\n" + SurveyDraftJson.encodeReadings(readings) + "\n")
         }
     }
 

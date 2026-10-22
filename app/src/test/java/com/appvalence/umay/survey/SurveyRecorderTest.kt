@@ -33,6 +33,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -51,14 +52,14 @@ class SurveyRecorderTest {
     private val foreground = FakeSurveyForeground()
     private val announcer = FakeSurveyAnnouncer()
 
-    private fun TestScope.recorder() = SurveyRecorder(
+    private fun TestScope.recorder(draftStore: SurveyDrafts = drafts) = SurveyRecorder(
         scanner = scanner,
         motion = motion,
         capabilities = FakeCapabilities(hasBarometer = false),
         settings = settings,
         announcer = announcer,
         camera = camera,
-        drafts = drafts,
+        drafts = draftStore,
         foreground = foreground,
         scope = backgroundScope,
         default = main.dispatcher,
@@ -292,13 +293,7 @@ class SurveyRecorderTest {
     }
 
     /** What a level camera at AR (x, 1.35, z) sees of a wall [distance] m ahead. */
-    private fun wallAhead(x: Float, z: Float, distance: Double) = DepthFrame(
-        width = 32, height = 24,
-        depthMm = ShortArray(32 * 24) { (distance * 1000).toInt().toShort() },
-        confidence = null,
-        fx = 25f, fy = 25f, cx = 16f, cy = 12f,
-        cameraPose = floatArrayOf(1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, x, 1.35f, z, 1f),
-    )
+    private fun wallAhead(x: Float, z: Float, distance: Double) = SyntheticMappingDepth.frame(x,z,distance,frameTime + 1_100)
 
     @Test
     fun `a camera walk takes its path from the camera, in metres, and only while on screen`() = runTest(main.dispatcher) {
@@ -332,7 +327,7 @@ class SurveyRecorderTest {
         recorder.start(SurveyMode.CAMERA)
         camera.status.value = ArCameraStatus.Tracking
 
-        repeat(3) { cameraAt(0.0, 0.0, depth = wallAhead(0f, 0f, 3.0)) }
+        repeat(8) { cameraAt(0.0, 0.0, depth = wallAhead(0f, 0f, 3.0)) }
         recorder.stop()
         advanceUntilIdle()
 
@@ -341,6 +336,7 @@ class SurveyRecorderTest {
         val cells = wallMap!!.decodeCells()!!
         assertTrue(cells.any { it == OccupancyRaster.OCCUPIED })
         assertTrue(cells.any { it == OccupancyRaster.FREE })
+        assertTrue(recorder.state.value.spatialMaps[0]!!.walls.isNotEmpty())
         assertFalse("stopping must release the camera", camera.resumed)
     }
 
@@ -418,6 +414,34 @@ class SurveyRecorderTest {
         assertEquals(1, camera.closed)
         assertEquals(SurveyMode.FOOTSTEPS, recorder.state.value.mode)
         assertTrue(recorder.state.value.wallMaps.isEmpty())
+    }
+
+
+    @Test
+    fun `a recovered camera draft cannot append an unrelated session`() = runTest(main.dispatcher) {
+        drafts.draft = SurveyDraft(mode = SurveyMode.CAMERA.name, currentFloor = 0,
+            trajectory = listOf(Position(5.0,7.0,0,0.0,1.0,PositionSource.MAP_MATCHED,1)), savedAtMs = 1)
+        val recorder = recorder()
+        advanceUntilIdle()
+        assertTrue(recorder.state.value.alignmentRequired)
+        recorder.start(SurveyMode.CAMERA)
+        assertFalse(recorder.state.value.isRecording)
+        assertEquals(5.0,recorder.state.value.trajectory.single().x,1e-9)
+    }
+
+    @Test
+    fun `a camera frame restart stops geometry and trajectory integration`() = runTest(main.dispatcher) {
+        val recorder = recorder()
+        recorder.start(SurveyMode.CAMERA)
+        camera.status.value = ArCameraStatus.Tracking
+        camera.frames.emit(ArFrameSample(ArPose(0.0,1.35,0.0,0.0,1),emptyList(),null,"session-a"))
+        advanceUntilIdle()
+        camera.frames.emit(ArFrameSample(ArPose(0.0,1.35,0.0,0.0,2),emptyList(),null,"session-b"))
+        advanceUntilIdle()
+        assertTrue(recorder.state.value.alignmentRequired)
+        assertEquals(1,recorder.state.value.trajectory.size)
+        assertNull(recorder.state.value.livePosition)
+        recorder.stop()
     }
 
     // --- Surviving the app being ended ---
@@ -506,4 +530,28 @@ class SurveyRecorderTest {
         assertEquals(samples, drafts.draft!!.radioSamples.getValue(0))
         recorder.stop()
     }
+
+    @Test
+    fun `failed persistence preserves recording and retries successfully`() = runTest(main.dispatcher) {
+        var fail = true
+        val store = object : SurveyDrafts by drafts {
+            override suspend fun save(draft: SurveyDraft) {
+                if (fail) throw java.io.IOException("disk full")
+                drafts.save(draft)
+            }
+        }
+        val recorder = recorder(store)
+        recorder.start()
+        step()
+        advanceTimeBy(SurveyRecorder.DRAFT_INTERVAL_MS + 1)
+        assertTrue(recorder.state.value.persistenceFailed)
+        assertTrue(recorder.state.value.isRecording)
+        assertEquals(1,recorder.state.value.trajectory.size)
+        fail = false
+        advanceTimeBy(SurveyRecorder.DRAFT_INTERVAL_MS + 1)
+        assertFalse(recorder.state.value.persistenceFailed)
+        assertEquals(1,drafts.draft!!.trajectory.size)
+        recorder.stop()
+    }
+
 }

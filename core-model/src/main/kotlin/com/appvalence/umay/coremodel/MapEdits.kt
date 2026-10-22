@@ -118,29 +118,100 @@ object MapEdits {
 
     /** Forgets what the wall map says within [radiusMeters] of ([x], [y]) — a person, a cart, a reflection. */
     fun eraseWalls(map: BuildingMap, floorIndex: Int, x: Double, y: Double, radiusMeters: Double): BuildingMap {
+        if (!x.isFinite() || !y.isFinite() || !radiusMeters.isFinite() || radiusMeters <= 0.0) return map
         val floor = map.floors.firstOrNull { it.floorIndex == floorIndex } ?: return map
-        val raster = floor.occupancy ?: return map
-        val cells = raster.decodeCells() ?: return map
-        val size = raster.cellSizeMeters
-        var changed = false
-        for (row in 0 until raster.height) {
-            val cellY = raster.originY + (row + 0.5) * size
-            for (column in 0 until raster.width) {
-                val cellX = raster.originX + (column + 0.5) * size
-                val index = row * raster.width + column
-                if (cells[index] != OccupancyRaster.UNKNOWN && hypot(cellX - x, cellY - y) <= radiusMeters) {
-                    cells[index] = OccupancyRaster.UNKNOWN
-                    changed = true
+        fun distanceToSegment(point: MetricPoint, start: MetricPoint, end: MetricPoint): Double {
+            val dx = end.x - start.x
+            val dy = end.y - start.y
+            val squared = dx * dx + dy * dy
+            val t = if (squared > 0.0) {
+                (((point.x - start.x) * dx + (point.y - start.y) * dy) / squared).coerceIn(0.0, 1.0)
+            } else 0.0
+            return hypot(point.x - start.x - t * dx, point.y - start.y - t * dy)
+        }
+        val center = MetricPoint(x, y)
+        fun affected(wall: WallSegment) = distanceToSegment(center, wall.start, wall.end) <= radiusMeters
+        fun pointInRing(point: MetricPoint, ring: List<MetricPoint>): Boolean {
+            var inside = false
+            for (index in ring.indices) {
+                val a = ring[index]
+                val b = ring[(index + 1) % ring.size]
+                if ((a.y > point.y) != (b.y > point.y) &&
+                    point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x) inside = !inside
+            }
+            return inside
+        }
+        fun touchesRegion(region: ObservedRegion): Boolean {
+            val boundaries = listOf(region.outline) + region.holes
+            if (boundaries.any { ring -> ring.indices.any { index ->
+                    distanceToSegment(center, ring[index], ring[(index + 1) % ring.size]) <= radiusMeters
+                } }) return true
+            return pointInRing(center, region.outline) && region.holes.none { pointInRing(center, it) }
+        }
+        var rasterChanged = false
+        val raster = floor.occupancy
+        val erased = raster?.let {
+            val cells = it.decodeCells() ?: return@let it
+            val size = it.cellSizeMeters
+            for (row in 0 until it.height) {
+                val cellY = it.originY + (row + 0.5) * size
+                for (column in 0 until it.width) {
+                    val cellX = it.originX + (column + 0.5) * size
+                    val index = row * it.width + column
+                    if (cells[index] != OccupancyRaster.UNKNOWN && hypot(cellX - x, cellY - y) <= radiusMeters) {
+                        cells[index] = OccupancyRaster.UNKNOWN
+                        rasterChanged = true
+                    }
                 }
             }
+            if (rasterChanged) OccupancyRaster.of(size, it.originX, it.originY, it.width, it.height, cells) else it
         }
-        if (!changed) return map
-        val erased = OccupancyRaster.of(size, raster.originX, raster.originY, raster.width, raster.height, cells)
-        return map.copy(floors = map.floors.map { if (it === floor) it.copy(occupancy = erased) else it })
+        val spatial = floor.reconstruction?.let { geometry ->
+            val removedWalls = (geometry.walls + geometry.confirmedWalls).filter(::affected)
+            fun dependsOnRemovedWall(point: MetricPoint) = removedWalls.any {
+                distanceToSegment(point, it.start, it.end) <= 0.15
+            }
+            val removedOpenings = geometry.openings.filter { opening ->
+                distanceToSegment(center, opening.start, opening.end) <= radiusMeters ||
+                    dependsOnRemovedWall(opening.start) || dependsOnRemovedWall(opening.end)
+            }
+            val corners = geometry.corners.filter {
+                hypot(it.x - x, it.y - y) > radiusMeters && !dependsOnRemovedWall(it)
+            }
+            val voxels = geometry.voxels.filter { hypot(it.x - x, it.y - y) > radiusMeters }
+            // A witness stores the gap crossing, not the original ray. Clear all witnesses when
+            // a supporting fit changes; their dependency on an erased surface cannot be recovered.
+            val witnesses = if (removedWalls.isNotEmpty() || removedOpenings.isNotEmpty()) emptyList() else {
+                geometry.openingWitnesses.filter { hypot(it.point.x - x, it.point.y - y) > radiusMeters }
+            }
+            val changed = rasterChanged || removedWalls.isNotEmpty() || removedOpenings.isNotEmpty() ||
+                corners.size != geometry.corners.size || voxels.size != geometry.voxels.size ||
+                witnesses.size != geometry.openingWitnesses.size || geometry.observedRegions.any(::touchesRegion)
+            if (!changed) return@let geometry
+            // A manually erased patch invalidates the fitted surface it intersects.
+            // Keep remaining raw evidence and raster; never draw the old fit across the erased patch.
+            geometry.copy(walls = geometry.walls.filterNot(::affected),
+                confirmedWalls = geometry.confirmedWalls.filterNot(::affected),
+                corners = corners,
+                openings = geometry.openings.filterNot { it in removedOpenings },
+                openingWitnesses = witnesses,
+                // These are derived from the pre-edit raster and must be reconstructed before reuse.
+                observedRegions = emptyList(),
+                voxels = voxels,
+                issues = geometry.issues + ReconstructionIssue.PARTIAL_COVERAGE)
+        }
+        if (!rasterChanged && spatial === floor.reconstruction) return map
+        return map.copy(floors = map.floors.map { if (it === floor) it.copy(occupancy = erased, reconstruction = spatial) else it })
     }
 
     fun clearWalls(map: BuildingMap, floorIndex: Int): BuildingMap =
-        map.copy(floors = map.floors.map { if (it.floorIndex == floorIndex) it.copy(occupancy = null) else it })
+        map.copy(floors = map.floors.map { floor ->
+            if (floor.floorIndex != floorIndex) floor else floor.copy(occupancy = null,
+                reconstruction = floor.reconstruction?.copy(walls = emptyList(), corners = emptyList(), openings = emptyList(),
+                    openingWitnesses = emptyList(), observedRegions = emptyList(), voxels = emptyList(),
+                    confirmedWalls = emptyList(), rejectedWalls = emptyList(), issues = setOf(ReconstructionIssue.PARTIAL_COVERAGE)),
+                edges = if (floor.reconstruction != null) emptyList() else floor.edges)
+        })
 
     /**
      * Places that can't be reached from the best-connected part of the building —

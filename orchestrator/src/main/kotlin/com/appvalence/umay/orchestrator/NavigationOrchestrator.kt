@@ -2,22 +2,17 @@ package com.appvalence.umay.orchestrator
 
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
-import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.GuidanceCue
-import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.NodeType
-import com.appvalence.umay.coremodel.ObstacleType
 import com.appvalence.umay.coremodel.isUnnamed
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.feedback.FeedbackController
-import com.appvalence.umay.perception.ObstacleDetector
 import com.appvalence.umay.positioning.engine.PositioningEngine
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import java.util.UUID
 import kotlin.math.abs
@@ -25,8 +20,8 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 
 /**
- * Combines the latest position and obstacle streams against the static
- * building map into a single [NavigationState] (FR-10/FR-11/FR-12):
+ * Combines the latest position against the static building map into a single
+ * [NavigationState] (FR-10/FR-11):
  *
  * - Plans (once) an A* route from [startNodeId] to [destinationNodeId] across
  *   the *whole* building via [AStarPathfinder.findPathAcrossFloors] — the
@@ -36,28 +31,22 @@ import kotlin.math.hypot
  *   repeated periodically while still on the same leg so a user who can't
  *   see the screen isn't left with silence, and a one-time arrival
  *   announcement. This is the actual point of the app — a blind user cannot
- *   read the on-screen route, so if this orchestrator only spoke about
- *   obstacles, it would never actually guide anyone anywhere.
+ *   read the on-screen route.
  * - When the route's current leg crosses floors, progress can't be tracked by
  *   proximity (two floors' coordinates come from independent PDR origins) —
  *   [NavigationState.pendingFloorChange] surfaces this so the UI can offer a
  *   manual "kat değiştirdim" confirmation (there's no barometer-based
  *   detection anywhere in this app); confirming it resets live tracking onto
  *   the new floor, which is what actually lets progress continue.
- * - Raises CRITICAL/WARNING alerts for nearby obstacles, re-alerting on an
- *   interval (not every single frame — that would flood [feedback] with
- *   TTS requests) or immediately on a priority escalation.
- * - When an obstacle is found to be sitting on the current route's next
- *   edge on the user's current floor (via [ObstacleEdgeMapper]), blocks that
- *   edge and replans from the nearest graph node to the destination, raising
- *   an INFO alert about the reroute.
+ * - When the walker leaves the route (see [RouteMonitor]) it plans again from
+ *   the nearest place on their floor and says so; walking the wrong way along
+ *   the route is said too.
  *
  * Alerts are forwarded to [feedback] as they're produced. Their wording comes
  * from [phrases], so guidance can be spoken in any language.
  */
 class NavigationOrchestrator(
     private val positioning: PositioningEngine,
-    private val perception: ObstacleDetector,
     private val map: BuildingMap,
     private val feedback: FeedbackController,
     private val startNodeId: String,
@@ -67,21 +56,14 @@ class NavigationOrchestrator(
     // falling back to stairs — said out loud — when the building offers nothing else.
     private val avoidStairs: Boolean = false,
 ) {
-    // Decoded once per floor that has a wall map (see WallSide, Passage).
+    // Decoded once per floor that has a wall map (see WallSide).
     private val wallSides: Map<Int, WallSide> = map.floors.mapNotNull { floor -> floor.occupancy?.let { floor.floorIndex to WallSide(it) } }.toMap()
-    private val passages: Map<Int, Passage> = map.floors.mapNotNull { floor -> floor.occupancy?.let { floor.floorIndex to Passage(it) } }.toMap()
-
-    // Obstacles already said to have room beside them: once is enough.
-    private val passHinted = mutableSetOf<String>()
 
     private val nodeFloor: Map<String, Int> =
         map.floors.flatMap { floor -> floor.nodes.map { it.id to floor.floorIndex } }.toMap()
 
     private var hasPlannedRoute = false
     private var currentRoute: List<MapNode> = emptyList()
-    private val blockedEdges = mutableSetOf<Pair<String, String>>()
-    private val lastAlertedAtMsByObstacleId = mutableMapOf<String, Long>()
-    private val lastAlertedPriorityByObstacleId = mutableMapOf<String, AlertPriority>()
 
     // Route guidance progress: the index into currentRoute of the node the
     // user is currently walking toward. Reset whenever the route is (re)planned.
@@ -89,6 +71,7 @@ class NavigationOrchestrator(
     private var lastAnnouncedLegIndex = -1
     private var lastLegAnnouncedAtMs = 0L
     private var arrivalAnnounced = false
+    private var positioningLimitedAnnounced = false
     private var noRouteAnnounced = false
     private var stairsFallbackPending = false
     private var stairsFallbackAnnounced = false
@@ -108,10 +91,10 @@ class NavigationOrchestrator(
     private var lastMonitoredTimestampMs = -1L
     private var lastDeviationAlertMs = Long.MIN_VALUE / 2
 
-    // A route planned from wherever the walker is (around an obstacle, after leaving the
-    // route) may start behind them or to one side, which its first leg's wording can't
-    // say. Simulated walks found that without it, "toward the lobby, 10 m" after a blocked
-    // corridor sent the walker straight on into the obstacle. So: first back to where the
+    // A route planned from wherever the walker is (after leaving the route) may start
+    // behind them or to one side, which its first leg's wording can't say. Simulated walks
+    // found that without it, "toward the lobby, 10 m" sent the walker straight on, the
+    // wrong way. So: first back to where the
     // new route starts ("Geri dön."), then, there, which way it goes — both from the
     // heading they're actually walking in, known by then.
     private enum class Reorient { NONE, FIRST_LEG, TO_START }
@@ -119,21 +102,11 @@ class NavigationOrchestrator(
     private var reorient = Reorient.NONE
 
     fun start(): Flow<NavigationState> =
-        combine(
-            positioning.positionUpdates(),
-            // "Still nothing in view" repeated for every analyzed camera frame — by far the
-            // common case — changes nothing here, but used to re-run all of this and
-            // redraw the whole navigation screen several times a second. Frames that do
-            // contain obstacles always differ (a fresh detectedAtMs) and still go through.
-            perception.obstacleUpdates().distinctUntilChanged { old, new -> old.isEmpty() && new.isEmpty() },
-        ) { position, obstacles ->
+        positioning.positionUpdates().map { position ->
             ensureRoute()
-            val floorMap = floorMapFor(position.floor)
-            val alerts = deriveAlerts(position, obstacles, floorMap)
             NavigationState(
                 position = position,
-                obstacles = obstacles,
-                alerts = alerts,
+                alerts = deriveAlerts(position),
                 route = currentRoute,
                 pendingFloorChange = pendingFloorChange,
                 nextRouteIndex = routeTargetIndex,
@@ -147,7 +120,7 @@ class NavigationOrchestrator(
 
     private fun ensureRoute() {
         // The route spans the whole building, not one floor, so there's nothing to
-        // re-key this on — plan once, replan only via an obstacle-triggered reroute.
+        // re-key this on — plan once, replan only after the walker leaves it.
         if (hasPlannedRoute) return
         hasPlannedRoute = true
         currentRoute = planRoute(startNodeId).orEmpty()
@@ -161,9 +134,9 @@ class NavigationOrchestrator(
      */
     private fun planRoute(fromNodeId: String): List<MapNode>? {
         if (avoidStairs) {
-            AStarPathfinder.findPathAcrossFloors(map, fromNodeId, destinationNodeId, blockedEdges, avoidStairs = true)?.let { return it }
+            AStarPathfinder.findPathAcrossFloors(map, fromNodeId, destinationNodeId, avoidStairs = true)?.let { return it }
         }
-        val route = AStarPathfinder.findPathAcrossFloors(map, fromNodeId, destinationNodeId, blockedEdges) ?: return null
+        val route = AStarPathfinder.findPathAcrossFloors(map, fromNodeId, destinationNodeId) ?: return null
         if (avoidStairs && !stairsFallbackAnnounced) stairsFallbackPending = true
         return route
     }
@@ -179,40 +152,10 @@ class NavigationOrchestrator(
         routeMonitor.reset()
     }
 
-    private fun deriveAlerts(position: Position, obstacles: List<DetectedObstacle>, floorMap: FloorMap?): List<NavigationAlert> {
-        // Proximity alerts (FR-12) never depend on a loaded route/map — a person right in
-        // front of the camera is dangerous whether or not we know the building's layout.
-        // Rerouting (FR-11) is the only part that genuinely needs the current floor's map.
-        val nodesById = floorMap?.nodes?.associateBy { it.id } ?: emptyMap()
+    private fun deriveAlerts(position: Position): List<NavigationAlert> {
         val alerts = mutableListOf<NavigationAlert>()
-
         stairsFallbackNotice(position)?.let { alerts += it }
         deriveRouteGuidance(position)?.let { alerts += it }
-
-        for (obstacle in obstacles) {
-            // Proximity alerting and rerouting are independent: an obstacle can be far
-            // enough away to skip a CRITICAL/WARNING alert but still be sitting on the
-            // route ahead, which should trigger a reroute before it becomes dangerous.
-            val priority = priorityFor(obstacle)
-            if (priority == null) {
-                lastAlertedPriorityByObstacleId.remove(obstacle.id)
-            } else if (shouldAlert(obstacle.id, priority, obstacle.detectedAtMs)) {
-                lastAlertedAtMsByObstacleId[obstacle.id] = obstacle.detectedAtMs
-                lastAlertedPriorityByObstacleId[obstacle.id] = priority
-                alerts += NavigationAlert(
-                    id = "obstacle-${obstacle.id}-${obstacle.detectedAtMs}",
-                    priority = priority,
-                    message = obstacleMessage(priority, obstacle),
-                    relatedObstacle = obstacle,
-                    createdAtMs = obstacle.detectedAtMs,
-                    cue = if (priority == AlertPriority.CRITICAL) GuidanceCue.OBSTACLE_CRITICAL else GuidanceCue.OBSTACLE_WARNING,
-                )
-            }
-
-            if (floorMap != null) {
-                rerouteIfBlocking(obstacle, position, floorMap, nodesById)?.let { alerts += it }
-            }
-        }
         return alerts
     }
 
@@ -227,7 +170,6 @@ class NavigationOrchestrator(
             id = "no-step-free-route-${position.timestampMs}",
             priority = AlertPriority.INFO,
             message = phrases.noStepFreeRoute(),
-            relatedObstacle = null,
             createdAtMs = position.timestampMs,
         )
     }
@@ -241,11 +183,18 @@ class NavigationOrchestrator(
                 id = "no-route-${UUID.randomUUID()}",
                 priority = AlertPriority.WARNING,
                 message = phrases.noRoute(),
-                relatedObstacle = null,
-                createdAtMs = position.timestampMs,
+                    createdAtMs = position.timestampMs,
                 cue = GuidanceCue.NO_ROUTE,
             )
         }
+        if (floorMapFor(position.floor)?.reconstruction != null && !canGuide(position)) {
+            pendingFloorChange = null
+            if (positioningLimitedAnnounced) return null
+            positioningLimitedAnnounced = true
+            return NavigationAlert(id = "route-guide-uncertain-${position.timestampMs}", priority = AlertPriority.WARNING,
+                message = phrases.positionUncertain(), createdAtMs = position.timestampMs, isGuidance = true)
+        }
+        if (positioningLimitedAnnounced) { positioningLimitedAnnounced = false; lastAnnouncedLegIndex = -1 }
         if (currentRoute.size < 2 || arrivalAnnounced) return null
 
         // Already on a floor the route only reaches further on: the floor change was
@@ -285,9 +234,8 @@ class NavigationOrchestrator(
         val target = currentRoute[routeTargetIndex]
         val targetFloor = nodeFloor[target.id]
         pendingFloorChange = if (targetFloor != null && targetFloor != position.floor) {
-            // Only count a step once per distinct position sample — this combine()
-            // block also re-runs on every obstacle-detector frame reusing the same
-            // stale position, which must not inflate the count.
+            // Only count a step once per distinct position sample, so a position
+            // re-emitted unchanged can't inflate the count.
             if (position.timestampMs != lastCountedPositionTimestampMs) {
                 lastCountedPositionTimestampMs = position.timestampMs
                 pendingFloorChangeStepCount++
@@ -308,8 +256,7 @@ class NavigationOrchestrator(
                     id = "arrived-${UUID.randomUUID()}",
                     priority = AlertPriority.INFO,
                     message = phrases.arrived(),
-                    relatedObstacle = null,
-                    createdAtMs = position.timestampMs,
+                            createdAtMs = position.timestampMs,
                     cue = GuidanceCue.ARRIVED,
                     isGuidance = true,
                 )
@@ -340,14 +287,13 @@ class NavigationOrchestrator(
         val turnAround = reorientTurn != null && abs(reorientTurn.angleDeg) >= TURN_AROUND_DEG
         return NavigationAlert(
             id = "route-guide-$routeTargetIndex-$now",
-            // Stairs are a real fall risk underfoot, so that leg gets the same urgency
-            // as a nearby obstacle instead of blending in with ordinary INFO guidance.
+            // Stairs are a real fall risk underfoot, so that leg gets more urgency
+            // than ordinary INFO guidance.
             priority = if (target.type == NodeType.STAIRS) AlertPriority.WARNING else AlertPriority.INFO,
             message = listOfNotNull(
                 reorientTurn?.let { if (turnAround) phrases.turnAround() else phrases.turnNow(it) },
                 legInstruction(routeTargetIndex, position),
             ).joinToString(" "),
-            relatedObstacle = null,
             createdAtMs = now,
             // Only a new leg gets a cue; the periodic repeat of the same leg stays silent
             // to the touch (see GuidanceCue).
@@ -381,8 +327,7 @@ class NavigationOrchestrator(
                 id = "wrong-way-${position.timestampMs}",
                 priority = AlertPriority.WARNING,
                 message = phrases.wrongWay(),
-                relatedObstacle = null,
-                createdAtMs = position.timestampMs,
+                    createdAtMs = position.timestampMs,
                 cue = GuidanceCue.WRONG_WAY,
                 isGuidance = true,
             )
@@ -400,7 +345,6 @@ class NavigationOrchestrator(
             id = "off-route-${position.timestampMs}",
             priority = AlertPriority.WARNING,
             message = phrases.offRoute(),
-            relatedObstacle = null,
             createdAtMs = position.timestampMs,
             cue = GuidanceCue.REROUTED,
         )
@@ -416,6 +360,7 @@ class NavigationOrchestrator(
     fun currentInstruction(position: Position): String? = when {
         !hasPlannedRoute -> null
         currentRoute.isEmpty() -> phrases.noRoute()
+        floorMapFor(position.floor)?.reconstruction != null && !canGuide(position) -> phrases.positionUncertain()
         arrivalAnnounced -> phrases.arrived()
         currentRoute.size < 2 -> null
         else -> legInstruction(routeTargetIndex, position)
@@ -516,9 +461,8 @@ class NavigationOrchestrator(
             ?.takeIf { position.floor == previousFloor && hypot(previous.x - position.x, previous.y - position.y) <= TURN_NOW_RADIUS_METERS }
             ?.let(phrases::turnNow)
 
-        // The camera only ever detects people, never static structure — a tagged hazard
-        // is the only source of "there's a door/stairs/ramp right here" awareness in the
-        // app, and it only exists where the survey operator explicitly tagged one.
+        // A tagged hazard is the only source of "there's a door/stairs/ramp right here"
+        // awareness in the app, and it only exists where the survey operator tagged one.
         val hazard = phrases.hazardAhead(target.type)
         val distance = hypot(target.x - position.x, target.y - position.y)
         // A leg ending at a staircase or lift says what's done there, so the walker knows on
@@ -570,100 +514,14 @@ class NavigationOrchestrator(
         return if (abs(turnAngle) > TURN_ANGLE_THRESHOLD_DEG) Turn(turnAngle) else null
     }
 
-    private fun shouldAlert(obstacleId: String, priority: AlertPriority, nowMs: Long): Boolean {
-        val previousPriority = lastAlertedPriorityByObstacleId[obstacleId]
-        if (previousPriority != priority) return true // escalation (or first sighting) always alerts immediately
-        val elapsed = nowMs - (lastAlertedAtMsByObstacleId[obstacleId] ?: 0L)
-        return elapsed >= MIN_REALERT_INTERVAL_MS
-    }
-
-    private fun rerouteIfBlocking(
-        obstacle: DetectedObstacle,
-        position: Position,
-        floorMap: FloorMap,
-        nodesById: Map<String, MapNode>,
-    ): NavigationAlert? {
-        val routeEdges = currentRouteEdges(floorMap)
-        val blocked = ObstacleEdgeMapper.blockingEdge(obstacle, position, routeEdges, nodesById) ?: return null
-        if ((blocked.fromId to blocked.toId) in blockedEdges) return null // already accounted for
-
-        // Room beside it: walk round it, the route stays (simulated walks: a chair in a wide
-        // aisle made the walk 55% longer). Said once, which side.
-        val gap = gapBeside(obstacle, position, blocked, nodesById, floorMap.floorIndex)
-        if (gap != null && gap.meters >= Passage.PASSABLE_METERS) {
-            if (!passHinted.add(obstacle.id)) return null
-            return NavigationAlert(
-                id = "pass-${obstacle.id}-${obstacle.detectedAtMs}",
-                priority = AlertPriority.INFO,
-                message = phrases.passObstacle(gap.side),
-                relatedObstacle = obstacle,
-                createdAtMs = obstacle.detectedAtMs,
-            )
-        }
-        // People move out of the way: a route around someone standing in the corridor sends
-        // the walker the long way for nothing (simulated walks: 84% longer). They're warned.
-        if (obstacle.type == ObstacleType.PERSON) return null
-        blockedEdges.add(blocked.fromId to blocked.toId)
-
-        val nearestNode = nodesById.values.minByOrNull { hypot(it.x - position.x, it.y - position.y) } ?: return null
-        // The destination may be on a different floor than this obstacle, so replanning
-        // has to consider the whole building again, not just the floor it was found on.
-        val rerouted = planRoute(nearestNode.id) ?: return null
-        currentRoute = rerouted
-        resetRouteProgress()
-        reorient = Reorient.FIRST_LEG
-
-        return NavigationAlert(
-            id = "reroute-${blocked.fromId}-${blocked.toId}-${UUID.randomUUID()}",
-            priority = AlertPriority.INFO,
-            message = phrases.rerouted(),
-            relatedObstacle = obstacle,
-            createdAtMs = obstacle.detectedAtMs,
-            cue = GuidanceCue.REROUTED,
-        )
-    }
-
-    /**
-     * Room beside [obstacle] standing on route edge [edge], on the side the walker would
-     * pass it; null when unknown (no wall map, or its width wasn't judged).
-     */
-    private fun gapBeside(obstacle: DetectedObstacle, position: Position, edge: MapEdge, nodesById: Map<String, MapNode>, floorIndex: Int): Passage.Gap? {
-        val width = obstacle.widthMeters ?: return null
-        val passage = passages[floorIndex] ?: return null
-        val from = nodesById[edge.fromId] ?: return null
-        val to = nodesById[edge.toId] ?: return null
-        val (x, y) = ObstacleEdgeMapper.pointOf(obstacle, position)
-        // Along the edge, the way the walker is going (toward the obstacle).
-        var dx = to.x - from.x
-        var dy = to.y - from.y
-        if (dx * (x - position.x) + dy * (y - position.y) < 0) {
-            dx = -dx
-            dy = -dy
-        }
-        return passage.widestGap(x, y, dx, dy, width)
-    }
-
-    private fun currentRouteEdges(floorMap: FloorMap): List<MapEdge> {
-        val routeNodeIds = currentRoute.map { it.id }.toSet()
-        if (routeNodeIds.isEmpty()) return emptyList()
-        return floorMap.edges.filter { it.fromId in routeNodeIds && it.toId in routeNodeIds }
-    }
-
-    private fun priorityFor(obstacle: DetectedObstacle): AlertPriority? = when {
-        obstacle.distanceMeters <= CRITICAL_DISTANCE_METERS -> AlertPriority.CRITICAL
-        obstacle.distanceMeters <= WARNING_DISTANCE_METERS -> AlertPriority.WARNING
-        else -> null
-    }
-
-    private fun obstacleMessage(priority: AlertPriority, obstacle: DetectedObstacle): String =
-        phrases.obstacle(priority, obstacle.kind, distanceMeters = obstacle.distanceMeters)
-
     companion object {
-        private val HAZARD_TYPES = setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)
+        // Admission policy, not a measured accuracy claim. Reconstructed-map guidance
+        // requires uncertainty no larger than the existing arrival acceptance radius.
+        fun canGuide(position: Position): Boolean = position.x.isFinite() && position.y.isFinite() &&
+            position.headingDeg.isFinite() && position.accuracyMeters.isFinite() &&
+            position.accuracyMeters in 0.0..ARRIVAL_DISTANCE_METERS
 
-        const val CRITICAL_DISTANCE_METERS = 1.5
-        const val WARNING_DISTANCE_METERS = 3.5
-        const val MIN_REALERT_INTERVAL_MS = 2_500L
+        private val HAZARD_TYPES = setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)
 
         const val WAYPOINT_ARRIVAL_METERS = 2.0
 

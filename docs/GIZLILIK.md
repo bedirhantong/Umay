@@ -44,7 +44,7 @@ verilmezse yukarıdaki gibi internet izni hiç yoktur.
 
 | İzin | Ne için | Veriye ne olur |
 |---|---|---|
-| Kamera | Yönlendirmede önündeki insanları algılamak, tabela okumak; harita çıkarırken kamerayla ölçmek | Görüntü bellekte işlenip atılır. Kaydedilmez, ekranda gösterilmez, gönderilmez. |
+| Kamera | Harita çıkarırken kamerayla ölçmek; yönlendirme öncesi basılı QR yer işaretinden başlangıç noktasını bulmak | Görüntü bellekte işlenip atılır. Kaydedilmez, ekranda gösterilmez, gönderilmez. |
 | Konum (yakın ve yaklaşık) | Android, Bluetooth işaretçilerini taramak için bunu şart koşar | GPS kullanılmaz. Bina içi konum adım sensörleri ve Bluetooth sinyallerinden cihazda hesaplanır. |
 | Bluetooth tarama | Binadaki işaretçilerin (beacon) sinyal gücünü ölçmek | Bellekte kullanılır. Harita çıkarırken haritaya, saha kaydı açıksa kayda yazılır. |
 | Mikrofon | Yalnızca "Bir şey sor" düğmesine basılınca soruyu dinlemek | Ses cihazda metne çevrilir, saklanmaz (aşağıya bakın). |
@@ -81,8 +81,8 @@ Android'in paylaşma ekranıyla kendisi gönderirse çıkar.
 
 - **Konum hesabı.** Adım sayma, yön, Bluetooth parmak izi eşleştirme ve
   parçacık filtresi tamamen cihazdadır (`positioning` modülü).
-- **İnsan algılama.** TensorFlow Lite ve uygulamanın içinde gelen
-  EfficientDet-Lite0 modeliyle cihazda çalışır (`perception` modülü).
+- **Yer işareti okuma.** Basılı QR işaretler cihazda, ZXing ile okunur
+  (`perception` modülü).
 - **Rota ve yönergeler.** Cihazda hesaplanır (`orchestrator` modülü).
 - **"Bir şey sor".** Android 12 ve sonrasında yalnızca telefonun cihaz içi
   konuşma tanıyıcısı kullanılır. Telefonda böyle bir tanıyıcı ya da Türkçe
@@ -104,15 +104,6 @@ Android'in paylaşma ekranıyla kendisi gönderirse çıkar.
 
 Umay'ın kendisi hiçbir sunucuya veri göndermez. Aşağıdaki Google bileşenleri
 uygulamanın içinde ya da yanında çalışır:
-
-**ML Kit metin tanıma (her iki dağıtımda).** Tabela okumak için kullanılır.
-Google'a göre görüntü ve sonuç tamamen cihazda işlenir, Google'a
-gönderilmez; ancak ML Kit, API'lerin performansı ve kullanım sıklığıyla
-ilgili ölçümleri Google'a gönderir ve zaman zaman model güncellemesi için
-Google sunucularına bağlanır (developers.google.com/ml-kit/terms). Metin
-tanıma modelini Google Play Hizmetleri indirir. Kurum sürümünde uygulamanın
-internet izni olmadığından bu ölçümler uygulamadan gönderilemez; model
-indirmesi Google Play Hizmetleri'nin kendi işidir ve kullanıcı verisi içermez.
 
 **ARCore (yalnızca kamerayla harita çıkarmada).** Haritayı çıkaran kişi
 "Kamerayla" modunu seçerse, kameranın hareket takibi ve derinlik ölçümü
@@ -182,13 +173,10 @@ Geliştiricinin formu doldururken kontrol etmesi için önerilen beyan:
   - *Cihaz veya diğer kimlikler:* yayın için Firebase anonim kimliği.
     İsteğe bağlı (yalnızca yayınlayanlarda). Amaç: uygulama işlevi
     (yayını yalnızca sahibinin kaldırabilmesi).
-  - *Uygulama bilgileri ve performans (tanılama):* ML Kit'in Google'a
-    gönderdiği kullanım ve performans ölçümleri. Zorunlu. Amaç: analiz
-    (Google'ın kendi SDK'sı için).
 - **Toplanmayan:** konum, ses, fotoğraf ve video, kişisel bilgiler,
   kimlik bilgileri, finansal bilgiler. Kamera, mikrofon ve konum izinleri
   yalnızca cihazda işlenen veriler içindir.
-- **Aktarım şifreli:** evet (Firebase ve ML Kit TLS kullanır).
+- **Aktarım şifreli:** evet (Firebase TLS kullanır).
 - **Silme talebi:** yayın uygulamadan kaldırılabilir; ayrıca web sitesindeki
   veri silme sayfası.
 

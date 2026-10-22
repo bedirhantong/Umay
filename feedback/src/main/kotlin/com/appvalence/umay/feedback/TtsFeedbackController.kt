@@ -266,7 +266,6 @@ class TtsFeedbackController(
                 id = "narration-${System.nanoTime()}",
                 priority = AlertPriority.CRITICAL, // CRITICAL is what flushes the queue
                 message = text,
-                relatedObstacle = null,
                 createdAtMs = System.currentTimeMillis(),
             ),
         )

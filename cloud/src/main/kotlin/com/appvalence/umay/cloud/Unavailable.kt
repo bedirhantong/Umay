@@ -19,7 +19,7 @@ object UnavailableRemoteBuildingMapRepository : RemoteBuildingMapRepository {
     override suspend fun unpublishBuildingMap(id: String): Result<Unit> = Result.remoteFailure(RemoteMapFailure.NoConnection)
 }
 
-/** Never online — and never asks Android, which would need the network-state permission. */
+/** Never online — and never asks Android which would need the network-state permission. */
 object NeverOnlineConnectivityMonitor : ConnectivityMonitor {
     override val isOnline: Flow<Boolean> = flowOf(false)
 }

@@ -37,10 +37,10 @@ class HapticPatternsTest {
     }
 
     @Test
-    fun `a critical obstacle is the strongest pattern there is`() {
-        val critical = HapticPatterns.forCue(GuidanceCue.OBSTACLE_CRITICAL)!!.amplitudes.max()
+    fun `a hazard ahead is stronger than an ordinary continue`() {
+        val hazard = HapticPatterns.forCue(GuidanceCue.HAZARD_AHEAD)!!.amplitudes.max()
 
-        assertEquals(255, critical)
-        assertTrue(HapticPatterns.forCue(GuidanceCue.CONTINUE)!!.amplitudes.max() < critical)
+        assertEquals(255, hazard)
+        assertTrue(HapticPatterns.forCue(GuidanceCue.CONTINUE)!!.amplitudes.max() < hazard)
     }
 }

@@ -1,6 +1,5 @@
 package com.appvalence.umay.simulation
 
-import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.FloorChangePhase
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
@@ -12,12 +11,10 @@ import com.appvalence.umay.orchestrator.FloorChangeConfirmation
 import com.appvalence.umay.orchestrator.GuidancePhrases
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
-import com.appvalence.umay.perception.ObstacleDetector
 import com.appvalence.umay.positioning.engine.PositioningEngine
 import com.appvalence.umay.positioning.particle.GraphParticleFilter
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -49,12 +46,6 @@ internal data class GuidedWalkResult(
     /** Camera frames rendered and markers read from them, with [Aids.camera]. */
     val framesRendered: Int = 0,
     val markersRead: Int = 0,
-    /** For each obstacle the app warned about: how far the walker really was from it at the first warning. */
-    val firstWarningMeters: Map<String, Double> = emptyMap(),
-    /** Obstacles the walker reached (within [CONTACT_METERS]) without having been warned. */
-    val unwarnedContacts: Int = 0,
-    /** New routes around an obstacle. */
-    val reroutes: Int = 0,
     /** Each floor change the walker made, by staircase or lift (the type of the place left). */
     val crossings: List<NodeType> = emptyList(),
     /** How each floor change was confirmed to positioning. */
@@ -73,9 +64,6 @@ internal data class GuidedWalkResult(
     companion object {
         /** Close enough to find the door by hand or cane. */
         const val REACHED_METERS = 3.0
-
-        /** Close enough to walk into. */
-        const val CONTACT_METERS = 0.5
     }
 }
 
@@ -89,8 +77,7 @@ internal data class GuidedWalkResult(
  * a blind user would meet it, in a building that exists only here.
  *
  * [appStartNodeId] is where the walker told the app they are; give a wrong one
- * to see a mistaken start play out. [obstacles] stand in the way, seen by a
- * stand-in for the camera's detector ([VirtualObstacleSensor]). [survey] is
+ * to see a mistaken start play out. [survey] is
  * the map the app guides by; by default the building's plan itself, or one
  * a [VirtualSurveyor] made, drifts and all.
  *
@@ -117,7 +104,6 @@ internal fun simulateGuidedWalk(
     avoidStairs: Boolean = false,
     record: Boolean = false,
     title: String = "",
-    obstacles: List<VirtualObstacle> = emptyList(),
     survey: SurveyedMap? = null,
     barometer: Boolean = true,
     speechCharsPerSecond: Double = SpokenQueue.TTS_CHARS_PER_SECOND,
@@ -142,17 +128,11 @@ internal fun simulateGuidedWalk(
         ?: error("no way from $startNodeId to $destinationNodeId in ${building.name}")
     val stepBudget = (shortest / walker.trueStrideMeters * 3).toInt() + 60
 
-    // The app's navigation, fed one position per footstep, exactly as NavigationSession feeds it,
-    // and the camera's obstacles whenever it sees any (or stops seeing them).
+    // The app's navigation, fed one position per footstep, exactly as NavigationSession feeds it.
     val positions = Channel<Position>(Channel.UNLIMITED)
-    val detections = Channel<List<DetectedObstacle>>(Channel.UNLIMITED)
-    val sensor = VirtualObstacleSensor(building, obstacles, Random(seed + 3_000))
     val orchestrator = NavigationOrchestrator(
         positioning = object : PositioningEngine {
             override fun positionUpdates(): Flow<Position> = positions.receiveAsFlow()
-        },
-        perception = object : ObstacleDetector {
-            override fun obstacleUpdates(): Flow<List<DetectedObstacle>> = if (obstacles.isEmpty()) flowOf(emptyList()) else detections.receiveAsFlow()
         },
         map = map,
         feedback = object : FeedbackController {
@@ -165,7 +145,6 @@ internal fun simulateGuidedWalk(
     )
     val states = Channel<NavigationState>(Channel.UNLIMITED)
     val collector = launch { orchestrator.start().collect { states.send(it) } }
-    if (obstacles.isNotEmpty()) detections.send(emptyList())
 
     val errors = mutableListOf<Double>()
     val frames = mutableListOf<WalkFrame>()
@@ -177,11 +156,6 @@ internal fun simulateGuidedWalk(
     var arrivalError: Double? = null
     var route: List<String>? = null
     var recordedRoute: List<String>? = null
-    val firstWarning = LinkedHashMap<String, Double>()
-    val contacted = HashSet<String>()
-    var unwarnedContacts = 0
-    var reroutes = 0
-    var obstaclesInView = false
     val floorChanges = FloorChangeConfirmation(hasBarometer = barometer)
     val crossings = ArrayList<NodeType>()
     val confirmations = ArrayList<FloorChangePhase>()
@@ -246,7 +220,7 @@ internal fun simulateGuidedWalk(
             continue
         }
         listenedMs = 0L
-        val move = follower.step(stride, route, obstacles.filter { it.blocking && it.floor == follower.floor })
+        val move = follower.step(stride, route)
         if (move.wrongTurn) wrongTurns++
         val notes = (heardNotes + move.notes).toMutableList()
         val crossing = move.crossing
@@ -285,33 +259,6 @@ internal fun simulateGuidedWalk(
             if (!barometer && crossing.from.type == NodeType.ELEVATOR) apply(floorChanges.manual(), notes)
         }
         val state = lastState ?: continue
-        val here = truth()
-        if (obstacles.isNotEmpty() && crossing == null) {
-            val seen = sensor.detect(here.x, here.y, follower.headingDeg, device.timeMs, follower.floor)
-            // "Still nothing in view" after nothing is no news to the app (see NavigationOrchestrator.start).
-            if (seen.isNotEmpty() || obstaclesInView) {
-                detections.send(seen)
-                val seenState = withTimeoutOrNull(STATE_TIMEOUT_MS) { states.receive() } ?: error("the app gave no answer to the camera (step $steps)")
-                lastState = seenState
-                alerts += seenState.alerts
-            }
-            obstaclesInView = seen.isNotEmpty()
-            for (alert in alerts) {
-                val obstacle = alert.relatedObstacle ?: continue
-                val real = obstacles.first { it.id == obstacle.id }
-                firstWarning.getOrPut(obstacle.id) { hypot(real.x - here.x, real.y - here.y) }
-                if (alert.id.startsWith("reroute-")) reroutes++
-            }
-            for (obstacle in obstacles) {
-                if (obstacle.floor != follower.floor) continue
-                if (obstacle.id in contacted || hypot(obstacle.x - here.x, obstacle.y - here.y) > GuidedWalkResult.CONTACT_METERS) continue
-                contacted += obstacle.id
-                if (obstacle.id !in firstWarning) {
-                    unwarnedContacts++
-                    notes += "Uyarı gelmeden ${obstacle.kind.name.lowercase()} engeline çarptı."
-                }
-            }
-        }
         val speech = alerts.map { it.message }
         for (alert in alerts) {
             when {
@@ -366,9 +313,6 @@ internal fun simulateGuidedWalk(
         recording = null,
         framesRendered = device.framesRendered,
         markersRead = device.markersRead,
-        firstWarningMeters = firstWarning,
-        unwarnedContacts = unwarnedContacts,
-        reroutes = reroutes,
         crossings = crossings,
         floorConfirmations = confirmations,
         wrongFloorSteps = wrongFloorSteps,
@@ -531,18 +475,11 @@ private class InstructionFollower(
 
     /**
      * One stride along the corridors; [route] is the app's current route, to tell a wrong
-     * turn. A [blockers] obstacle filling the corridor just ahead is felt with the cane,
-     * and the walker turns back.
+     * turn.
      */
-    fun step(stride: Double, route: List<String>?, blockers: List<VirtualObstacle> = emptyList()): Move {
+    fun step(stride: Double, route: List<String>?): Move {
         val notes = mutableListOf<String>()
         var wrongTurn = false
-        if (!turnAround && blockers.any { blocksAhead(it, stride) }) {
-            turnAround = true
-            plannedTurnDeg = null
-            turnNowDeg = null
-            notes += "Önü kapalı; bastonla engeli buldu, geri döndü."
-        }
         if (turnAround) {
             val back = from
             from = to
@@ -597,14 +534,6 @@ private class InstructionFollower(
         if (along + stride < length) return false
         if (floorChangeTo != null && crossingsFrom[to.id] != null) return false
         return neighbors[to.id].orEmpty().none { it.id != from.id }
-    }
-
-    private fun blocksAhead(obstacle: VirtualObstacle, stride: Double): Boolean {
-        val ex = (to.x - from.x) / length
-        val ey = (to.y - from.y) / length
-        val ahead = (obstacle.x - from.x) * ex + (obstacle.y - from.y) * ey - along
-        val aside = abs((obstacle.x - from.x) * -ey + (obstacle.y - from.y) * ex)
-        return aside < BLOCKING_HALF_WIDTH_METERS && ahead > 0 && ahead < stride + CANE_REACH_METERS
     }
 
     private fun chooseAt(node: MapNode, cameFrom: MapNode): Pair<MapNode, String?> {
@@ -717,8 +646,6 @@ private class InstructionFollower(
         private val DISTANCE = Regex("""[Yy]aklaşık (\d+) metre""")
         private val FLOOR_CHANGE = Regex("""(?:yukarı çık|aşağı in)[:,] Kat (-?\d+)""")
         private const val HALF = 0.5
-        private const val BLOCKING_HALF_WIDTH_METERS = 0.6
-        private const val CANE_REACH_METERS = 0.8
         private const val TURN_MATCH_DEG = 50.0
         private const val STRAIGHT_DEG = 35.0
         private const val VEER_TAPER_METERS = 1.5

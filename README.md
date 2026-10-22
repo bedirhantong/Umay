@@ -4,16 +4,16 @@
 
 Umay, görme engelli kişiler için geliştirilmiş, bina içinde yol gösteren bir
 Android uygulamasıdır. Kişiyi gitmek istediği yere sesli yönergeler ve her
-biri farklı titreşim desenleriyle götürür. Kamerayla hemen önündeki insanlara
-karşı uyarır. Merdiven ve asansör dahil katlar arasında da çalışır. Ekran
+biri farklı titreşim desenleriyle götürür. Merdiven ve asansör dahil katlar
+arasında da çalışır. Ekran
 kapalıyken ve telefon cepteyken de yönlendirmeye devam eder.
 
 Uygulamanın arayüzü ve sesli yönergeleri Türkçedir. Kullanıcının gördüğü ve
 duyduğu tüm metinler kaynak dosyalarındadır, başka dillere çevrilmeye hazırdır.
 
 > **Güvenlik:** Umay bir yardımcıdır, bir hareket aracı değildir. Beyaz baston
-> ya da rehber köpeğin **yerini tutmaz**. Kamera yalnızca insanları algılar.
-> Merdiven, kapı ve rampalar yalnızca binanın haritasını çıkaran kişi onları
+> ya da rehber köpeğin **yerini tutmaz**. Engelleri ve insanları **algılamaz**,
+> seni onlara karşı uyarmaz. Merdiven, kapı ve rampalar yalnızca binanın haritasını çıkaran kişi onları
 > işaretlediyse bilinir. Konum tahmini birkaç metre sapabilir.
 
 ## Nasıl çalışır
@@ -64,8 +64,8 @@ adımlardan anlaşılır, asansörde bir düğmeyle onaylanır.
 |---|---|
 | `core-model` | Saf Kotlin veri modeli: bina haritaları, konumlar, uyarılar, saha kaydı olayları, JSON |
 | `positioning` | Adım algılama, adım sayarak konum takibi, Bluetooth tarama ve parmak izi eşleştirme, koridor grafiği üzerinde parçacık filtresi, saha kaydını yeniden oynatma, barometre |
-| `perception` | CameraX ve TensorFlow Lite (EfficientDet-Lite0) ile insan algılama, mesafe ve yön tahmini |
-| `orchestrator` | Katlar arası A* rota bulma, adım adım yönergeler, engel uyarıları, rotayı yeniden hesaplama |
+| `perception` | Basılı QR yer işaretlerini okuma (CameraX ve ZXing): başlangıç noktasını işaretten bulma |
+| `orchestrator` | Katlar arası A* rota bulma, adım adım yönergeler, rotadan çıkınca rotayı yeniden hesaplama |
 | `feedback` | Metin okuma (ses seçimi, ses odağı yönetimi) ve titreşim desenleri |
 | `cloud` | Uzaktaki harita kaynağının arayüzü, bağlantı durumu takibi ve kurum sunucusu istemcisi |
 | `cloud-firebase` | Play Store sürümünün paylaşımlı harita havuzu (Firestore, anonim kimlik doğrulama) — yalnızca Firebase'in ücretsiz Spark katmanı kullanılır, Cloud Storage kullanılmaz |
@@ -179,6 +179,4 @@ lisansla ve kaynak koduyla birlikte yayınlanmalıdır.
 uyumludur:
 
 - **Apache Lisansı 2.0:** AndroidX ve Jetpack Compose, CameraX,
-  TensorFlow Lite ve Task Library, EfficientDet-Lite0 modeli
-  (`perception/src/main/assets/`), kotlinx.coroutines ve
-  kotlinx.serialization.
+  kotlinx.coroutines ve kotlinx.serialization.

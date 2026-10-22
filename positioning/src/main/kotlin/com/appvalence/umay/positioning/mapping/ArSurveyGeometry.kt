@@ -11,7 +11,7 @@ import kotlin.math.sin
  * [headingDeg] is the camera's facing in the survey's convention (0 = the
  * session's −Z, clockwise), already flattened onto the floor.
  */
-data class ArPose(val x: Double, val y: Double, val z: Double, val headingDeg: Double, val timestampMs: Long)
+data class ArPose(val x: Double, val y: Double, val z: Double, val headingDeg: Double, val timestampMs: Long, val timestampNs: Long? = null)
 
 /** A point on the survey's floor plan: x right, y "north", heading clockwise from +y. */
 data class SurveyPose(val x: Double, val y: Double, val headingDeg: Double, val timestampMs: Long)
@@ -27,6 +27,11 @@ data class ArToSurvey(val rotationDeg: Double, val tx: Double, val ty: Double) {
 
     fun x(arX: Double, arZ: Double): Double = arX * cosR + (-arZ) * sinR + tx
     fun y(arX: Double, arZ: Double): Double = -arX * sinR + (-arZ) * cosR + ty
+    fun toAr(planX: Double, planY: Double): Pair<Double, Double> {
+        val x = planX - tx; val y = planY - ty
+        return (x*cosR-y*sinR) to (-x*sinR-y*cosR)
+    }
+
     fun heading(arHeadingDeg: Double): Double = normalizeDegrees(arHeadingDeg + rotationDeg)
 
     /** The same rotation, shifted so that AR ([arX], [arZ]) lands on plan ([x], [y]). */
@@ -189,9 +194,13 @@ class DepthFrame(
     val cx: Float,
     val cy: Float,
     val cameraPose: FloatArray,
+    /** Source depth timestamp; repeated reprojections are not independent measurements. */
+    val timestampNs: Long = 0,
 )
 
 /**
+ * Legacy raster projection for simulator regression fixtures. Production reconstruction uses
+ * [MetricDepth] and [SpatialReconstructor] and does not infer clearance from rays.
  * Projects depth pixels into the AR world and votes them into an
  * [OccupancyGrid] on the survey plan: anything between [OBSTACLE_MIN_HEIGHT]
  * and [OBSTACLE_MAX_HEIGHT] above the floor is a wall (or a pillar, a counter —

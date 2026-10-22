@@ -25,8 +25,9 @@ import com.appvalence.umay.positioning.ble.BeaconScanner
 import com.appvalence.umay.positioning.ble.BleScanState
 import com.appvalence.umay.positioning.fingerprint.RadioSampler
 import com.appvalence.umay.positioning.mapping.ArPoseAligner
-import com.appvalence.umay.positioning.mapping.DepthProjector
-import com.appvalence.umay.positioning.mapping.FloorHeightEstimator
+import com.appvalence.umay.positioning.mapping.MappingFrameGuard
+import com.appvalence.umay.positioning.mapping.SpatialReconstructor
+import com.appvalence.umay.coremodel.SpatialMap
 import com.appvalence.umay.positioning.mapping.OccupancyGrid
 import com.appvalence.umay.positioning.compass.HeadingReading
 import com.appvalence.umay.positioning.pdr.PdrIntegrator
@@ -46,6 +47,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -81,6 +84,9 @@ data class SurveyState(
     val wallMaps: Map<Int, OccupancyRaster> = emptyMap(),
     /** This walk was brought back from disk after the app was ended mid-survey. */
     val restoredFromDraft: Boolean = false,
+    val spatialMaps: Map<Int, SpatialMap> = emptyMap(),
+    val alignmentRequired: Boolean = false,
+    val persistenceFailed: Boolean = false,
     /** Beacon signatures taken every few metres along the path, per floor (see [RadioSampler]). */
     val radioSamples: Map<Int, List<RadioSample>> = emptyMap(),
     /** How the compass lines up with each floor's drawing, so far (see [CompassSums]). */
@@ -138,7 +144,7 @@ fun trackingProblemText(problem: ArTrackingProblem): Int = when (problem) {
  * [DRAFT_INTERVAL_MS] ([SurveyDrafts]) to come back if the app is ended anyway.
  *
  * In [SurveyMode.CAMERA] the path comes from [ArSurveyCamera] instead of
- * footsteps — centimetre-accurate, and with depth, a wall map is drawn as the
+ * footsteps — locally metric, and with depth, observed geometry is drawn as the
  * surveyor walks, the way a robot vacuum maps a home. The camera only runs
  * while the survey screen is on screen ([setScreenVisible]); meanwhile, and
  * whenever tracking drops, footsteps bridge the gap (see [ArPoseAligner]).
@@ -172,6 +178,7 @@ class SurveyRecorder @Inject constructor(
 
     // How many of [rawReadings] are already in the draft on disk.
     private var flushedReadings = 0
+    private val draftSaveLock = Mutex()
 
     // Fed from the footstep collector (main) or the camera one (mapping), never both at once.
     private val radioSampler = RadioSampler()
@@ -183,7 +190,8 @@ class SurveyRecorder @Inject constructor(
     private var aligner = ArPoseAligner()
     private val grids = mutableMapOf<Int, OccupancyGrid>()
     private val dirtyFloors = mutableSetOf<Int>()
-    private val floorHeight = FloorHeightEstimator()
+    private var frameGuard = MappingFrameGuard()
+    private val reconstructors = mutableMapOf<Int, SpatialReconstructor>()
 
     init {
         scope.launch { scanner.scanState().collect { scanState -> _state.update { it.copy(scanState = scanState) } } }
@@ -209,6 +217,7 @@ class SurveyRecorder @Inject constructor(
         if (recordingJob != null) return
         val current = _state.value
         val walkMode = if (current.trajectory.isEmpty() && current.taggedWaypoints.isEmpty()) mode else current.mode
+        if (walkMode == SurveyMode.CAMERA && current.alignmentRequired) return
         val stepLength = settings.stepLengthMeters
         _state.update { it.copy(isRecording = true, stepLengthMeters = stepLength, mode = walkMode, restoredFromDraft = false) }
         scanner.start(null)
@@ -233,9 +242,7 @@ class SurveyRecorder @Inject constructor(
                             val floor = _state.value.currentFloor
                             val position = Position(reckoned.x, reckoned.y, floor, reckoned.headingDeg, STEP_ACCURACY_METERS, PositionSource.PEDESTRIAN_DEAD_RECKONING, step.timestampMs)
                             _state.update { current ->
-                                val last = current.trajectory.lastOrNull()
-                                val moved = last == null || last.floor != floor || hypot(last.x - position.x, last.y - position.y) >= TRAJECTORY_SPACING_METERS
-                                current.copy(livePosition = position, trajectory = if (moved) current.trajectory + position else current.trajectory)
+                                current.copy(livePosition = if (current.alignmentRequired) null else position)
                             }
                         }
                     }
@@ -329,9 +336,20 @@ class SurveyRecorder @Inject constructor(
     private suspend fun recordCamera(): Unit = withContext(mapping) {
         var lastSnapshotMs = 0L
         camera.frames.collect { sample ->
+            if (sample.acquiredAtElapsedMs?.let { android.os.SystemClock.elapsedRealtime() - it > 500 } == true) return@collect
+            if (_state.value.alignmentRequired) return@collect
             val floor = _state.value.currentFloor
-            val pose = aligner.onTracked(sample.pose, latestHeading?.gameHeadingDeg)
-            val position = Position(pose.x, pose.y, floor, pose.headingDeg, CAMERA_ACCURACY_METERS, PositionSource.MAP_MATCHED, pose.timestampMs)
+            val toSurvey = frameGuard.accept(sample.coordinateFrameId, sample.pose)
+            if (toSurvey == null) {
+                if (frameGuard.alignmentRequired) _state.update { it.copy(alignmentRequired = true, livePosition = null) }
+                return@collect
+            }
+            // Trajectory continuity heuristics are not permitted to change the reconstruction frame.
+            val pose = com.appvalence.umay.positioning.mapping.SurveyPose(
+                toSurvey.x(sample.pose.x, sample.pose.z), toSurvey.y(sample.pose.x, sample.pose.z),
+                toSurvey.heading(sample.pose.headingDeg), sample.pose.timestampMs)
+            aligner.onTracked(sample.pose, latestHeading?.gameHeadingDeg)
+            val position = Position(pose.x, pose.y, floor, pose.headingDeg, CAMERA_ACCURACY_METERS, PositionSource.VISUAL_INERTIAL, pose.timestampMs)
             _state.update { current ->
                 val last = current.trajectory.lastOrNull()
                 val moved = last == null || last.floor != floor || hypot(last.x - position.x, last.y - position.y) >= TRAJECTORY_SPACING_METERS
@@ -341,9 +359,11 @@ class SurveyRecorder @Inject constructor(
             sampleCompass(position)
 
             val depth = sample.depth ?: return@collect
-            val toSurvey = aligner.transform ?: return@collect
-            val floorY = floorHeight.update(sample.pose.y, sample.upwardPlaneHeights)
-            if (DepthProjector.integrate(depth, floorY, toSurvey, grids.getOrPut(floor) { OccupancyGrid() }) > 0) dirtyFloors += floor
+            val engine = reconstructors.getOrPut(floor) {
+                SpatialReconstructor(sample.coordinateFrameId, grids.getOrPut(floor) { OccupancyGrid() })
+            }
+            engine.integrate(depth, toSurvey, sample.pose.y, sample.upwardPlaneHeights)
+            dirtyFloors += floor
             if (pose.timestampMs - lastSnapshotMs >= WALL_MAP_REFRESH_MS) {
                 lastSnapshotMs = pose.timestampMs
                 publishWallMaps()
@@ -381,7 +401,8 @@ class SurveyRecorder @Inject constructor(
         if (dirtyFloors.isEmpty()) return
         val updated = dirtyFloors.mapNotNull { floor -> grids[floor]?.snapshot()?.let { floor to it } }.toMap()
         dirtyFloors.clear()
-        _state.update { it.copy(wallMaps = it.wallMaps + updated) }
+        val geometry = reconstructors.mapValues { (_, engine) -> engine.snapshot() }
+        _state.update { it.copy(wallMaps = it.wallMaps + updated, spatialMaps = it.spatialMaps + geometry) }
     }
 
     /**
@@ -420,14 +441,17 @@ class SurveyRecorder @Inject constructor(
     }
 
     /** Writes what's new since the last call; main thread, like everything that touches [rawReadings]. */
-    private suspend fun saveDraft() {
+    private suspend fun saveDraft() = draftSaveLock.withLock {
+        withContext(mapping) { publishWallMaps() }
         val current = _state.value
-        if (current.trajectory.isEmpty() && current.taggedWaypoints.isEmpty()) return
+        if (current.trajectory.isEmpty() && current.taggedWaypoints.isEmpty()) return@withLock
         val newReadings = if (flushedReadings < rawReadings.size) ArrayList(rawReadings.subList(flushedReadings, rawReadings.size)) else emptyList()
-        flushedReadings = rawReadings.size
-        drafts.appendReadings(newReadings)
-        drafts.save(
-            SurveyDraft(
+        try {
+            val readingCount = rawReadings.size
+            drafts.appendReadings(newReadings)
+            flushedReadings = readingCount
+            drafts.save(
+                SurveyDraft(
                 mode = current.mode.name,
                 currentFloor = current.currentFloor,
                 stepLengthMeters = current.stepLengthMeters,
@@ -437,15 +461,22 @@ class SurveyRecorder @Inject constructor(
                 radioSamples = current.radioSamples,
                 compass = current.compass,
                 savedAtMs = System.currentTimeMillis(),
-            ),
-        )
+                spatialMaps = current.spatialMaps,
+                coordinateFrameId = current.spatialMaps.values.firstOrNull()?.coordinateFrameId,
+                ),
+            )
+            _state.update { it.copy(persistenceFailed = false) }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            _state.update { it.copy(persistenceFailed = true) }
+        }
     }
 
     /**
      * Brings back a walk the app was ended in the middle of. Its beacons are solved
-     * straight away, so it can be saved as it is or recording resumed. A camera walk
-     * continues in a new AR session, from its last point and heading (see
-     * [ArPoseAligner]), with its wall maps as they were.
+     * straight away, so it can be reviewed and saved. Recovered camera walks cannot
+     * resume acquisition without validated spatial alignment to the new AR session.
      */
     private suspend fun restoreDraft() {
         val restored = drafts.load() ?: return
@@ -473,6 +504,8 @@ class SurveyRecorder @Inject constructor(
                 compass = draft.compass,
                 rawReadingCount = rawReadings.size,
                 restoredFromDraft = true,
+                spatialMaps = draft.spatialMaps,
+                alignmentRequired = mode == SurveyMode.CAMERA,
             )
         }
         solve()
@@ -518,15 +551,42 @@ class SurveyRecorder @Inject constructor(
         rawReadings.clear()
         flushedReadings = 0
         synchronized(radioSampler) { radioSampler.reset() }
-        scope.launch { drafts.delete() }
+        scope.launch { draftSaveLock.withLock { drafts.delete() } }
         // A new walk gets a new camera frame and empty wall maps.
         if (_state.value.mode == SurveyMode.CAMERA) camera.close()
         scope.launch(mapping) {
             aligner = ArPoseAligner()
             grids.clear()
+            reconstructors.clear()
+            frameGuard = MappingFrameGuard()
             dirtyFloors.clear()
         }
         _state.update { SurveyState(beacons = it.beacons, discovered = it.discovered, scanState = it.scanState) }
+    }
+
+    fun reviewWall(wall: com.appvalence.umay.coremodel.WallSegment, accept: Boolean) {
+        val floor = _state.value.currentFloor
+        scope.launch(mapping) {
+            val engine = reconstructors[floor]
+            if (engine != null) {
+                engine.review(wall, accept)
+                _state.update { it.copy(spatialMaps = it.spatialMaps + (floor to engine.snapshot())) }
+            } else {
+                _state.update { current ->
+                    val geometry = current.spatialMaps[floor] ?: return@update current
+                    val index = geometry.walls.indexOf(wall)
+                    if (index < 0) return@update current
+                    val edited = if (accept) geometry.copy(walls = geometry.walls.mapIndexed { i, w ->
+                        if (i == index) w.copy(evidence = com.appvalence.umay.coremodel.GeometryEvidence.OPERATOR_CONFIRMED) else w
+                    }, confirmedWalls = (geometry.confirmedWalls + wall).distinct().take(500)) else geometry.copy(
+                        walls = geometry.walls.filterIndexed { i, _ -> i != index }, rejectedWalls = (geometry.rejectedWalls + wall).distinct().take(500),
+                        corners = com.appvalence.umay.positioning.mapping.StructuralWalls.corners(geometry.walls.filterIndexed { i, _ -> i != index }),
+                        openings = emptyList(), observedRegions = geometry.observedRegions.map { it.copy(boundaryComplete = false) })
+                    current.copy(spatialMaps = current.spatialMaps + (floor to edited))
+                }
+            }
+            withContext(kotlinx.coroutines.Dispatchers.Main.immediate) { saveDraft() }
+        }
     }
 
     fun clearDiscovered() {
@@ -539,7 +599,8 @@ class SurveyRecorder @Inject constructor(
         // Coarse enough to keep the trajectory list small over a long walk, fine
         // enough that corners survive (see BeaconMapBuilder.CORNER_TOLERANCE_METERS).
         const val TRAJECTORY_SPACING_METERS = 0.25
-        const val CAMERA_ACCURACY_METERS = 0.1
+        // ARCore provides no calibrated absolute position uncertainty.
+        val CAMERA_ACCURACY_METERS = Double.POSITIVE_INFINITY
 
         // Footsteps bridging a tracking loss: a few seconds of them, a metre or so out at most.
         const val STEP_ACCURACY_METERS = 1.0

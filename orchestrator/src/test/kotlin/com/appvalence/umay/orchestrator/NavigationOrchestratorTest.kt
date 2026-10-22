@@ -2,7 +2,6 @@ package com.appvalence.umay.orchestrator
 
 import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.BuildingMap
-import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.FloorTransition
 import com.appvalence.umay.coremodel.GuidanceCue
@@ -10,14 +9,10 @@ import com.appvalence.umay.coremodel.MapEdge
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.NodeType
-import com.appvalence.umay.coremodel.ObstacleKind
 import com.appvalence.umay.coremodel.OccupancyRaster
-import com.appvalence.umay.coremodel.ObstacleSensorSource
-import com.appvalence.umay.coremodel.ObstacleType
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.feedback.FeedbackController
-import com.appvalence.umay.perception.ObstacleDetector
 import com.appvalence.umay.positioning.engine.PositioningEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -33,10 +28,6 @@ private class FakePositioningEngine(private val positions: List<Position>) : Pos
     override fun positionUpdates(): Flow<Position> = flow { positions.forEach { emit(it) } }
 }
 
-private class FakeObstacleDetector(private val sightings: List<List<DetectedObstacle>>) : ObstacleDetector {
-    override fun obstacleUpdates(): Flow<List<DetectedObstacle>> = flow { sightings.forEach { emit(it) } }
-}
-
 private class RecordingFeedbackController : FeedbackController {
     val emitted = mutableListOf<NavigationAlert>()
     override fun emit(alert: NavigationAlert) {
@@ -47,17 +38,6 @@ private class RecordingFeedbackController : FeedbackController {
 private fun position(x: Double, y: Double, floor: Int = 0, headingDeg: Double = 0.0, timestampMs: Long = 0L) = Position(
     x = x, y = y, floor = floor, headingDeg = headingDeg, accuracyMeters = 0.3,
     source = PositionSource.FUSED, timestampMs = timestampMs,
-)
-
-private fun personObstacle(id: String, distanceMeters: Double, bearingDeg: Double = 0.0, detectedAtMs: Long = 0L) = DetectedObstacle(
-    id = id, type = ObstacleType.PERSON, distanceMeters = distanceMeters, bearingDeg = bearingDeg,
-    relativeVelocityMps = null, confidence = 0.9f, detectedAtMs = detectedAtMs, sensorSource = ObstacleSensorSource.CAMERA_ML,
-)
-
-private fun chairObstacle(id: String, distanceMeters: Double, bearingDeg: Double = 0.0, detectedAtMs: Long = 0L) = DetectedObstacle(
-    id = id, type = ObstacleType.STATIC_OBJECT, distanceMeters = distanceMeters, bearingDeg = bearingDeg,
-    relativeVelocityMps = null, confidence = 0.9f, detectedAtMs = detectedAtMs, sensorSource = ObstacleSensorSource.CAMERA_ML,
-    kind = ObstacleKind.CHAIR,
 )
 
 /**
@@ -74,7 +54,6 @@ private object TokenPhrases : GuidancePhrases {
     override fun followWall(side: TurnDirection) = "WALL $side"
     override fun turnNow(turn: Turn) = "TURN_NOW ${turn.direction}"
     override fun turnAround() = "TURN_AROUND"
-    override fun passObstacle(side: TurnDirection) = "PASS $side"
     override fun approachDestination(distanceMeters: Double) = "APPROACH ${meters(distanceMeters)}"
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String) =
         "CHANGE_FLOOR $method ${if (goingUp) "UP" else "DOWN"} $targetFloor $arrivalPlaceName"
@@ -83,33 +62,20 @@ private object TokenPhrases : GuidancePhrases {
     override fun hazardAhead(type: NodeType) = if (type in setOf(NodeType.STAIRS, NodeType.DOOR, NodeType.RAMP, NodeType.ELEVATOR)) "HAZARD $type" else null
     override fun arrived() = "ARRIVED"
     override fun noRoute() = "NO_ROUTE"
-    override fun rerouted() = "REROUTED"
     override fun noStepFreeRoute() = "NO_STEP_FREE_ROUTE"
     override fun offRoute() = "OFF_ROUTE"
     override fun wrongWay() = "WRONG_WAY"
-    override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double) =
-        "OBSTACLE $priority $kind ${meters(distanceMeters)}"
 }
 
 class NavigationOrchestratorTest {
 
     private val emptyMap = BuildingMap(id = "test-building", floors = emptyList())
 
-    // A single-node "route" (start == destination == "A"), used by tests that only
-    // care about obstacle-alerting behavior — an empty map would also be valid there,
-    // but now unconditionally raises its own "no route found" alert, which would
-    // pollute the exact-alert-count assertions these tests make.
-    private val singleNodeMap = BuildingMap(
-        id = "test-building",
-        floors = listOf(FloorMap(floorIndex = 0, nodes = listOf(MapNode("A", 0.0, 0.0, NodeType.CORRIDOR)), edges = emptyList())),
-    )
-
     @Test
-    fun `combines the latest position and obstacles into a NavigationState`() = runTest {
+    fun `combines the latest position into a NavigationState`() = runTest {
         val position = position(1.0, 2.0, timestampMs = 1_000L)
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = emptyMap,
             feedback = RecordingFeedbackController(),
             startNodeId = "A",
@@ -120,271 +86,8 @@ class NavigationOrchestratorTest {
         val state = orchestrator.start().toList().single()
 
         assertEquals(position, state.position)
-        assertEquals(emptyList(), state.obstacles)
         assertEquals(emptyList(), state.route)
     }
-
-    @Test
-    fun `raises a CRITICAL alert for a very close obstacle`() = runTest {
-        val feedback = RecordingFeedbackController()
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(position(0.0, 0.0)),
-            perception = FakeObstacleDetector(listOf(listOf(personObstacle("p1", distanceMeters = 0.5)))),
-            map = singleNodeMap,
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "A",
-            phrases = TokenPhrases,
-        )
-
-        orchestrator.start().toList()
-
-        assertEquals(1, feedback.emitted.size)
-        assertEquals(AlertPriority.CRITICAL, feedback.emitted.single().priority)
-    }
-
-    @Test
-    fun `does not repeat an unchanged-priority alert within the debounce window`() = runTest {
-        val feedback = RecordingFeedbackController()
-        val obstacleSightings = listOf(
-            listOf(personObstacle("p1", distanceMeters = 0.5, detectedAtMs = 0L)),
-            listOf(personObstacle("p1", distanceMeters = 0.5, detectedAtMs = 500L)), // within the 2.5s debounce
-        )
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(position(0.0, 0.0)),
-            perception = FakeObstacleDetector(obstacleSightings),
-            map = singleNodeMap,
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "A",
-            phrases = TokenPhrases,
-        )
-
-        orchestrator.start().toList()
-
-        assertEquals(1, feedback.emitted.size)
-    }
-
-    @Test
-    fun `re-alerts immediately on a priority escalation even inside the debounce window`() = runTest {
-        val feedback = RecordingFeedbackController()
-        val obstacleSightings = listOf(
-            listOf(personObstacle("p1", distanceMeters = 3.0, detectedAtMs = 0L)), // WARNING
-            listOf(personObstacle("p1", distanceMeters = 0.5, detectedAtMs = 200L)), // escalates to CRITICAL
-        )
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(position(0.0, 0.0)),
-            perception = FakeObstacleDetector(obstacleSightings),
-            map = singleNodeMap,
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "A",
-            phrases = TokenPhrases,
-        )
-
-        orchestrator.start().toList()
-
-        assertEquals(2, feedback.emitted.size)
-        assertEquals(AlertPriority.WARNING, feedback.emitted[0].priority)
-        assertEquals(AlertPriority.CRITICAL, feedback.emitted[1].priority)
-    }
-
-    @Test
-    fun `reroutes around an obstacle blocking the planned route and alerts INFO`() = runTest {
-        // A --- B --- C   (direct path)
-        //       |     |
-        //       D-----+   (detour via D if B-C is blocked)
-        val nodes = listOf(
-            MapNode("A", 0.0, 0.0, NodeType.CORRIDOR),
-            MapNode("B", 0.0, 10.0, NodeType.CORRIDOR),
-            MapNode("C", 0.0, 20.0, NodeType.DESTINATION),
-            MapNode("D", 10.0, 10.0, NodeType.CORRIDOR),
-        )
-        val edges = listOf(
-            MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
-            MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
-            MapEdge("B", "D", accessible = true, distanceMeters = 10.0),
-            MapEdge("D", "C", accessible = true, distanceMeters = 14.0),
-        )
-        val map = BuildingMap(id = "test-building", floors = listOf(FloorMap(floorIndex = 0, nodes = nodes, edges = edges)))
-        val feedback = RecordingFeedbackController()
-
-        // User is at B, facing toward C (north, heading 0), where a chair stands directly on
-        // the B-C edge — far enough away to not itself be a CRITICAL/WARNING alert.
-        val userPosition = position(0.0, 10.0, headingDeg = 0.0)
-        val blockingObstacle = chairObstacle("c1", distanceMeters = 5.0, bearingDeg = 0.0)
-
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(userPosition),
-            perception = FakeObstacleDetector(listOf(listOf(blockingObstacle))),
-            map = map,
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "C",
-            phrases = TokenPhrases,
-        )
-
-        val states = orchestrator.start().toList()
-
-        // Replanning starts from the nearest node to where the user actually is (B,
-        // since they're already past A) — not from the original start node.
-        assertEquals(listOf("B", "D", "C"), states.last().route.map { it.id })
-        assertTrue(feedback.emitted.any { it.priority == AlertPriority.INFO })
-    }
-
-    @Test
-    fun `a person on the route is warned about, never routed around`() = runTest {
-        val feedback = RecordingFeedbackController()
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(position(0.0, 10.0, headingDeg = 0.0)),
-            perception = FakeObstacleDetector(listOf(listOf(personObstacle("p1", distanceMeters = 3.0, bearingDeg = 0.0)))),
-            map = rerouteMap,
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "C",
-            phrases = TokenPhrases,
-        )
-
-        val states = orchestrator.start().toList()
-
-        assertEquals(listOf("A", "B", "C"), states.last().route.map { it.id })
-        assertTrue(feedback.emitted.any { it.message.startsWith("OBSTACLE WARNING PERSON") })
-        assertTrue(feedback.emitted.none { it.id.startsWith("reroute-") })
-    }
-
-    private fun rerouteMapWithWalls(corridorHalfWidth: Double) = rerouteMap.copy(
-        floors = rerouteMap.floors.map { it.copy(occupancy = corridor(-corridorHalfWidth, corridorHalfWidth)) },
-    )
-
-    @Test
-    fun `room beside a chair keeps the route and says which side to pass`() = runTest {
-        val feedback = RecordingFeedbackController()
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(position(0.0, 10.0, headingDeg = 0.0)),
-            perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 5.0, bearingDeg = 3.0).copy(widthMeters = 0.5)))),
-            map = rerouteMapWithWalls(1.5),
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "C",
-            phrases = TokenPhrases,
-        )
-
-        val states = orchestrator.start().toList()
-
-        assertEquals(listOf("A", "B", "C"), states.last().route.map { it.id })
-        assertTrue(feedback.emitted.none { it.id.startsWith("reroute-") })
-        // A little right of centre: more room on the left.
-        assertEquals("PASS LEFT", feedback.emitted.single { it.id.startsWith("pass-") }.message)
-    }
-
-    @Test
-    fun `no room beside it, or no wall map to tell, still means a new route`() = runTest {
-        for (map in listOf(rerouteMapWithWalls(0.6), rerouteMap)) {
-            val feedback = RecordingFeedbackController()
-            val orchestrator = NavigationOrchestrator(
-                positioning = FakePositioningEngine(position(0.0, 10.0, headingDeg = 0.0)),
-                perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 5.0).copy(widthMeters = 0.5)))),
-                map = map,
-                feedback = feedback,
-                startNodeId = "A",
-                destinationNodeId = "C",
-                phrases = TokenPhrases,
-            )
-
-            val states = orchestrator.start().toList()
-
-            assertEquals(listOf("B", "D", "C"), states.last().route.map { it.id })
-        }
-    }
-
-    @Test
-    fun `the new route's first leg says which way to turn when it starts to one side`() = runTest {
-        // At B facing north toward C, a chair on B-C: the new route goes east to D first.
-        val feedback = RecordingFeedbackController()
-        val positions = listOf(position(0.0, 10.0, headingDeg = 0.0, timestampMs = 0L), position(0.0, 10.3, headingDeg = 0.0, timestampMs = 1L))
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 5.0)))),
-            map = rerouteMap,
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "C",
-            phrases = TokenPhrases,
-        )
-
-        orchestrator.start().toList()
-
-        val leg = feedback.emitted.last { it.id.startsWith("route-guide-") }
-        assertTrue(leg.message.startsWith("TURN_NOW RIGHT "), leg.message)
-        assertEquals(GuidanceCue.TURN_RIGHT, leg.cue)
-    }
-
-    @Test
-    fun `the new route's first leg says to turn around when it starts behind`() = runTest {
-        // Walking north from B toward C, a chair ahead on B-C: the only other way goes back
-        // through A, so the new route's first leg is behind the walker.
-        val feedback = RecordingFeedbackController()
-        val positions = listOf(position(0.0, 11.0, headingDeg = 0.0, timestampMs = 0L), position(0.0, 11.5, headingDeg = 0.0, timestampMs = 1L))
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(listOf(listOf(chairObstacle("c1", distanceMeters = 4.0)))),
-            map = behindMap,
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "C",
-            phrases = TokenPhrases,
-        )
-
-        orchestrator.start().toList()
-
-        val leg = feedback.emitted.last { it.id.startsWith("route-guide-") }
-        assertTrue(leg.message.startsWith("TURN_AROUND "), leg.message)
-        assertEquals(GuidanceCue.WRONG_WAY, leg.cue)
-    }
-
-    // A --- B --- C, with a way round from A by E: going round starts back at A.
-    private val behindMap = BuildingMap(
-        id = "test-building",
-        floors = listOf(
-            FloorMap(
-                floorIndex = 0,
-                nodes = listOf(
-                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR),
-                    MapNode("B", 0.0, 10.0, NodeType.CORRIDOR),
-                    MapNode("C", 0.0, 20.0, NodeType.DESTINATION),
-                    MapNode("E", 15.0, 0.0, NodeType.CORRIDOR),
-                ),
-                edges = listOf(
-                    MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
-                    MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
-                    MapEdge("A", "E", accessible = true, distanceMeters = 15.0),
-                    MapEdge("E", "C", accessible = true, distanceMeters = 25.0),
-                ),
-            ),
-        ),
-    )
-
-    // A --- B --- C, with a way round from B by D.
-    private val rerouteMap = BuildingMap(
-        id = "test-building",
-        floors = listOf(
-            FloorMap(
-                floorIndex = 0,
-                nodes = listOf(
-                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR),
-                    MapNode("B", 0.0, 10.0, NodeType.CORRIDOR),
-                    MapNode("C", 0.0, 20.0, NodeType.DESTINATION),
-                    MapNode("D", 10.0, 10.0, NodeType.CORRIDOR),
-                ),
-                edges = listOf(
-                    MapEdge("A", "B", accessible = true, distanceMeters = 10.0),
-                    MapEdge("B", "C", accessible = true, distanceMeters = 10.0),
-                    MapEdge("B", "D", accessible = true, distanceMeters = 10.0),
-                    MapEdge("D", "C", accessible = true, distanceMeters = 14.0),
-                ),
-            ),
-        ),
-    )
 
     @Test
     fun `announces the first leg instruction on the first position update`() = runTest {
@@ -401,7 +104,6 @@ class NavigationOrchestratorTest {
         val feedback = RecordingFeedbackController()
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0, timestampMs = 0L)),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = map,
             feedback = feedback,
             startNodeId = "A",
@@ -431,7 +133,6 @@ class NavigationOrchestratorTest {
         val feedback = RecordingFeedbackController()
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0)),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = map,
             feedback = feedback,
             startNodeId = "A",
@@ -460,7 +161,6 @@ class NavigationOrchestratorTest {
         val feedback = RecordingFeedbackController()
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0)),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = map,
             feedback = feedback,
             startNodeId = "A",
@@ -489,7 +189,6 @@ class NavigationOrchestratorTest {
         val feedback = RecordingFeedbackController()
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(2.0, 0.0)),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = map,
             feedback = feedback,
             startNodeId = "A",
@@ -524,7 +223,6 @@ class NavigationOrchestratorTest {
         val feedback = RecordingFeedbackController()
         NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = tMap,
             feedback = feedback,
             startNodeId = "G",
@@ -586,7 +284,6 @@ class NavigationOrchestratorTest {
         )
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = map,
             feedback = feedback,
             startNodeId = "A",
@@ -619,7 +316,6 @@ class NavigationOrchestratorTest {
         )
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = map,
             feedback = RecordingFeedbackController(),
             startNodeId = "A",
@@ -649,7 +345,6 @@ class NavigationOrchestratorTest {
         )
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = map,
             feedback = feedback,
             startNodeId = "A",
@@ -674,7 +369,6 @@ class NavigationOrchestratorTest {
         val positions = listOf(position(0.0, 0.0, timestampMs = 0L), position(0.0, 0.0, timestampMs = 1_000L))
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = map,
             feedback = feedback,
             startNodeId = "A",
@@ -719,7 +413,6 @@ class NavigationOrchestratorTest {
         val feedback = RecordingFeedbackController()
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0, floor = 0, timestampMs = 0L)),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = twoFloorMap,
             feedback = feedback,
             startNodeId = "A",
@@ -741,7 +434,6 @@ class NavigationOrchestratorTest {
         )
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = twoFloorMap,
             feedback = feedback,
             startNodeId = "A",
@@ -768,7 +460,6 @@ class NavigationOrchestratorTest {
         )
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = twoFloorMap,
             feedback = feedback,
             startNodeId = "A",
@@ -794,7 +485,6 @@ class NavigationOrchestratorTest {
         )
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = twoFloorMap,
             feedback = feedback,
             startNodeId = "A",
@@ -842,7 +532,6 @@ class NavigationOrchestratorTest {
         )
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = stairsMap,
             feedback = feedback,
             startNodeId = "A",
@@ -864,7 +553,6 @@ class NavigationOrchestratorTest {
         val feedback = RecordingFeedbackController()
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0, floor = 0, timestampMs = 0L)),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = twoFloorMap,
             feedback = feedback,
             startNodeId = "A",
@@ -912,7 +600,6 @@ class NavigationOrchestratorTest {
         val feedback = RecordingFeedbackController()
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(position(0.0, 0.0, floor = 0, timestampMs = 0L)),
-            perception = FakeObstacleDetector(listOf(emptyList())),
             map = stairsMap,
             feedback = feedback,
             startNodeId = "A",
@@ -936,7 +623,6 @@ class NavigationOrchestratorTest {
         )
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = stairsMap,
             feedback = feedback,
             startNodeId = "A",
@@ -964,7 +650,6 @@ class NavigationOrchestratorTest {
         }
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = stairsMap,
             feedback = feedback,
             startNodeId = "A",
@@ -987,7 +672,6 @@ class NavigationOrchestratorTest {
         }
         val orchestrator = NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = twoFloorMap, // transition endpoints are plain CORRIDOR here, not STAIRS
             feedback = feedback,
             startNodeId = "A",
@@ -1023,7 +707,6 @@ class NavigationOrchestratorTest {
     private fun orchestratorFor(map: BuildingMap, positions: List<Position>, feedback: FeedbackController, destination: String) =
         NavigationOrchestrator(
             positioning = FakePositioningEngine(positions),
-            perception = FakeObstacleDetector(List(positions.size) { emptyList() }),
             map = map,
             feedback = feedback,
             startNodeId = "A",
@@ -1127,23 +810,6 @@ class NavigationOrchestratorTest {
     }
 
     @Test
-    fun `a very close obstacle carries an OBSTACLE_CRITICAL cue`() = runTest {
-        val feedback = RecordingFeedbackController()
-        val orchestrator = NavigationOrchestrator(
-            positioning = FakePositioningEngine(position(0.0, 0.0)),
-            perception = FakeObstacleDetector(listOf(listOf(personObstacle("p1", distanceMeters = 1.0)))),
-            map = singleNodeMap,
-            feedback = feedback,
-            startNodeId = "A",
-            destinationNodeId = "A",
-            phrases = TokenPhrases,
-        )
-        orchestrator.start().toList()
-
-        assertEquals(GuidanceCue.OBSTACLE_CRITICAL, feedback.emitted.single { it.id.startsWith("obstacle-") }.cue)
-    }
-
-    @Test
     fun `currentInstruction rewords the current leg with a fresh distance`() = runTest {
         val orchestrator = orchestratorFor(rightTurnMap, listOf(position(0.0, 0.0)), RecordingFeedbackController(), "C")
         assertNull(orchestrator.currentInstruction(position(0.0, 0.0)), "nothing is planned before navigation starts")
@@ -1153,4 +819,21 @@ class NavigationOrchestratorTest {
         val instruction = orchestrator.currentInstruction(position(0.0, 6.0))
         assertEquals("WALK Donus 4.0 RIGHT", instruction)
     }
+
+    @Test fun `uncertain reconstructed-map position suppresses direction arrival and repeated instruction`() = runTest {
+        val map = BuildingMap("scan",listOf(FloorMap(0,
+            listOf(MapNode("A",0.0,0.0,NodeType.WAYPOINT),MapNode("B",0.0,10.0,NodeType.DESTINATION)),
+            listOf(MapEdge("A","B",true,10.0)),reconstruction=com.appvalence.umay.coremodel.SpatialMap(coordinateFrameId="a"))))
+        val uncertain = position(0.0,9.5).copy(accuracyMeters=5.0)
+        val feedback = RecordingFeedbackController()
+        val orchestrator = NavigationOrchestrator(positioning=FakePositioningEngine(uncertain),map=map,feedback=feedback,
+            startNodeId="A",destinationNodeId="B",phrases=TokenPhrases)
+        orchestrator.start().toList()
+        assertEquals(1,feedback.emitted.size)
+        assertTrue(feedback.emitted.single().id.startsWith("route-guide-uncertain-"))
+        assertTrue(feedback.emitted.none { it.cue == GuidanceCue.ARRIVED || it.cue == GuidanceCue.CONTINUE })
+        assertEquals(TokenPhrases.positionUncertain(),orchestrator.currentInstruction(uncertain))
+        assertTrue(NavigationOrchestrator.canGuide(uncertain.copy(accuracyMeters=0.3)))
+    }
+
 }

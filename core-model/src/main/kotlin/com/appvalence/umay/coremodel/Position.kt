@@ -2,7 +2,7 @@ package com.appvalence.umay.coremodel
 
 import kotlinx.serialization.Serializable
 
-enum class PositionSource { BLE_TRILATERATION, RADIO_FINGERPRINT, PEDESTRIAN_DEAD_RECKONING, MAP_MATCHED, FUSED }
+enum class PositionSource { BLE_TRILATERATION, RADIO_FINGERPRINT, PEDESTRIAN_DEAD_RECKONING, MAP_MATCHED, FUSED, VISUAL_INERTIAL }
 
 @Serializable
 data class Position(

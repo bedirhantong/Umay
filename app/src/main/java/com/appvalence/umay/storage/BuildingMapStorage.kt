@@ -1,6 +1,7 @@
 package com.appvalence.umay.storage
 
 import android.content.Context
+import android.util.AtomicFile
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.BuildingMapJson
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -41,12 +42,22 @@ class BuildingMapStorage @Inject constructor(@ApplicationContext context: Contex
     }
 
     override fun save(map: BuildingMap): Boolean =
-        runCatching { fileFor(map.id).writeText(BuildingMapJson.encode(map)) }.isSuccess
+        runCatching {
+            val atomic = AtomicFile(fileFor(map.id))
+            val output = atomic.startWrite()
+            try {
+                output.write(BuildingMapJson.encode(map).toByteArray(Charsets.UTF_8))
+                atomic.finishWrite(output)
+            } catch (error: Exception) {
+                atomic.failWrite(output)
+                throw error
+            }
+        }.isSuccess
 
     fun load(buildingId: String): BuildingMap? {
         val file = fileFor(buildingId)
         if (!file.exists()) return null
-        return runCatching { BuildingMapJson.decode(file.readText()) }.getOrNull()
+        return runCatching { BuildingMapJson.decode(AtomicFile(file).openRead().bufferedReader().use { it.readText() }) }.getOrNull()
     }
 
     override fun exists(buildingId: String): Boolean = fileFor(buildingId).exists()
@@ -55,7 +66,7 @@ class BuildingMapStorage @Inject constructor(@ApplicationContext context: Contex
 
     override fun listBuildings(): List<BuildingMap> =
         directory.listFiles { file -> file.extension == "json" }
-            ?.mapNotNull { file -> runCatching { BuildingMapJson.decode(file.readText()) }.getOrNull() }
+            ?.mapNotNull { file -> runCatching { BuildingMapJson.decode(AtomicFile(file).openRead().bufferedReader().use { it.readText() }) }.getOrNull() }
             ?.sortedBy { it.id }
             .orEmpty()
 
@@ -102,7 +113,7 @@ class BuildingMapStorage @Inject constructor(@ApplicationContext context: Contex
     private fun migrateUnhashedFileNames() {
         directory.listFiles { file -> file.extension == "json" && !HASHED_FILE_NAME.matches(file.name) }
             ?.forEach { file ->
-                val map = runCatching { BuildingMapJson.decode(file.readText()) }.getOrNull() ?: return@forEach
+                val map = runCatching { BuildingMapJson.decode(AtomicFile(file).openRead().bufferedReader().use { it.readText() }) }.getOrNull() ?: return@forEach
                 val target = fileFor(map.id)
                 if (!target.exists()) file.renameTo(target) else file.delete()
             }

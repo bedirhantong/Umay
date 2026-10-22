@@ -20,8 +20,8 @@ interface UserSettings {
 
     /**
      * Off by default: with the screen off, positioning and guidance carry on (see
-     * NavigationSession) but the camera can't, so obstacle detection pauses. On keeps
-     * the screen awake for the whole walk so it doesn't — at a real battery cost.
+     * NavigationSession). On keeps the screen awake for the whole walk so the route
+     * stays in view — at a real battery cost.
      */
     var keepScreenOnDuringNavigation: Boolean
 
