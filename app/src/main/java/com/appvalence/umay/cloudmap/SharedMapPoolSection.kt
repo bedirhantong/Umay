@@ -261,6 +261,7 @@ private fun remoteMapFailureText(failure: RemoteMapFailure): String = when (fail
     RemoteMapFailure.NotFound -> stringResource(R.string.cloud_error_not_found)
     is RemoteMapFailure.TooLarge -> stringResource(R.string.cloud_error_too_large)
     is RemoteMapFailure.InvalidMap -> stringResource(R.string.cloud_error_invalid_map)
+    RemoteMapFailure.NewerFormat -> stringResource(R.string.map_newer_format)
     RemoteMapFailure.NotOwner -> stringResource(R.string.cloud_error_not_owner)
     is RemoteMapFailure.Other -> stringResource(R.string.cloud_error_other, failure.message ?: "?")
 }

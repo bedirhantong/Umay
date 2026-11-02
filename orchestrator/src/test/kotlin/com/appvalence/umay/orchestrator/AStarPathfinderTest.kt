@@ -152,4 +152,65 @@ class AStarPathfinderTest {
         // Via B1/C1: 10 + 50 + 81 = 141. Via B2/C2: 50 + 1 + 1 = 52 — the true optimum.
         assertEquals(listOf("A", "B2", "C2", "D"), path?.map { it.id })
     }
+
+    // Floor 0: A — S0 (stairs) and A — E0 (lift, farther). Floor 1: S1 (stairs), E1 (lift) — D.
+    private val stairsAndLift = BuildingMap(
+        id = "test",
+        floors = listOf(
+            FloorMap(
+                floorIndex = 0,
+                nodes = listOf(
+                    MapNode("A", 0.0, 0.0, NodeType.CORRIDOR),
+                    MapNode("S0", 5.0, 0.0, NodeType.STAIRS),
+                    MapNode("E0", 0.0, 20.0, NodeType.ELEVATOR),
+                ),
+                edges = listOf(
+                    MapEdge("A", "S0", accessible = true, distanceMeters = 5.0),
+                    MapEdge("A", "E0", accessible = true, distanceMeters = 20.0),
+                ),
+            ),
+            FloorMap(
+                floorIndex = 1,
+                nodes = listOf(
+                    MapNode("S1", 5.0, 0.0, NodeType.STAIRS),
+                    MapNode("E1", 0.0, 20.0, NodeType.ELEVATOR),
+                    MapNode("D", 5.0, 20.0, NodeType.DESTINATION),
+                ),
+                edges = listOf(
+                    MapEdge("S1", "D", accessible = true, distanceMeters = 20.0),
+                    MapEdge("E1", "D", accessible = true, distanceMeters = 5.0),
+                ),
+            ),
+        ),
+        floorTransitions = listOf(
+            FloorTransition(fromNodeId = "S0", fromFloorIndex = 0, toNodeId = "S1", toFloorIndex = 1, costMeters = 10.0),
+            FloorTransition(fromNodeId = "E0", fromFloorIndex = 0, toNodeId = "E1", toFloorIndex = 1, costMeters = 10.0),
+        ),
+    )
+
+    @Test
+    fun `findPathAcrossFloors takes the shorter stairs unless told to avoid them`() {
+        // Stairs: 5 + 10 + 20 = 35. Lift: 20 + 10 + 5 = 35 — make the stairs strictly shorter.
+        val map = stairsAndLift.copy(
+            floorTransitions = stairsAndLift.floorTransitions.map { if (it.fromNodeId == "S0") it.copy(costMeters = 5.0) else it },
+        )
+
+        assertEquals(listOf("A", "S0", "S1", "D"), AStarPathfinder.findPathAcrossFloors(map, "A", "D")?.map { it.id })
+        assertEquals(listOf("A", "E0", "E1", "D"), AStarPathfinder.findPathAcrossFloors(map, "A", "D", avoidStairs = true)?.map { it.id })
+    }
+
+    @Test
+    fun `findPathAcrossFloors finds no step-free route when stairs are the only way`() {
+        val map = stairsAndLift.copy(floorTransitions = stairsAndLift.floorTransitions.filter { it.fromNodeId == "S0" })
+
+        assertNull(AStarPathfinder.findPathAcrossFloors(map, "A", "D", avoidStairs = true))
+        assertEquals(listOf("A", "S0", "S1", "D"), AStarPathfinder.findPathAcrossFloors(map, "A", "D")?.map { it.id })
+    }
+
+    @Test
+    fun `avoiding stairs still lets a walker start on a landing`() {
+        val path = AStarPathfinder.findPathAcrossFloors(stairsAndLift, "S0", "D", avoidStairs = true)
+
+        assertEquals(listOf("S0", "A", "E0", "E1", "D"), path?.map { it.id })
+    }
 }

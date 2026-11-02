@@ -22,6 +22,13 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" tools:targetApi="s" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
+    <!-- Never used. The manifest merger adds them on its own because TensorFlow Lite's
+         task library declares no targetSdkVersion; Umay shares files through its
+         FileProvider and never reads phone state. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" tools:ignore="ScopedStorage" />
+
     <application
         android:name=".UmayApplication"
         android:allowBackup="true"
@@ -32,6 +39,12 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Umay">
+        <!-- The camera survey uses ARCore when the phone has it; nothing else does, and
+             surveying by footsteps works without it, so it's never required to install. -->
+        <meta-data
+            android:name="com.google.ar.core"
+            android:value="optional" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -62,6 +75,11 @@
 
         <service
             android:name=".navigation.NavigationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <service
+            android:name=".survey.SurveyService"
             android:exported="false"
             android:foregroundServiceType="location" />
 

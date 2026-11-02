@@ -6,10 +6,4 @@
 -dontobfuscate
 -keepattributes SourceFile,LineNumberTable
 
-# TensorFlow Lite (obstacle detection): the native runtime reaches these classes
-# through JNI, which R8 can't see, so they'd otherwise be stripped as unused.
--keep class org.tensorflow.lite.** { *; }
-# The Task library references the optional GPU delegate, which isn't a dependency.
--dontwarn org.tensorflow.lite.gpu.**
-
 # kotlinx.serialization (maps, field logs) and CameraX ship their own consumer rules.

@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -36,7 +37,6 @@ import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -46,12 +46,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -59,10 +59,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,14 +73,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.appvalence.umay.R
 import com.appvalence.umay.common.PermissionRationale
 import com.appvalence.umay.common.VoiceStatusNotice
@@ -88,13 +90,15 @@ import com.appvalence.umay.common.rememberIsScreenReaderOn
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.coremodel.MapNode
-import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.isPlace
 import com.appvalence.umay.files.rememberMapFilePicker
+import com.appvalence.umay.perception.CameraMarkerScanner
 import com.appvalence.umay.survey.round1
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 private val NAVIGATION_PERMISSIONS = buildList {
-    add(Manifest.permission.CAMERA)
     add(Manifest.permission.ACCESS_FINE_LOCATION)
     add(Manifest.permission.ACCESS_COARSE_LOCATION)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -102,18 +106,19 @@ private val NAVIGATION_PERMISSIONS = buildList {
     }
 }.toTypedArray()
 
-// Asked for together with the required ones, but navigation works without it: the
-// foreground service runs regardless, only its notification stays hidden.
+// Asked for together with the required ones, but navigation works without them: the
+// foreground service runs regardless, only its notification stays hidden, and only
+// "Kamerayla bul" (finding the start by a printed marker) needs the camera.
 private val OPTIONAL_NAVIGATION_PERMISSIONS = buildList {
+    add(Manifest.permission.CAMERA)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
 }.toTypedArray()
 
 /**
  * Picks a building and a start/destination point by name from *any* floor,
  * then starts a [NavigationSession] — live position fused from continuous PDR
- * and sparse RSSI-fingerprint corrections, camera obstacle detection, A*
- * routing across floors with obstacle-triggered rerouting, spoken and
- * vibrated guidance — and shows it the way a consumer navigation app would:
+ * and sparse RSSI-fingerprint corrections, A* routing across floors with
+ * rerouting when the walker leaves the route, spoken and vibrated guidance — and shows it the way a consumer navigation app would:
  * one big status message people can read at a glance, with the technical
  * detail folded away. The session itself runs independently of this screen
  * (see [NavigationService]), so leaving it or turning the screen off doesn't
@@ -122,7 +127,6 @@ private val OPTIONAL_NAVIGATION_PERMISSIONS = buildList {
 @Composable
 fun NavigationScreen(modifier: Modifier = Modifier, viewModel: NavigationViewModel = hiltViewModel()) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
 
     var hasPermissions by remember {
         mutableStateOf(NAVIGATION_PERMISSIONS.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED })
@@ -175,7 +179,7 @@ fun NavigationScreen(modifier: Modifier = Modifier, viewModel: NavigationViewMod
         // A walk already in progress (started earlier, screen since turned off, app
         // reopened from the notification...) takes over the screen, whatever else is set.
         activeSession?.let { session ->
-            ActiveNavigationView(session, lifecycleOwner, keepScreenOn = viewModel.keepScreenOn)
+            ActiveNavigationView(session, keepScreenOn = viewModel.keepScreenOn)
             return@Column
         }
 
@@ -213,7 +217,16 @@ fun NavigationScreen(modifier: Modifier = Modifier, viewModel: NavigationViewMod
         }
 
         if (selected.nodes.isEmpty()) {
-            EmptyState(icon = Icons.Filled.Map, title = stringResource(R.string.nav_empty_map_title), message = stringResource(R.string.nav_empty_map_message))
+            if (selected.map.floors.any { it.reconstruction?.hasGeometry == true || it.occupancy != null }) {
+                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    TextButton(onClick = viewModel::changeBuilding) {
+                        Text(stringResource(R.string.nav_change_building, selected.map.id))
+                    }
+                    BuildingGeometryPreview(selected.map)
+                }
+            } else {
+                EmptyState(icon = Icons.Filled.Map, title = stringResource(R.string.nav_empty_map_title), message = stringResource(R.string.nav_empty_map_message))
+            }
             return@Column
         }
         if (buildings.size > 1) {
@@ -221,15 +234,33 @@ fun NavigationScreen(modifier: Modifier = Modifier, viewModel: NavigationViewMod
                 Text(stringResource(R.string.nav_change_building, selected.map.id))
             }
         }
+        // Listen for the building's beacons only while choosing (see StartPlaceFinder).
+        DisposableEffect(selected.map.id) {
+            viewModel.findStart()
+            onDispose { viewModel.stopFindingStart() }
+        }
+        val startHint by viewModel.startHint.collectAsStateWithLifecycle()
+        val screenReaderOn = rememberIsScreenReaderOn()
+        startHint.suggested?.let { place ->
+            StartSuggestion(
+                text = stringResource(R.string.nav_start_suggestion, nodeLabel(place, selected.nodeFloor, selected.showFloorInLabels)),
+                // TalkBack reads the card itself (live region); without it, the app says it.
+                speak = if (screenReaderOn) null else viewModel::speak,
+                onAccept = viewModel::acceptSuggestedStart,
+                onDecline = viewModel::declineSuggestedStart,
+            )
+        }
         RoutePicker(
             nodes = selected.nodes,
             nodeFloor = selected.nodeFloor,
             showFloor = selected.showFloorInLabels,
             startIndex = selected.startIndex,
             destinationIndex = selected.destinationIndex,
+            nearbyStartIds = startHint.nearbyIds,
             onStartChange = viewModel::setStart,
             onDestinationChange = viewModel::setDestination,
             onBegin = viewModel::begin,
+            speak = if (screenReaderOn) null else viewModel::speak,
         )
         if (viewModel.isFieldLogRecording) {
             RecordingIndicator(
@@ -269,7 +300,8 @@ private fun BuildingPicker(buildings: List<BuildingMap>, onSelect: (BuildingMap)
         buildings.forEach { building ->
             Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp).clickable { onSelect(building) },
+                    // The whole card is the target (not just its padded content), announced as a button.
+                    modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { onSelect(building) }.padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -319,9 +351,11 @@ private fun RoutePicker(
     showFloor: Boolean,
     startIndex: Int,
     destinationIndex: Int,
+    nearbyStartIds: List<String>,
     onStartChange: (Int) -> Unit,
     onDestinationChange: (Int) -> Unit,
     onBegin: () -> Unit,
+    speak: ((String) -> Unit)?,
 ) {
     Text(text = stringResource(R.string.nav_pick_route_title), style = MaterialTheme.typography.headlineSmall)
     Text(
@@ -330,6 +364,9 @@ private fun RoutePicker(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
     )
+    val startLabel = nodeLabel(nodes[startIndex], nodeFloor, showFloor)
+    val confirmation = stringResource(R.string.nav_start_confirmed, startLabel)
+    var startChosenByHand by remember { mutableStateOf(false) }
     NodeDropdown(
         label = stringResource(R.string.nav_start_label),
         icon = Icons.Filled.LocationSearching,
@@ -337,8 +374,40 @@ private fun RoutePicker(
         nodeFloor = nodeFloor,
         showFloor = showFloor,
         selectedIndex = startIndex,
-        onIndexChange = onStartChange,
+        onIndexChange = {
+            startChosenByHand = true
+            onStartChange(it)
+        },
+        priorityIds = nearbyStartIds,
     )
+    FindStartWithCamera(
+        nodes = nodes,
+        nodeFloor = nodeFloor,
+        showFloor = showFloor,
+        onFound = {
+            startChosenByHand = false // announced by the finder itself
+            onStartChange(it)
+        },
+        speak = speak,
+    )
+    if (nearbyStartIds.isNotEmpty()) {
+        Text(
+            text = stringResource(R.string.nav_start_nearby_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+    // Says the start out loud once it's picked: TalkBack through the live region,
+    // the app's own voice otherwise. Not on first showing — nothing was chosen yet.
+    Text(
+        text = confirmation,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
+    )
+    LaunchedEffect(confirmation) {
+        if (startChosenByHand) speak?.invoke(confirmation)
+    }
     NodeDropdown(
         label = stringResource(R.string.nav_destination_label),
         icon = Icons.Filled.Flag,
@@ -374,8 +443,15 @@ private fun NodeDropdown(
     selectedIndex: Int,
     onIndexChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    // Listed first and marked as nearby; the rest keep their order.
+    priorityIds: List<String> = emptyList(),
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val ordered = remember(nodes, priorityIds) {
+        val indexed = nodes.withIndex().toList()
+        indexed.filter { it.value.id in priorityIds }.sortedBy { priorityIds.indexOf(it.value.id) } +
+            indexed.filter { it.value.id !in priorityIds }
+    }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
         OutlinedTextField(
             value = nodeLabel(nodes[selectedIndex], nodeFloor, showFloor),
@@ -387,9 +463,10 @@ private fun NodeDropdown(
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.exposedDropdownSize()) {
-            nodes.forEachIndexed { index, node ->
+            ordered.forEach { (index, node) ->
+                val label = nodeLabel(node, nodeFloor, showFloor)
                 DropdownMenuItem(
-                    text = { Text(nodeLabel(node, nodeFloor, showFloor)) },
+                    text = { Text(if (node.id in priorityIds) stringResource(R.string.nav_start_nearby, label) else label) },
                     onClick = {
                         onIndexChange(index)
                         expanded = false
@@ -403,8 +480,7 @@ private fun NodeDropdown(
 private enum class NavigationStatus(@param:StringRes val label: Int, val containerColor: @Composable () -> Color, val icon: ImageVector) {
     SEARCHING(R.string.nav_status_searching, { MaterialTheme.colorScheme.surfaceVariant }, Icons.Filled.LocationSearching),
     ON_ROUTE(R.string.nav_status_on_route, { MaterialTheme.colorScheme.primaryContainer }, Icons.Filled.CheckCircle),
-    WARNING(R.string.nav_status_warning, { Color(0xFFFFE0B2) }, Icons.Filled.Warning),
-    CRITICAL(R.string.nav_status_critical, { MaterialTheme.colorScheme.errorContainer }, Icons.Filled.Warning),
+    POSITION_UNCERTAIN(R.string.nav_status_uncertain, { Color(0xFFFFE0B2) }, Icons.Filled.Warning),
     ARRIVED(R.string.nav_status_arrived, { Color(0xFFC8E6C9) }, Icons.Filled.CheckCircle),
     ;
 
@@ -412,8 +488,7 @@ private enum class NavigationStatus(@param:StringRes val label: Int, val contain
         fun of(phase: NavigationPhase): NavigationStatus = when (phase) {
             NavigationPhase.SEARCHING -> SEARCHING
             NavigationPhase.ON_ROUTE -> ON_ROUTE
-            NavigationPhase.WARNING -> WARNING
-            NavigationPhase.CRITICAL -> CRITICAL
+            NavigationPhase.POSITION_UNCERTAIN -> POSITION_UNCERTAIN
             NavigationPhase.ARRIVED -> ARRIVED
         }
     }
@@ -423,30 +498,14 @@ private enum class NavigationStatus(@param:StringRes val label: Int, val contain
  * The live view of a running [NavigationSession]. Everything that makes
  * navigation *work* lives in the session, which outlives this screen (screen
  * off, other tab, app in the background); this only shows its state and
- * forwards the user's taps. The one thing it does own is the camera
- * attachment: obstacle detection runs exactly while this screen is visible.
+ * forwards the user's taps.
  */
 @Composable
-private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: LifecycleOwner, keepScreenOn: Boolean) {
+private fun ActiveNavigationView(session: NavigationSession, keepScreenOn: Boolean) {
     val context = LocalContext.current
     val ui by session.ui.collectAsStateWithLifecycle()
     val voiceStatus by session.speech.voiceStatus.collectAsStateWithLifecycle()
 
-    DisposableEffect(session, lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START -> session.attachCamera(lifecycleOwner)
-                Lifecycle.Event.ON_STOP -> session.detachCamera()
-                else -> Unit
-            }
-        }
-        // addObserver replays ON_START right away if the screen is already visible.
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            session.detachCamera()
-        }
-    }
     KeepScreenOnIfRequested(keepScreenOn)
 
     val currentState = ui.state
@@ -483,17 +542,6 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
             if (!session.hasFingerprintedWaypoints) {
                 Text(
                     text = stringResource(R.string.nav_no_fingerprints_warning),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-
-            // Non-fatal: navigation (position, routing, TTS guidance) still works without
-            // obstacle detection, so this is a note, not a blocking EmptyState.
-            ui.cameraWarning?.let {
-                Text(
-                    text = stringResource(R.string.nav_camera_warning, it),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 8.dp),
@@ -570,8 +618,7 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
                 nextRouteIndex = currentState?.nextRouteIndex ?: 1,
                 nodeFloor = session.nodeFloor,
                 position = currentState?.position,
-                obstacles = currentState?.obstacles ?: emptyList(),
-                description = mapDescription(context, currentFloorMap.floorIndex, progress, session.destinationNode, currentState?.obstacles?.size ?: 0),
+                description = mapDescription(context, currentFloorMap.floorIndex, progress, session.destinationNode),
                 modifier = Modifier.padding(top = 16.dp),
             )
 
@@ -598,10 +645,10 @@ private fun ActiveNavigationView(session: NavigationSession, lifecycleOwner: Lif
 
 /**
  * Fixed to the bottom of the active-navigation screen regardless of scroll
- * position — see the comment above this function's caller. Both actions are
- * fully offline (on-device OCR for sign reading, [com.appvalence.umay.orchestrator.BuildingQueryMatcher]
- * for questions); a disabled button (not a hidden one) while one is already in
- * flight is what stops an impatient double-tap from queuing a second announcement.
+ * position — see the comment above this function's caller. The question is
+ * answered fully offline ([com.appvalence.umay.orchestrator.BuildingQueryMatcher]);
+ * a disabled button (not a hidden one) while one is already in flight is what
+ * stops an impatient double-tap from queuing a second announcement.
  */
 @Composable
 private fun StickyAssistantBar(session: NavigationSession, ui: NavigationSessionUi) {
@@ -618,15 +665,6 @@ private fun StickyAssistantBar(session: NavigationSession, ui: NavigationSession
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedButton(
-                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
-                enabled = !ui.readingSigns,
-                onClick = session::readSignsAloud,
-            ) {
-                Icon(Icons.Filled.TextFields, contentDescription = null)
-                Text(stringResource(R.string.nav_read_signs), modifier = Modifier.padding(start = 8.dp))
-            }
-
             // Speaking the reason before the system permission dialog follows the same
             // rule as every other permission ask in this app: a blind user can't read
             // the dialog's fine print, so the *why* has to be said out loud regardless.
@@ -651,8 +689,8 @@ private fun StickyAssistantBar(session: NavigationSession, ui: NavigationSession
 }
 
 /**
- * Ayarlar's "Ekranı açık tut": keeps the screen (and with it the camera, so obstacle
- * detection) on for as long as the navigation view is showing. A screen-reader user
+ * Ayarlar's "Ekranı açık tut": keeps the screen on for as long as the navigation
+ * view is showing. A screen-reader user
  * gets the lowest brightness instead of whatever the phone was set to — the light
  * serves no one who can't see it, and the battery serves everyone.
  */
@@ -724,7 +762,7 @@ private fun RouteProgressCard(progress: RouteProgress, modifier: Modifier = Modi
     }
 }
 
-private fun mapDescription(context: Context, floorIndex: Int, progress: RouteProgress?, destination: MapNode, obstacleCount: Int): String =
+private fun mapDescription(context: Context, floorIndex: Int, progress: RouteProgress?, destination: MapNode): String =
     listOfNotNull(
         context.getString(R.string.nav_map_description_floor, floorIndex),
         progress?.let {
@@ -739,7 +777,6 @@ private fun mapDescription(context: Context, floorIndex: Int, progress: RoutePro
             val meters = it.metersToDestination.roundToInt()
             context.resources.getQuantityString(R.plurals.nav_map_description_destination, meters, destination.name, meters)
         },
-        obstacleCount.takeIf { it > 0 }?.let { context.resources.getQuantityString(R.plurals.nav_map_description_obstacles, it, it) },
     ).joinToString(" ")
 
 /**
@@ -774,7 +811,7 @@ private fun GroundTruthControls(session: NavigationSession, currentFloorIndex: I
         val nodes = remember(buildingMap, currentFloorIndex) {
             buildingMap.floors
                 .sortedBy { if (it.floorIndex == currentFloorIndex) Int.MIN_VALUE else it.floorIndex }
-                .flatMap { floor -> floor.nodes.filter { it.type != NodeType.BLE_ANCHOR }.sortedBy { it.name } }
+                .flatMap { floor -> floor.nodes.filter { it.isPlace }.sortedBy { it.name } }
         }
         AlertDialog(
             onDismissRequest = { choosing = false },
@@ -788,7 +825,7 @@ private fun GroundTruthControls(session: NavigationSession, currentFloorIndex: I
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .clickable(role = Role.Button) {
                                     val event = session.markGroundTruth(node)
                                     lastMark = event?.errorMeters
                                         ?.let { resources.getString(R.string.nav_ground_truth_marked_error, node.name, it.round1().toString()) }
@@ -836,3 +873,90 @@ private fun StatusBanner(status: NavigationStatus) {
         }
     }
 }
+
+/** "Are you at X?" — asked once a place has been the clear match for a few scans. */
+@Composable
+private fun StartSuggestion(text: String, speak: ((String) -> Unit)?, onAccept: () -> Unit, onDecline: () -> Unit) {
+    LaunchedEffect(text) { speak?.invoke(text) }
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(modifier = Modifier.weight(1f), onClick = onAccept) { Text(stringResource(R.string.nav_start_suggestion_yes)) }
+                OutlinedButton(modifier = Modifier.weight(1f), onClick = onDecline) { Text(stringResource(R.string.nav_start_suggestion_no)) }
+            }
+        }
+    }
+}
+
+/**
+ * "Kamerayla bul": the person turns slowly where they stand while the camera
+ * looks for a printed place marker (see CameraMarkerScanner); the first one of
+ * this building it sees becomes the start. Gives up after [FIND_START_TIMEOUT_MS].
+ */
+@Composable
+private fun FindStartWithCamera(
+    nodes: List<MapNode>,
+    nodeFloor: Map<String, Int>,
+    showFloor: Boolean,
+    onFound: (Int) -> Unit,
+    speak: ((String) -> Unit)?,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val resources = LocalResources.current
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    var result by rememberSaveable { mutableStateOf<String?>(null) }
+    val scanningText = stringResource(R.string.nav_find_start_scanning)
+
+    OutlinedButton(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        onClick = {
+            result = null
+            scanning = !scanning
+        },
+    ) {
+        Icon(Icons.Filled.CameraAlt, contentDescription = null)
+        Text(stringResource(if (scanning) R.string.common_cancel else R.string.nav_find_start_camera), modifier = Modifier.padding(start = 8.dp))
+    }
+    if (scanning) {
+        val scanner = remember { CameraMarkerScanner(context.applicationContext) }
+        DisposableEffect(lifecycleOwner) {
+            scanner.bind(lifecycleOwner) {
+                scanning = false
+                result = resources.getString(R.string.nav_find_start_camera_failed)
+            }
+            onDispose { scanner.unbind() }
+        }
+        LaunchedEffect(scanner) {
+            speak?.invoke(scanningText)
+            val found = withTimeoutOrNull(FIND_START_TIMEOUT_MS) {
+                scanner.sightings().first { sighting -> nodes.any { it.id == sighting.nodeId } }
+            }
+            scanning = false
+            result = if (found == null) {
+                resources.getString(R.string.nav_find_start_not_found)
+            } else {
+                val index = nodes.indexOfFirst { it.id == found.nodeId }
+                onFound(index)
+                val node = nodes[index]
+                val label = if (showFloor) resources.getString(R.string.common_node_with_floor, node.name, nodeFloor[node.id] ?: 0) else node.name
+                resources.getString(R.string.nav_find_start_found, label)
+            }
+            result?.let { speak?.invoke(it) }
+        }
+        Text(text = scanningText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
+    }
+    result?.let {
+        Text(text = it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
+    }
+}
+
+private const val FIND_START_TIMEOUT_MS = 30_000L

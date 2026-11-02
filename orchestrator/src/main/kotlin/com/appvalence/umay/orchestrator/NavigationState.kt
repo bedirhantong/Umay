@@ -1,6 +1,5 @@
 package com.appvalence.umay.orchestrator
 
-import com.appvalence.umay.coremodel.DetectedObstacle
 import com.appvalence.umay.coremodel.MapNode
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.Position
@@ -26,11 +25,11 @@ data class FloorChangeHint(
 )
 
 /**
- * Snapshot combining the latest fused position, currently visible obstacles,
- * the currently planned route (start to destination, possibly spanning
- * multiple floors, replanned around any obstacle blocking it — see
- * [NavigationOrchestrator]), any alerts derived from them against the static
- * building map, and whether the route is currently waiting on a floor change.
+ * Snapshot combining the latest fused position, the currently planned route
+ * (start to destination, possibly spanning multiple floors, replanned when the
+ * walker leaves it — see [NavigationOrchestrator]), the guidance alerts derived
+ * from them against the static building map, and whether the route is
+ * currently waiting on a floor change.
  *
  * [nextRouteIndex] is the index into [route] of the node the user is currently
  * walking toward — everything before it is already behind them, which is what
@@ -38,9 +37,14 @@ data class FloorChangeHint(
  */
 data class NavigationState(
     val position: Position,
-    val obstacles: List<DetectedObstacle>,
     val alerts: List<NavigationAlert>,
     val route: List<MapNode>,
     val pendingFloorChange: FloorChangeHint? = null,
     val nextRouteIndex: Int = 1,
+    /**
+     * The floor change at the end of the leg being walked, before it's pending: the
+     * staircase or lift the walker is heading for. Lets a barometer notice the change
+     * even if guidance hasn't caught up with the walker yet (see FloorChangeConfirmation).
+     */
+    val upcomingFloorChange: FloorChangeHint? = null,
 )

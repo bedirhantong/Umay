@@ -4,6 +4,8 @@ import android.content.Context
 import com.appvalence.umay.coremodel.StepEvent
 import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.baro.PressureReading
+import com.appvalence.umay.positioning.compass.HeadingReading
+import com.appvalence.umay.positioning.compass.HeadingSensors
 import com.appvalence.umay.positioning.pdr.StepDetector
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +26,9 @@ interface MotionSensors {
     fun steps(stepLengthMeters: Double): Flow<StepEvent>
 
     fun pressure(): Flow<PressureReading>
+
+    /** Heading by gyro and by compass together (see [HeadingSensors]); empty without a compass. */
+    fun headings(): Flow<HeadingReading>
 }
 
 @Singleton
@@ -36,4 +41,6 @@ class AndroidMotionSensors @Inject constructor(@param:ApplicationContext private
     override fun steps(stepLengthMeters: Double): Flow<StepEvent> = StepDetector(context, stepLengthMeters).stepEvents()
 
     override fun pressure(): Flow<PressureReading> = BarometerSensor(context).readings()
+
+    override fun headings(): Flow<HeadingReading> = HeadingSensors(context).readings()
 }

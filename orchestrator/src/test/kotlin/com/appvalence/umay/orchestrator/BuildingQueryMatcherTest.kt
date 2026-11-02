@@ -99,4 +99,34 @@ class BuildingQueryMatcherTest {
 
         assertEquals((a as BuildingQueryResult.Found).node.id, (b as BuildingQueryResult.Found).node.id)
     }
+
+    private val danisma = MapNode("d", 0.0, 0.0, NodeType.WAYPOINT, "Danışma")
+    private val asansor = MapNode("a", 0.0, 10.0, NodeType.ELEVATOR, "Asansör")
+    private val ust = MapNode("u", 0.0, 1.0, NodeType.WAYPOINT, "Üst kat holü")
+    private val whereNodes = listOf(danisma, asansor, ust, MapNode("bend", 0.0, 5.0, NodeType.CORRIDOR))
+    private val whereFloors = mapOf("d" to 0, "a" to 0, "u" to 1, "bend" to 0)
+    private fun at(y: Double) = com.appvalence.umay.coremodel.Position(0.0, y, 0, 0.0, 1.0, com.appvalence.umay.coremodel.PositionSource.FUSED, 0L)
+
+    @Test
+    fun `where am I, standing at a place, names just that place on this floor`() {
+        val result = BuildingQueryMatcher.match("Ben neredeyim?", whereNodes, whereFloors, at(0.5)) as BuildingQueryResult.WhereAmI
+
+        assertEquals("Danışma", result.nearest?.name)
+        assertEquals(null, result.second)
+    }
+
+    @Test
+    fun `where am I, between places, names the two nearest, never a corridor bend`() {
+        val result = BuildingQueryMatcher.match("şu an nerdeyim", whereNodes, whereFloors, at(4.0)) as BuildingQueryResult.WhereAmI
+
+        assertEquals(listOf("Danışma", "Asansör"), listOf(result.nearest?.name, result.second?.name))
+        assertEquals(4.0, result.nearestMeters, 1e-9)
+    }
+
+    @Test
+    fun `where am I without a position yet says so`() {
+        val result = BuildingQueryMatcher.match("neredeyim", whereNodes, whereFloors, null) as BuildingQueryResult.WhereAmI
+
+        assertEquals(null, result.nearest)
+    }
 }

@@ -53,11 +53,8 @@ object HapticPatterns {
         GuidanceCue.HAZARD_AHEAD -> pattern(off(0), on(350, STRONG), off(180), on(350, STRONG))
         GuidanceCue.FLOOR_CHANGE -> pattern(off(0), on(300, MEDIUM), off(150), on(80, MEDIUM), off(150), on(300, MEDIUM))
         GuidanceCue.ARRIVED -> pattern(off(0), on(500, MEDIUM), off(150), on(120, MEDIUM))
-        GuidanceCue.OBSTACLE_WARNING -> pattern(off(0), on(140, MEDIUM), off(100), on(140, MEDIUM), off(100), on(140, MEDIUM))
-        GuidanceCue.OBSTACLE_CRITICAL -> pattern(
-            off(0), on(110, STRONG), off(50), on(110, STRONG), off(50), on(110, STRONG), off(50), on(110, STRONG), off(50), on(110, STRONG),
-        )
         GuidanceCue.REROUTED -> pattern(off(0), on(80, SOFT), off(120), on(280, MEDIUM))
         GuidanceCue.NO_ROUTE -> pattern(off(0), on(700, MEDIUM))
+        GuidanceCue.WRONG_WAY -> pattern(off(0), on(250, STRONG), off(120), on(60, STRONG), off(120), on(250, STRONG))
     }
 }

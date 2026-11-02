@@ -27,6 +27,13 @@ import kotlin.math.sign
  *
  * Readings are averaged over [SMOOTHING_WINDOW_MS] to smooth out the
  * sensor's sample-to-sample noise.
+ *
+ * Disarmed and armed again for the same floor soon after (a new route worked
+ * out halfway up the stairs, whose first leg is on this floor and so expects
+ * no change for a moment), the climb is still measured from where it began,
+ * not from wherever the walker had got to: re-measured from there it never
+ * reaches the bar, and the change is never confirmed (simulated walks: the
+ * walker upstairs, the app sending them up the stairs again and again).
  */
 class BarometricFloorChangeDetector(
     private val floorHeightMeters: Double = DEFAULT_FLOOR_HEIGHT_METERS,
@@ -34,6 +41,13 @@ class BarometricFloorChangeDetector(
     private val window = AltitudeWindow(SMOOTHING_WINDOW_MS)
     private var expectedFloorDelta = 0
     private var baselineMeters: Double? = null
+    private var armedFromFloor = 0
+    private var latestMs: Long? = null
+
+    // The baseline of the last arming, kept a while after disarming (see class doc).
+    private class Baseline(val floor: Int, val meters: Double, val disarmedAtMs: Long)
+
+    private var previousBaseline: Baseline? = null
 
     val isArmed: Boolean get() = expectedFloorDelta != 0
 
@@ -44,10 +58,15 @@ class BarometricFloorChangeDetector(
         expectedFloorDelta = delta
         // Baseline is where the user was *before* the climb started; null until the
         // first reading arrives if nothing has been measured yet.
-        baselineMeters = window.smoothedMeters()
+        val recent = previousBaseline?.takeIf { it.floor == fromFloor && (latestMs ?: it.disarmedAtMs) - it.disarmedAtMs <= BASELINE_REUSE_MS }
+        baselineMeters = recent?.meters ?: window.smoothedMeters()
+        armedFromFloor = fromFloor
+        previousBaseline = null
     }
 
     fun disarm() {
+        val baseline = baselineMeters
+        if (isArmed && baseline != null) previousBaseline = Baseline(armedFromFloor, baseline, latestMs ?: 0L)
         expectedFloorDelta = 0
         baselineMeters = null
     }
@@ -60,6 +79,7 @@ class BarometricFloorChangeDetector(
 
     fun onPressure(hPa: Double, timestampMs: Long): Boolean {
         window.add(hPa, timestampMs)
+        latestMs = timestampMs
 
         if (!isArmed) return false
         val smoothed = window.smoothedMeters() ?: return false
@@ -71,6 +91,8 @@ class BarometricFloorChangeDetector(
         if (abs(window.verticalSpeedMps() ?: return false) > SETTLED_VERTICAL_SPEED_MPS) return false
 
         disarm()
+        // Done: the walker is on another floor now, nothing to measure from.
+        previousBaseline = null
         return true
     }
 
@@ -82,5 +104,8 @@ class BarometricFloorChangeDetector(
 
         // Walking up stairs climbs ~0.3-0.5 m/s, elevators ~1-2 m/s; standing still reads ~0.
         const val SETTLED_VERTICAL_SPEED_MPS = 0.15
+
+        // Weather moves pressure by a metre's worth in well under an hour; a minute's is nothing.
+        const val BASELINE_REUSE_MS = 60_000L
     }
 }

@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appvalence.umay.common.StoredFile
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.coremodel.FieldLogSummary
+import com.appvalence.umay.common.Distribution
 import com.appvalence.umay.di.IoDispatcher
 import com.appvalence.umay.diagnostics.CrashReports
 import com.appvalence.umay.fieldlog.FieldLogFiles
@@ -27,6 +29,8 @@ enum class FilesMessage { EXPORT_FAILED, LOGS_SHARE_FAILED, LOG_SHARE_FAILED, CR
 data class FilesUiState(
     val buildings: List<BuildingMap> = emptyList(),
     val logs: List<StoredFile> = emptyList(),
+    /** Each log's "Buradayım" accuracy, by file path; missing until read (see [FieldLogSummary]). */
+    val logSummaries: Map<String, FieldLogSummary> = emptyMap(),
     val crashReports: List<StoredFile> = emptyList(),
     val recordingEnabled: Boolean = false,
     /** An exported copy of a building, ready for the share sheet. */
@@ -46,7 +50,11 @@ class FilesViewModel @Inject constructor(
     private val fieldLogs: FieldLogFiles,
     private val crashReports: CrashReports,
     @param:IoDispatcher private val io: CoroutineDispatcher,
+    distribution: Distribution,
 ) : ViewModel() {
+    /** False in the institution build, which has no internet to reach the pool with. */
+    val showsSharedMapPool: Boolean = distribution.sharedMapPool
+
     private val local = MutableStateFlow(FilesUiState(recordingEnabled = fieldLogs.isRecordingEnabled))
 
     val state: StateFlow<FilesUiState> = combine(buildings.buildings, local) { all, current -> current.copy(buildings = all.orEmpty()) }
@@ -58,6 +66,10 @@ class FilesViewModel @Inject constructor(
             val logs = withContext(io) { StoredFile.of(fieldLogs.listLogs()) }
             val crashes = withContext(io) { StoredFile.of(crashReports.list()) }
             local.update { it.copy(logs = logs, crashReports = crashes) }
+            // Then each log's accuracy: a long walk's log is megabytes, so only logs that
+            // are new or changed since last time are read again.
+            val summaries = withContext(io) { logs.associate { it.file.path to summaryOf(it) } }
+            local.update { it.copy(logSummaries = summaries) }
         }
     }
 
@@ -88,6 +100,17 @@ class FilesViewModel @Inject constructor(
     fun showMessage(message: FilesMessage) = local.update { it.copy(message = message) }
 
     fun messageShown() = local.update { it.copy(message = null) }
+
+    private val summaryCache = HashMap<String, Pair<Long, FieldLogSummary>>()
+
+    /** Disk I/O. Two refreshes can overlap (the screen shown twice quickly), hence the lock. */
+    private fun summaryOf(log: StoredFile): FieldLogSummary {
+        val stamp = log.modifiedAtMs * 31 + log.sizeBytes
+        synchronized(summaryCache) { summaryCache[log.file.path]?.takeIf { it.first == stamp }?.let { return it.second } }
+        val summary = runCatching { log.file.useLines { FieldLogSummary.of(it) } }.getOrElse { FieldLogSummary(0, 0, null, null, null) }
+        synchronized(summaryCache) { summaryCache[log.file.path] = stamp to summary }
+        return summary
+    }
 
     private fun deleteThenRefresh(delete: () -> Unit) {
         viewModelScope.launch {

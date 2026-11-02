@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The institution build with the institution's own map server (see app/build.gradle.kts,
+     docs/SUNUCU.md): the internet permission stays, but the generated network security
+     config lets it reach that server's host and nothing else. No backup, as without one. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/institution_data_extraction_rules"
+        android:networkSecurityConfig="@xml/institution_network_security_config"
+        tools:replace="android:allowBackup,android:fullBackupContent,android:dataExtractionRules" />
+
+</manifest>

@@ -2,8 +2,11 @@ package com.appvalence.umay.navigation
 
 import androidx.lifecycle.SavedStateHandle
 import com.appvalence.umay.coremodel.BuildingMap
+import com.appvalence.umay.coremodel.RadioFingerprint
+import com.appvalence.umay.coremodel.BleBeaconReading
 import com.appvalence.umay.storage.BuildingRepository
 import com.appvalence.umay.testing.FakeBuildingMapStore
+import com.appvalence.umay.testing.FakeBeaconScanner
 import com.appvalence.umay.testing.FakeCapabilities
 import com.appvalence.umay.testing.FakeFieldLogFiles
 import com.appvalence.umay.testing.FakeNavigationSessions
@@ -30,11 +33,12 @@ class NavigationViewModelTest {
     val main = MainDispatcherRule()
 
     private val sessions = FakeNavigationSessions()
+    private val scanner = FakeBeaconScanner()
     private val threeNodes = building("Ofis", nodes = listOf(node("a", 0.0), node("b", 5.0), node("c", 10.0)))
 
     private fun TestScope.viewModel(buildings: List<BuildingMap>, saved: SavedStateHandle = SavedStateHandle()): NavigationViewModel {
         val repository = BuildingRepository({ FakeBuildingMapStore(buildings) }, backgroundScope, main.dispatcher).apply { refresh() }
-        return NavigationViewModel(repository, sessions, FakeUserSettings(), FakeFieldLogFiles(), FakeCapabilities(), FakeSpeaker(), saved).also { viewModel ->
+        return NavigationViewModel(repository, sessions, FakeUserSettings(), FakeFieldLogFiles(), FakeCapabilities(), FakeSpeaker(), saved, scanner).also { viewModel ->
             backgroundScope.launch { viewModel.state.collect {} }
         }
     }
@@ -122,5 +126,76 @@ class NavigationViewModelTest {
         advanceUntilIdle()
 
         assertEquals(2, viewModel.state.value.selected!!.startIndex)
+    }
+
+    // --- Finding where the walk starts ---
+
+    private fun reading(id: String, rssi: Int) = BleBeaconReading(id, "", null, "u", 1, 1, rssi, -59, 1.0, 0L)
+
+    // Three places, each with its own signature over beacons b1 and b2.
+    private val fingerprinted = building(
+        "Ofis",
+        nodes = listOf(
+            node("a", 0.0).copy(fingerprint = listOf(RadioFingerprint("b1", -55.0), RadioFingerprint("b2", -85.0))),
+            node("b", 5.0).copy(fingerprint = listOf(RadioFingerprint("b1", -70.0), RadioFingerprint("b2", -70.0))),
+            node("c", 10.0).copy(fingerprint = listOf(RadioFingerprint("b1", -85.0), RadioFingerprint("b2", -55.0))),
+        ),
+    )
+
+    private suspend fun TestScope.hearAt(rssi1: Int, rssi2: Int, times: Int = 3) {
+        repeat(times) {
+            scanner.beacons.value = listOf(reading("b1", rssi1 + it % 2), reading("b2", rssi2))
+            advanceUntilIdle()
+        }
+    }
+
+    @Test
+    fun `a confident place is suggested as the start, and accepting it sets it`() = runTest(main.dispatcher) {
+        val viewModel = viewModel(listOf(fingerprinted))
+        advanceUntilIdle()
+        viewModel.findStart()
+        assertTrue(scanner.started)
+
+        hearAt(-70, -70)
+
+        assertEquals("b", viewModel.startHint.value.suggested?.id)
+        assertEquals("b", viewModel.startHint.value.nearbyIds.first())
+        viewModel.acceptSuggestedStart()
+        assertEquals(1, viewModel.state.value.selected!!.startIndex)
+        assertEquals(null, viewModel.startHint.value.suggested)
+    }
+
+    @Test
+    fun `a declined place isn't suggested again`() = runTest(main.dispatcher) {
+        val viewModel = viewModel(listOf(fingerprinted))
+        advanceUntilIdle()
+        viewModel.findStart()
+        hearAt(-70, -70)
+
+        viewModel.declineSuggestedStart()
+        hearAt(-70, -70)
+
+        assertEquals(null, viewModel.startHint.value.suggested)
+    }
+
+    @Test
+    fun `starting the walk stops the picker's own scan`() = runTest(main.dispatcher) {
+        val viewModel = viewModel(listOf(fingerprinted))
+        advanceUntilIdle()
+        viewModel.findStart()
+
+        viewModel.begin()
+
+        assertFalse(scanner.started)
+    }
+
+    @Test
+    fun `a map surveyed without beacons doesn't scan at all`() = runTest(main.dispatcher) {
+        val viewModel = viewModel(listOf(threeNodes))
+        advanceUntilIdle()
+
+        viewModel.findStart()
+
+        assertFalse(scanner.started)
     }
 }

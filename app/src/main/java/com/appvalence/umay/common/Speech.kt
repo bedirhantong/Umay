@@ -55,6 +55,7 @@ fun VoiceStatusNotice(status: VoiceStatus, onRecheck: () -> Unit, modifier: Modi
     }
     val message = when (status) {
         VoiceStatus.MISSING_DATA -> R.string.voice_missing_data
+        VoiceStatus.NETWORK_ONLY -> R.string.voice_network_only
         VoiceStatus.NOT_SUPPORTED -> R.string.voice_not_supported
         VoiceStatus.ENGINE_UNAVAILABLE -> R.string.voice_engine_unavailable
         VoiceStatus.INITIALIZING, VoiceStatus.READY -> return

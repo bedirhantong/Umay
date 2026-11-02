@@ -1,6 +1,8 @@
 package com.appvalence.umay.positioning.trilateration
 
 import com.appvalence.umay.coremodel.NodeType
+import com.appvalence.umay.coremodel.Position
+import com.appvalence.umay.coremodel.PositionSource
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -160,5 +162,142 @@ class BeaconMapBuilderTest {
         val map = BeaconMapBuilder.buildFromWaypoints("test-building", waypoints)
 
         assertTrue(map.floorTransitions.isEmpty())
+    }
+
+    private fun walked(vararg points: Pair<Double, Double>, floor: Int = 0) =
+        points.mapIndexed { i, (x, y) -> Position(x, y, floor, 0.0, 0.1, PositionSource.MAP_MATCHED, i.toLong()) }
+
+    @Test
+    fun `a camera-surveyed walk round a corner adds the corner as an unnamed corridor node`() {
+        // Tagged at the start and after turning the corner; the walk between them is an L.
+        val trajectory = walked(0.0 to 0.0, 0.0 to 5.0, 0.0 to 10.0, 5.0 to 10.0, 10.0 to 10.0)
+        val waypoints = listOf(
+            TaggedWaypoint("Giriş", 0.0, 0.0, 0, emptyList(), trajectoryIndex = 1),
+            TaggedWaypoint("Oda", 10.0, 10.0, 0, emptyList(), trajectoryIndex = 5),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints, trajectory = trajectory).floors.single()
+
+        val corner = floor.nodes.single { it.type == NodeType.CORRIDOR }
+        assertEquals(0.0, corner.x, 1e-9)
+        assertEquals(10.0, corner.y, 1e-9)
+        assertEquals(2, floor.edges.size)
+        assertEquals(20.0, floor.edges.sumOf { it.distanceMeters }, 1e-9, "the edges follow the walk, not the diagonal")
+    }
+
+    @Test
+    fun `waypoints without a trajectory index keep their straight edges`() {
+        val trajectory = walked(0.0 to 0.0, 0.0 to 10.0, 10.0 to 10.0)
+        val waypoints = listOf(
+            TaggedWaypoint("Giriş", 0.0, 0.0, 0, emptyList()),
+            TaggedWaypoint("Oda", 10.0, 10.0, 0, emptyList()),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints, trajectory = trajectory).floors.single()
+
+        assertTrue(floor.nodes.none { it.type == NodeType.CORRIDOR })
+        assertEquals(1, floor.edges.size)
+    }
+
+    private fun tag(name: String, x: Double, y: Double, floor: Int = 0, rssi: Double = -60.0, type: NodeType = NodeType.WAYPOINT) =
+        TaggedWaypoint(name, x, y, floor, listOf(com.appvalence.umay.coremodel.RadioFingerprint("b1", rssi)), type)
+
+    @Test
+    fun `coming back to a place and naming it again joins the walk's branches there`() {
+        // A T: walk from the entrance to the junction, down the left arm, back to the
+        // junction (named again, a little off by dead reckoning), then down the right arm.
+        val waypoints = listOf(
+            tag("Giriş", 0.0, 0.0),
+            tag("Kavşak", 0.0, 10.0, rssi = -60.0),
+            tag("Sol oda", -10.0, 10.0),
+            tag(" kavşak ", 0.8, 10.6, rssi = -70.0),
+            tag("Sağ oda", 10.0, 10.0),
+        )
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints).floors.single()
+
+        assertEquals(4, floor.nodes.size)
+        val junction = floor.nodes.single { it.name == "Kavşak" }
+        // Between the two visits: loop closure pulls them together, spreading the difference
+        // over the walk in between.
+        assertTrue(junction.x in 0.0..0.8, "junction at ${junction.x}")
+        assertEquals(-65.0, junction.fingerprint.single().rssi, 1e-9)
+        val junctionLinks = floor.edges.count { it.fromId == junction.id || it.toId == junction.id }
+        assertEquals(3, junctionLinks)
+        assertEquals(3, floor.edges.size)
+    }
+
+    @Test
+    fun `a footsteps survey's start, named again 5 m off by drift, is still one place`() {
+        // A 20 m square walked round and back to the start, the heading creeping 5° a
+        // stretch and the stride 5% long: dead reckoning ends 5 m from where it began.
+        val truth = listOf(0.0 to 0.0, 0.0 to 20.0, 20.0 to 20.0, 20.0 to 0.0, 0.0 to 0.0)
+        var x = 0.0
+        var y = 0.0
+        var heading = 0.0
+        val raw = mutableListOf(0.0 to 0.0)
+        for ((a, b) in truth.zipWithNext()) {
+            heading += 5.0
+            val bearing = Math.toDegrees(kotlin.math.atan2(b.first - a.first, b.second - a.second)) + heading
+            val length = kotlin.math.hypot(b.first - a.first, b.second - a.second) * 1.05
+            x += length * kotlin.math.sin(Math.toRadians(bearing))
+            y += length * kotlin.math.cos(Math.toRadians(bearing))
+            raw += x to y
+        }
+        val names = listOf("Giriş", "Kuzey", "Köşe", "Güney", "Giriş")
+        val waypoints = raw.mapIndexed { i, (px, py) -> tag(names[i], px, py) }
+        assertTrue(kotlin.math.hypot(raw.last().first, raw.last().second) > 3.0, "no drift to take out")
+
+        val floor = BeaconMapBuilder.buildFromWaypoints("b", waypoints).floors.single()
+
+        // Before loop closure, 5 m apart was two places, and the square never closed.
+        assertEquals(4, floor.nodes.size, "the start, named again, is one place")
+        // Pulling the two visits together mustn't bend the rest out of shape: how far apart
+        // each two places are, against the truth (the drawing may sit turned as a whole).
+        // A single loop's turning drift isn't undone by moving places, so no better either.
+        fun shapeError(points: List<Pair<Double, Double>>): Double {
+            val pairs = points.indices.flatMap { i -> (i + 1 until points.size).map { j -> i to j } }
+            return pairs.map { (i, j) ->
+                val drawn = kotlin.math.hypot(points[i].first - points[j].first, points[i].second - points[j].second)
+                val real = kotlin.math.hypot(truth[i].first - truth[j].first, truth[i].second - truth[j].second)
+                kotlin.math.abs(drawn - real)
+            }.average()
+        }
+        val closed = names.dropLast(1).map { name -> floor.nodes.single { it.name == name }.let { it.x to it.y } }
+        val before = shapeError(raw.dropLast(1))
+        val after = shapeError(closed)
+        assertTrue(after < before * 1.2, "distances between places off by %.2f m on average, %.2f m before".format(after, before))
+    }
+
+    @Test
+    fun `two places either side of a trip to another floor are not connected`() {
+        // Up the east stairs, along the upper corridor, down the west stairs.
+        val waypoints = listOf(
+            tag("Doğu merdiven alt", 0.0, 0.0, type = NodeType.STAIRS),
+            tag("Doğu merdiven üst", 0.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Batı merdiven üst", 30.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Batı merdiven alt", 30.0, 0.0, type = NodeType.STAIRS),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("b", waypoints)
+
+        assertTrue(map.floors.single { it.floorIndex == 0 }.edges.isEmpty(), "a straight line from one staircase to the other through the ground floor")
+        assertEquals(2, map.floorTransitions.size)
+    }
+
+    @Test
+    fun `down the same stairs that were walked up is one crossing`() {
+        val waypoints = listOf(
+            tag("Merdiven alt", 0.0, 0.0, type = NodeType.STAIRS),
+            tag("Merdiven üst", 0.0, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Oda", 5.0, 0.0, floor = 1),
+            tag("Merdiven üst", 0.5, 0.0, floor = 1, type = NodeType.STAIRS),
+            tag("Merdiven alt", 0.5, 0.0, type = NodeType.STAIRS),
+        )
+
+        val map = BeaconMapBuilder.buildFromWaypoints("b", waypoints)
+
+        assertEquals(1, map.floorTransitions.size)
+        assertEquals(2, map.floors.single { it.floorIndex == 1 }.nodes.size)
     }
 }

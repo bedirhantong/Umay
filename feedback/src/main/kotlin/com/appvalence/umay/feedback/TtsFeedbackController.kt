@@ -33,6 +33,12 @@ enum class VoiceStatus {
     /** The installed TTS engine has no voice for the language at all. */
     NOT_SUPPORTED,
 
+    /**
+     * The only voice for the language synthesizes on the engine's server: guidance is
+     * spoken, but its text leaves the phone until an on-device voice is installed.
+     */
+    NETWORK_ONLY,
+
     /** No working TTS engine on the device. */
     ENGINE_UNAVAILABLE,
 }
@@ -100,10 +106,10 @@ class TtsFeedbackController(
     @Suppress("DEPRECATION")
     private val legacyFocusListener = AudioManager.OnAudioFocusChangeListener { }
 
-    // Utterances queued or playing. Audio focus is held while this is non-empty and
-    // released as soon as it empties, so ducked music comes back right after speech.
+    // Utterances queued or playing, by id. Audio focus is held while this is non-empty
+    // and released as soon as it empties, so ducked music comes back right after speech.
     // Touched from the main thread (speak) and the TTS engine's callback thread.
-    private val activeUtterances = mutableSetOf<String>()
+    private val activeUtterances = LinkedHashMap<String, NavigationAlert>()
     private val status = MutableStateFlow(VoiceStatus.INITIALIZING)
 
     override val voiceStatus: StateFlow<VoiceStatus> = status.asStateFlow()
@@ -191,7 +197,8 @@ class TtsFeedbackController(
         return when (tts.setLanguage(speechLocale)) {
             TextToSpeech.LANG_MISSING_DATA -> VoiceStatus.MISSING_DATA
             TextToSpeech.LANG_NOT_SUPPORTED -> VoiceStatus.NOT_SUPPORTED
-            else -> VoiceStatus.READY
+            // The engine's own pick for the language may be one it synthesizes online.
+            else -> if (runCatching { tts.voice?.isNetworkConnectionRequired }.getOrNull() == true) VoiceStatus.NETWORK_ONLY else VoiceStatus.READY
         }
     }
 
@@ -206,12 +213,13 @@ class TtsFeedbackController(
 
     private fun speak(alert: NavigationAlert) {
         if (!acquireAudioFocus()) return // in a call (see class doc)
-        val queueMode = if (alert.priority == AlertPriority.CRITICAL) {
-            TextToSpeech.QUEUE_FLUSH
-        } else {
-            TextToSpeech.QUEUE_ADD
+        val queueMode = synchronized(activeUtterances) {
+            val flush = SpeechQueuePolicy.flushes(alert, activeUtterances.values)
+            // Whatever is flushed is gone, whenever the engine gets round to saying so.
+            if (flush) activeUtterances.clear()
+            activeUtterances[alert.id] = alert
+            if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
         }
-        synchronized(activeUtterances) { activeUtterances += alert.id }
         if (tts.speak(alert.message, queueMode, Bundle.EMPTY, alert.id) != TextToSpeech.SUCCESS) finished(alert.id)
     }
 
@@ -231,7 +239,7 @@ class TtsFeedbackController(
 
     private fun finished(utteranceId: String) {
         val nothingLeft = synchronized(activeUtterances) {
-            activeUtterances -= utteranceId
+            activeUtterances.remove(utteranceId)
             activeUtterances.isEmpty()
         }
         if (nothingLeft) abandonAudioFocus()
@@ -258,7 +266,6 @@ class TtsFeedbackController(
                 id = "narration-${System.nanoTime()}",
                 priority = AlertPriority.CRITICAL, // CRITICAL is what flushes the queue
                 message = text,
-                relatedObstacle = null,
                 createdAtMs = System.currentTimeMillis(),
             ),
         )

@@ -2,6 +2,8 @@ package com.appvalence.umay.coremodel
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class BuildingMapJsonTest {
 
@@ -73,5 +75,28 @@ class BuildingMapJsonTest {
     @Test
     fun `a blank building name is reported`() {
         assertEquals(listOf(MapProblem.BlankName), BuildingMapJson.problems(sampleMap.copy(id = "  ")))
+    }
+
+    @Test
+    fun `every written map says which format it is, first`() {
+        val encoded = BuildingMapJson.encode(sampleMap)
+
+        assertTrue(encoded.trimStart().removePrefix("{").trimStart().startsWith("\"formatVersion\": ${BuildingMapJson.FORMAT_VERSION}"), encoded.take(80))
+    }
+
+    @Test
+    fun `a map from before versioning still opens`() {
+        val legacy = BuildingMapJson.encode(sampleMap).replace(Regex("\"formatVersion\":\\s*\\d+,"), "")
+        assertTrue("formatVersion" !in legacy)
+
+        assertEquals(sampleMap, BuildingMapJson.decode(legacy))
+    }
+
+    @Test
+    fun `a map from a newer Umay is refused rather than half read`() {
+        val newer = BuildingMapJson.encode(sampleMap).replaceFirst("\"formatVersion\": ${BuildingMapJson.FORMAT_VERSION}", "\"formatVersion\": 99")
+
+        val error = assertFailsWith<NewerMapFormatException> { BuildingMapJson.decode(newer) }
+        assertEquals(99, error.version)
     }
 }

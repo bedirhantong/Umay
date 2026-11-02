@@ -2,9 +2,10 @@ package com.appvalence.umay.perception
 
 /**
  * Lets at most one frame through per [minIntervalMs]. Not thread-safe: call
- * from one thread (the camera analyzer's).
+ * from one thread (the camera analyzer's) — except [minIntervalMs], which may
+ * be changed from anywhere (a battery-saving slowdown) and is read as it is.
  */
-class FrameThrottle(private val minIntervalMs: Long) {
+class FrameThrottle(@Volatile var minIntervalMs: Long) {
     private var lastAcceptedAtMs: Long? = null
 
     /** True if a frame arriving at [nowMs] should be processed; the time is then recorded. */

@@ -26,6 +26,7 @@ data class RadioFingerprint(
  * information in the whole app, since the camera model only ever detects
  * people, never static structure like stairs or doors.
  */
+@Serializable
 data class TaggedWaypoint(
     val name: String,
     val x: Double,
@@ -33,4 +34,9 @@ data class TaggedWaypoint(
     val floor: Int,
     val fingerprint: List<RadioFingerprint>,
     val type: NodeType = NodeType.WAYPOINT,
+    /**
+     * How many trajectory points had been recorded when this was tagged, so the walked
+     * path between two tags can be recovered (see BeaconMapBuilder's corner nodes).
+     */
+    val trajectoryIndex: Int? = null,
 )

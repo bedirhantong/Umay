@@ -46,7 +46,7 @@ fun routeProgress(
     val metersToNext = if (nodeFloor[next.id] == position.floor) hypot(next.x - position.x, next.y - position.y) else null
     // Off-floor next node: the leg toward it is a floor crossing, so charge it the
     // same way as any other transition rather than pretend it's free.
-    var total = metersToNext ?: transitionCost(route[nextRouteIndex - 1], next)
+    var total = metersToNext ?: route.getOrNull(nextRouteIndex - 1)?.let { transitionCost(it, next) } ?: 0.0
     for (i in nextRouteIndex until route.lastIndex) {
         val from = route[i]
         val to = route[i + 1]

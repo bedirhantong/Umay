@@ -36,26 +36,29 @@ class PositionFusionEngine(
             fused
         }
 
-    private fun blend(previous: Position?, correction: Position): Position {
-        if (previous == null) return correction.copy(source = PositionSource.FUSED)
-
-        val pdrVariance = previous.accuracyMeters * previous.accuracyMeters
-        val correctionVariance = correction.accuracyMeters * correction.accuracyMeters
-        val correctionWeight = pdrVariance / (pdrVariance + correctionVariance)
-
-        return Position(
-            x = previous.x * (1 - correctionWeight) + correction.x * correctionWeight,
-            y = previous.y * (1 - correctionWeight) + correction.y * correctionWeight,
-            floor = correction.floor,
-            headingDeg = previous.headingDeg,
-            accuracyMeters = sqrt(1.0 / (1.0 / pdrVariance + 1.0 / correctionVariance)),
-            source = PositionSource.FUSED,
-            timestampMs = correction.timestampMs,
-        )
-    }
-
     private sealed interface Reading {
         data class Correction(val position: Position) : Reading
         data class Pdr(val position: Position) : Reading
+    }
+
+    companion object {
+        // Shared with FieldLogReplay, which replays this pipeline synchronously.
+        internal fun blend(previous: Position?, correction: Position): Position {
+            if (previous == null) return correction.copy(source = PositionSource.FUSED)
+
+            val pdrVariance = previous.accuracyMeters * previous.accuracyMeters
+            val correctionVariance = correction.accuracyMeters * correction.accuracyMeters
+            val correctionWeight = pdrVariance / (pdrVariance + correctionVariance)
+
+            return Position(
+                x = previous.x * (1 - correctionWeight) + correction.x * correctionWeight,
+                y = previous.y * (1 - correctionWeight) + correction.y * correctionWeight,
+                floor = correction.floor,
+                headingDeg = previous.headingDeg,
+                accuracyMeters = sqrt(1.0 / (1.0 / pdrVariance + 1.0 / correctionVariance)),
+                source = PositionSource.FUSED,
+                timestampMs = correction.timestampMs,
+            )
+        }
     }
 }
