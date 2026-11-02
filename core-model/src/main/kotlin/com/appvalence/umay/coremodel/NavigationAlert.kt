@@ -18,8 +18,6 @@ enum class GuidanceCue {
     HAZARD_AHEAD,
     FLOOR_CHANGE,
     ARRIVED,
-    OBSTACLE_WARNING,
-    OBSTACLE_CRITICAL,
     REROUTED,
     NO_ROUTE,
 
@@ -31,7 +29,6 @@ data class NavigationAlert(
     val id: String,
     val priority: AlertPriority,
     val message: String,
-    val relatedObstacle: DetectedObstacle?,
     val createdAtMs: Long,
     val cue: GuidanceCue = GuidanceCue.NONE,
     /**

@@ -1,7 +1,15 @@
 package com.appvalence.umay.survey
 
 import android.graphics.Paint
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import com.appvalence.umay.coremodel.SpatialMap
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -11,8 +19,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -23,14 +34,23 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import com.appvalence.umay.R
 import com.appvalence.umay.common.drawWallLayer
 import com.appvalence.umay.common.rememberWallMapImage
+import com.appvalence.umay.common.FloorPlanViewport
+import com.appvalence.umay.common.drawSpatialMap
+import com.appvalence.umay.common.drawMetricScale
+import com.appvalence.umay.common.floorPlanBounds
+import com.appvalence.umay.common.rememberSpatialMapDrawing
+import com.appvalence.umay.common.nearestWall
+import com.appvalence.umay.coremodel.MetricPoint
 import com.appvalence.umay.coremodel.OccupancyRaster
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.TaggedWaypoint
 import com.appvalence.umay.positioning.trilateration.BeaconSurveyResult
-import kotlin.math.min
+import kotlin.math.sin
+import kotlin.math.cos
 
 /**
  * Live top-down view of the on-site survey for the current floor: the
@@ -58,15 +78,34 @@ fun SurveyMapCanvas(
     wallMap: OccupancyRaster? = null,
     livePosition: Position? = null,
     height: Dp = 240.dp,
+    spatialMap: SpatialMap? = null,
+    onReviewWall: (com.appvalence.umay.coremodel.WallSegment, Boolean) -> Unit = { _, _ -> },
+    floorIndex: Int = livePosition?.floor ?: trajectory.firstOrNull()?.floor ?: 0,
 ) {
     val wallImage by rememberWallMapImage(
         raster = wallMap,
         seenFloorColor = MaterialTheme.colorScheme.surfaceVariant,
         wallColor = MaterialTheme.colorScheme.onSurface,
     )
+    val frameId = spatialMap?.coordinateFrameId
+    var manualViewport by remember(floorIndex, frameId) { mutableStateOf<FloorPlanViewport?>(null) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    var selectedWall by remember(floorIndex, frameId) { mutableStateOf(0) }
+    val drawing = rememberSpatialMapDrawing(spatialMap)
+    val bounds = remember(spatialMap, wallMap, trajectory, results, waypoints, livePosition) {
+        floorPlanBounds(spatialMap, wallMap, trajectory.map { MetricPoint(it.x, it.y) } +
+            results.map { MetricPoint(it.x, it.y) } + waypoints.map { MetricPoint(it.x, it.y) } +
+            listOfNotNull(livePosition?.let { MetricPoint(it.x, it.y) }))
+    }
+    val viewport = bounds?.let {
+        manualViewport?.copy(widthPixels = canvasSize.width.toDouble(), heightPixels = canvasSize.height.toDouble())
+            ?: FloorPlanViewport.fit(it, canvasSize.width.toDouble(), canvasSize.height.toDouble())
+    }
+    val currentViewport by rememberUpdatedState(viewport)
+    val currentWalls by rememberUpdatedState(spatialMap?.walls.orEmpty())
     Column(modifier = modifier) {
         Text(text = stringResource(R.string.survey_preview_title), style = MaterialTheme.typography.titleSmall)
-        if (trajectory.isEmpty() && results.isEmpty() && waypoints.isEmpty() && wallMap == null) {
+        if (bounds == null) {
             Text(
                 text = stringResource(R.string.survey_preview_empty),
                 style = MaterialTheme.typography.bodySmall,
@@ -74,6 +113,7 @@ fun SurveyMapCanvas(
             )
             return@Column
         }
+        TextButton(onClick = { manualViewport = null }) { Text(stringResource(R.string.map_fit)) }
 
         val labelPaint = remember {
             Paint().apply {
@@ -81,6 +121,7 @@ fun SurveyMapCanvas(
                 textSize = WAYPOINT_LABEL_TEXT_SIZE_PX
             }
         }
+        val scalePaint = remember { Paint(Paint.ANTI_ALIAS_FLAG) }
 
         // A picture for the eye; for TalkBack, what it shows in words.
         val description = pluralStringResource(R.plurals.survey_preview_description, waypoints.size, waypoints.size, if (wallMap != null) stringResource(R.string.survey_preview_with_walls) else "")
@@ -89,40 +130,35 @@ fun SurveyMapCanvas(
                 .fillMaxWidth()
                 .height(height)
                 .padding(top = 4.dp)
-                .semantics { contentDescription = description },
+                .clipToBounds()
+                .onSizeChanged { canvasSize = it }
+                .semantics { contentDescription = description }
+                .pointerInput(floorIndex, frameId) {
+                    detectTransformGestures { centroid, delta, factor, _ ->
+                        val active = manualViewport?.copy(widthPixels = size.width.toDouble(), heightPixels = size.height.toDouble()) ?: currentViewport
+                        manualViewport = active?.transformed(centroid.x.toDouble(), centroid.y.toDouble(), factor.toDouble(), delta.x.toDouble(), delta.y.toDouble())
+                    }
+                }
+                .pointerInput(floorIndex, frameId) {
+                    detectTapGestures { tap ->
+                        val view = currentViewport ?: return@detectTapGestures
+                        nearestWall(currentWalls, view, tap.x.toDouble(), tap.y.toDouble(), 24.dp.toPx().toDouble())?.let { selectedWall = it }
+                    }
+                },
         ) {
             val walls = wallImage
-            val wallXs = walls?.let { listOf(it.originX, it.originX + it.widthMeters) }.orEmpty()
-            val wallYs = walls?.let { listOf(it.originY, it.originY + it.heightMeters) }.orEmpty()
-            val allX = trajectory.map { it.x } + results.map { it.x } + waypoints.map { it.x } + wallXs + listOfNotNull(livePosition?.x)
-            val allY = trajectory.map { it.y } + results.map { it.y } + waypoints.map { it.y } + wallYs + listOfNotNull(livePosition?.y)
-            if (allX.isEmpty()) return@Canvas
-            val minX = allX.min()
-            val maxX = allX.max()
-            val minY = allY.min()
-            val maxY = allY.max()
-            val spanX = (maxX - minX).coerceAtLeast(MIN_SPAN_METERS)
-            val spanY = (maxY - minY).coerceAtLeast(MIN_SPAN_METERS)
-            val padding = CANVAS_PADDING_PX
-
-            // One scale for both axes, so a square room stays square — stretching x and y
-            // independently to fill the canvas distorts every corridor's proportions.
-            val scale = min((size.width - 2 * padding) / spanX, (size.height - 2 * padding) / spanY)
-            val centerX = (minX + maxX) / 2
-            val centerY = (minY + maxY) / 2
-
-            fun toOffset(x: Double, y: Double): Offset = Offset(
-                x = (size.width / 2 + (x - centerX) * scale).toFloat(),
-                // Flip y so "up" on screen matches increasing y in the survey's
-                // coordinate convention (see BeaconScannerScreen's field notes).
-                y = (size.height / 2 - (y - centerY) * scale).toFloat(),
-            )
+            val view = viewport ?: return@Canvas
+            fun toOffset(x: Double, y: Double): Offset {
+                val (sx,sy) = view.toScreen(MetricPoint(x,y))
+                return Offset(sx.toFloat(),sy.toFloat())
+            }
 
             if (walls != null) {
                 val topLeft = toOffset(walls.originX, walls.originY + walls.heightMeters)
-                drawWallLayer(walls.seenFloor, walls, topLeft, scale.toFloat())
-                drawWallLayer(walls.walls, walls, topLeft, scale.toFloat())
+                drawWallLayer(walls.seenFloor, walls, topLeft, view.pixelsPerMeter.toFloat())
+                drawWallLayer(walls.walls, walls, topLeft, view.pixelsPerMeter.toFloat())
             }
+            drawSpatialMap(drawing, view, spatialMap?.walls?.getOrNull(selectedWall))
 
             if (trajectory.size >= 2) {
                 val path = Path().apply {
@@ -152,22 +188,41 @@ fun SurveyMapCanvas(
             }
 
             (livePosition ?: trajectory.lastOrNull())?.let { last ->
-                drawCircle(color = CURRENT_POSITION_COLOR, radius = CURRENT_POSITION_RADIUS_PX, center = toOffset(last.x, last.y))
+                val center = toOffset(last.x, last.y)
+                val heading = Math.toRadians(last.headingDeg)
+                drawLine(CURRENT_POSITION_COLOR, center,
+                    center + Offset((sin(heading) * 28.dp.toPx()).toFloat(), (-cos(heading) * 28.dp.toPx()).toFloat()), 3.dp.toPx())
+                drawCircle(color = CURRENT_POSITION_COLOR, radius = CURRENT_POSITION_RADIUS_PX, center = center)
             }
+            drawMetricScale(view, scalePaint, Color.DarkGray)
         }
         Text(
             text = stringResource(R.string.survey_preview_legend),
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 4.dp),
         )
+        spatialMap?.let { geometry ->
+            Text(stringResource(R.string.map_geometry_legend), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.survey_geometry_status, geometry.walls.size, geometry.openings.size, geometry.observedRegions.size, geometry.integratedFrames), style = MaterialTheme.typography.bodySmall)
+            if (com.appvalence.umay.coremodel.ReconstructionIssue.FLOOR_UNRESOLVED in geometry.issues) {
+                Text(stringResource(R.string.survey_floor_unresolved), style = MaterialTheme.typography.bodySmall)
+            }
+            val index = selectedWall.coerceIn(0, (geometry.walls.size - 1).coerceAtLeast(0))
+            geometry.walls.getOrNull(index)?.let { wall ->
+                Text(stringResource(R.string.survey_wall_evidence, index + 1, wall.independentFrames, wall.residualMeters), style = MaterialTheme.typography.bodySmall)
+                Row {
+                    TextButton(onClick = { selectedWall = (index + 1) % geometry.walls.size }) { Text(stringResource(R.string.survey_wall_next)) }
+                    TextButton(onClick = { onReviewWall(wall, true) }) { Text(stringResource(R.string.survey_wall_confirm)) }
+                    TextButton(onClick = { onReviewWall(wall, false) }) { Text(stringResource(R.string.survey_wall_reject)) }
+                }
+            }
+        }
         if (wallMap != null) {
             Text(text = stringResource(R.string.survey_preview_legend_walls), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
-private const val MIN_SPAN_METERS = 1.0
-private const val CANVAS_PADDING_PX = 24f
 private const val TRAJECTORY_STROKE_WIDTH_PX = 4f
 private const val BEACON_RADIUS_PX = 10f
 private const val CURRENT_POSITION_RADIUS_PX = 14f

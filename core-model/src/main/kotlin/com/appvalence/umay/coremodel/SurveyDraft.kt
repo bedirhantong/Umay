@@ -26,11 +26,13 @@ data class SurveyDraft(
     /** Per floor, see [CompassSums]. */
     val compass: Map<Int, CompassSums> = emptyMap(),
     val savedAtMs: Long,
+    val spatialMaps: Map<Int, SpatialMap> = emptyMap(),
+    val coordinateFrameId: String? = null,
 )
 
 object SurveyDraftJson {
     /** Bump on an incompatible change; a draft of another version is discarded rather than misread. */
-    const val SCHEMA_VERSION = 1
+    const val SCHEMA_VERSION = 2
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -41,7 +43,7 @@ object SurveyDraftJson {
 
     /** Null for anything that isn't a draft this version can read. */
     fun decode(text: String): SurveyDraft? =
-        runCatching { json.decodeFromString(SurveyDraft.serializer(), text) }.getOrNull()?.takeIf { it.schemaVersion == SCHEMA_VERSION }
+        runCatching { json.decodeFromString(SurveyDraft.serializer(), text) }.getOrNull()?.takeIf { it.schemaVersion in 1..SCHEMA_VERSION && it.spatialMaps.values.all(SpatialValidation::valid) }?.copy(schemaVersion = SCHEMA_VERSION)
 
     /** One line per batch of sightings, so a write cut short by the app being killed loses at most that batch. */
     fun encodeReadings(readings: List<BleBeaconReading>): String = json.encodeToString(ListSerializer(BleBeaconReading.serializer()), readings)

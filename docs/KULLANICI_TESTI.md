@@ -54,7 +54,6 @@ K1, K2… diye anılır.
 - [ ] **Dosyalar → Navigasyon sırasında kayıt tut** açık.
 - [ ] Görevlerin başlangıç ve hedef yerleri belli, rotalar refakatçilerle
   önceden yüründü.
-- [ ] Engel görevi için bir sandalye ve bir kişi hazır.
 - [ ] Göğüs askısı (varsa) hazır.
 
 ---
@@ -71,7 +70,7 @@ Refakatçi süreyi tutar ve aşağıdaki ölçümleri doldurur.
 | G3 | Yer işaretinin olduğu bir yerde **Kamerayla bul** ile başlangıcı bulmak | Bulundu mu, kaç saniyede, katılımcı nasıl döndü |
 | G4 | Aynı katta en az iki dönüşlü bir rota | Varış, süre, yanlış dönüş, refakatçi müdahalesi |
 | G5 | Kat değiştiren bir rota (merdiven ya da asansör) | Kat geçişi doğru algılandı mı, yönerge anlaşıldı mı |
-| G6 | Rota üzerinde konan bir sandalye ve duran bir kişi | Uyarı zamanında geldi mi, doğru adlandırıldı mı, çarpma oldu mu |
+| G6 | Rotadan bilerek çıkmak (yan koridora girmek, geri dönmek) | Rotadan çıkma söylendi mi, yeni yönerge anlaşıldı mı |
 | G7 | "Bir şey sor": "Tuvalet nerede?" | Anlaşıldı mı, yanıt doğru muydu |
 | G8 | Rotanın bir kısmını telefon cepteyken yürümek | Yönlendirme sürdü mü, konum ne kadar kaydı |
 

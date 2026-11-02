@@ -13,9 +13,8 @@ import kotlin.math.hypot
  * heuristic — admissible because it can never overestimate the true walking
  * distance along edges.
  *
- * [blockedEdges] lets a caller exclude specific edges (e.g. one an obstacle
- * is currently occupying, see [ObstacleEdgeMapper]) without mutating the
- * underlying graph; edges are treated as undirected for blocking purposes
+ * [blockedEdges] lets a caller exclude specific edges (e.g. one known to be
+ * closed) without mutating the underlying graph; edges are treated as undirected for blocking purposes
  * (either direction of the pair blocks it).
  */
 object AStarPathfinder {

@@ -1,8 +1,6 @@
 package com.appvalence.umay.simulation
 
-import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.NodeType
-import com.appvalence.umay.coremodel.ObstacleKind
 import com.appvalence.umay.orchestrator.FloorChangeMethod
 import com.appvalence.umay.orchestrator.GuidancePhrases
 import com.appvalence.umay.orchestrator.Turn
@@ -65,12 +63,6 @@ class StringsXmlPhrases(
 
     override fun turnAround(): String = if (clockDirections) string("say_turn_clock_now", 6) else string("say_turn_around")
 
-    override fun passObstacle(side: TurnDirection): String = when {
-        clockDirections -> string("say_pass_clock", if (side == TurnDirection.LEFT) 11 else 1)
-        side == TurnDirection.LEFT -> string("say_pass_left")
-        else -> string("say_pass_right")
-    }
-
     override fun approachDestination(distanceMeters: Double): String = string("say_approach_destination", meters(distanceMeters))
 
     override fun changeFloor(method: FloorChangeMethod, goingUp: Boolean, targetFloor: Int, arrivalPlaceName: String): String {
@@ -103,22 +95,11 @@ class StringsXmlPhrases(
 
     override fun noRoute(): String = string("say_no_route")
 
-    override fun rerouted(): String = string("say_rerouted")
-
     override fun noStepFreeRoute(): String = string("say_no_step_free_route")
 
     override fun offRoute(): String = string("say_off_route")
 
     override fun wrongWay(): String = string("say_wrong_way")
-
-    override fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String {
-        val what = string("obstacle_" + kind.name.lowercase(Locale.ROOT))
-        return when (priority) {
-            AlertPriority.CRITICAL -> string("say_obstacle_critical", what)
-            AlertPriority.WARNING -> string("say_obstacle_warning", meters(distanceMeters), what)
-            AlertPriority.INFO -> string("say_obstacle_info", meters(distanceMeters), what)
-        }
-    }
 
     companion object {
         private val TURKISH = Locale.forLanguageTag("tr")

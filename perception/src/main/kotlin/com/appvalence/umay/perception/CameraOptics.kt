@@ -5,11 +5,10 @@ import kotlin.math.tan
 
 /**
  * What the app assumes about a phone's main camera, in one place: how wide its
- * longer side sees. Every distance judged from an image (a person's height, a
- * marker's size) and every direction depends on it, and which side is the
- * longer one depends on how the frame is turned — the navigation frames are
- * upright (the phone held at the chest), the marker scanner's are the
- * sensor's own, on their side. Not measured per phone yet; field logs carry
+ * longer side sees. Every distance judged from an image (a marker's size)
+ * and every direction depends on it, and which side is the longer one depends
+ * on how the frame is turned — the marker scanner's frames are the sensor's
+ * own, on their side. Not measured per phone yet; field logs carry
  * it so it can be.
  */
 object CameraOptics {
@@ -30,10 +29,6 @@ object CameraOptics {
      */
     const val ANALYSIS_WIDTH_PX = 1280
     const val ANALYSIS_HEIGHT_PX = 960
-
-    /** How wide a frame markers are read in: full detail normally, half when saving power (CameraPowerPolicy). */
-    const val MARKER_FRAME_WIDTH_PX = 960
-    const val MARKER_FRAME_WIDTH_SAVING_PX = 640
 
     private fun fovOf(sidePx: Int, otherPx: Int): Double {
         if (sidePx >= otherPx || otherPx <= 0) return LONG_SIDE_FOV_DEGREES

@@ -49,11 +49,13 @@ class ArFrameSample(
     val pose: ArPose,
     val upwardPlaneHeights: List<Double>,
     val depth: DepthFrame?,
+    val coordinateFrameId: String = "legacy",
+    val acquiredAtElapsedMs: Long? = null,
 )
 
 /**
  * The phone's camera as a measuring instrument for the survey: motion tracking
- * (ARCore) for a centimetre-accurate walked path, and depth for the walls
+ * (ARCore) for a locally metric walked path, and depth for the walls
  * around it. The camera image itself is never shown or stored.
  *
  * Only works while the app is on screen (Android's camera rule), so the survey

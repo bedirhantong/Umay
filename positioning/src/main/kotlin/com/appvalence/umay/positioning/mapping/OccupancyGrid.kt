@@ -81,6 +81,15 @@ class OccupancyGrid(val cellSizeMeters: Double = DEFAULT_CELL_SIZE_METERS) {
         }
     }
 
+    /** One vote per endpoint cell per depth frame. Obstacles override floor evidence in that frame. */
+    fun addSurfaceFrame(floorPoints: List<Pair<Double, Double>>, obstaclePoints: List<Pair<Double, Double>>) {
+        fun keys(points: List<Pair<Double, Double>>) = points.filter { it.first.isFinite() && it.second.isFinite() }
+            .map { cellOf(it.first) to cellOf(it.second) }.toSet()
+        val occupied = keys(obstaclePoints)
+        (keys(floorPoints) - occupied).forEach { (x, y) -> vote(x, y, FREE_VOTE) }
+        occupied.forEach { (x, y) -> vote(x, y, OCCUPIED_VOTE) }
+    }
+
     fun logOdds(x: Double, y: Double): Float {
         val column = cellOf(x)
         val row = cellOf(y)
@@ -104,6 +113,7 @@ class OccupancyGrid(val cellSizeMeters: Double = DEFAULT_CELL_SIZE_METERS) {
 
         val width = maxColumn - minColumn + 1
         val height = maxRow - minRow + 1
+        if (width.toLong() * height > 2_000_000) return null
         val cells = ByteArray(width * height)
         forEachKnownCell { column, row, value -> cells[(row - minRow) * width + (column - minColumn)] = value }
         return OccupancyRaster.of(
@@ -129,7 +139,9 @@ class OccupancyGrid(val cellSizeMeters: Double = DEFAULT_CELL_SIZE_METERS) {
     }
 
     private fun vote(column: Int, row: Int, vote: Float) {
-        val chunk = chunks.getOrPut(chunkKey(column shr CHUNK_SHIFT, row shr CHUNK_SHIFT)) { FloatArray(CHUNK_SIZE * CHUNK_SIZE) }
+        val key = chunkKey(column shr CHUNK_SHIFT, row shr CHUNK_SHIFT)
+        if (key !in chunks && chunks.size >= 512) return
+        val chunk = chunks.getOrPut(key) { FloatArray(CHUNK_SIZE * CHUNK_SIZE) }
         val i = indexInChunk(column, row)
         chunk[i] = (chunk[i] + vote).coerceIn(-LOG_ODDS_LIMIT, LOG_ODDS_LIMIT)
     }

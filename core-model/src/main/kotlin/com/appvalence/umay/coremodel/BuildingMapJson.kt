@@ -37,7 +37,8 @@ object BuildingMapJson {
      *    (`FloorMap.doors`), radio maps (`FloorMap.radioMap`) and unnamed
      *    corridor-bend nodes.
      */
-    const val FORMAT_VERSION = 2
+    // 3: metric structural surface evidence and coordinate frame identity.
+    const val FORMAT_VERSION = 3
 
     private const val VERSION_KEY = "formatVersion"
 
@@ -57,7 +58,9 @@ object BuildingMapJson {
         val version = root[VERSION_KEY]?.jsonPrimitive?.intOrNull ?: 1
         if (version > FORMAT_VERSION) throw NewerMapFormatException(version)
         // 1 → 2 only added optional fields, so a version-1 map reads as it is.
-        return json.decodeFromJsonElement(BuildingMap.serializer(), JsonObject(root - VERSION_KEY))
+        return json.decodeFromJsonElement(BuildingMap.serializer(), JsonObject(root - VERSION_KEY)).also { map ->
+            require(map.floors.all { it.reconstruction?.let(SpatialValidation::valid) != false }) { "Invalid metric reconstruction evidence" }
+        }
     }
 
     /**
@@ -74,7 +77,7 @@ object BuildingMapJson {
         if (map.id.isBlank()) problems += MapProblem.BlankName
 
         val allNodes = map.floors.flatMap { it.nodes }
-        if (allNodes.isEmpty()) problems += MapProblem.NoNodes
+        if (allNodes.isEmpty() && map.floors.none { it.reconstruction?.hasGeometry == true }) problems += MapProblem.NoNodes
         if (allNodes.map { it.id }.toSet().size != allNodes.size) problems += MapProblem.DuplicateNodeIds
         if (map.floors.map { it.floorIndex }.toSet().size != map.floors.size) problems += MapProblem.DuplicateFloors
 

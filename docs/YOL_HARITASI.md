@@ -29,9 +29,8 @@ Kullanıcının gözünden akış:
 
    Kurumda beacon'lar konumu kabaca kendiliğinden de verir.
 3. **Gideceği yeri seçer.** Seçimi TalkBack ile listeden ya da sesle yapar.
-4. **İlerler.** Telefon göğüs hizasında, kamera önüne bakar. Uygulama sesli
-   ve titreşimli yönergeler verir, önüne çıkan engellere karşı uyarır. Telefon
-   cepteyken de adım ve beacon'larla yönlendirme sürer.
+4. **İlerler.** Uygulama sesli ve titreşimli yönergeler verir. Yönlendirme
+   kamera kullanmaz; telefon cepteyken de adım ve beacon'larla sürer.
 
 ### Değişmez ilkeler
 
@@ -52,20 +51,25 @@ Kullanıcının gözünden akış:
 
 ## Bugünkü durum
 
+> **Kapsam kararı (2026-10):** Umay yalnızca haritayı çıkarır ve yönlendirir.
+> Kamerayla engel ve insan algılama, tabela okuma, yürürken kameranın ısı/pil/
+> tutuş denetimi ve engele göre rota değiştirme koddan **kaldırıldı**. Aşağıda
+> bunlara ait maddeler (3.3'ün yürürken işaret okuma kısmı, 4.1, 4.4, 4.5, 4.10)
+> artık yapılmayacak; geçmiş kaydı olarak duruyor. Kamera yalnızca harita
+> çıkarırken (ARCore) ve yola çıkmadan önce QR işaretten başlangıç bulurken
+> kullanılır.
+
 | Alan | Durum | Nerede |
 |---|---|---|
 | Adım sayarak harita çıkarma, isimli yerler, beacon parmak izi | Çalışıyor | `main` |
 | Graf üzerinde A* rota, sesli ve titreşimli yönergeler, katlar arası geçiş | Çalışıyor | `main` |
-| Kamerayla insan algılama, tabela okuma, "Bir şey sor" | Çalışıyor | `main` |
+| "Bir şey sor" | Çalışıyor | `main` |
 | Ekran kapalıyken ve cepteyken yönlendirme | Çalışıyor | `main` |
 | Koridor grafiği üzerinde parçacık filtresi (konum) | Yazıldı, **sahada ölçülmedi** | `feat/graph-particle-filter` |
 | Saha kaydını eski ve yeni motorla yeniden oynatma | Yazıldı | `feat/graph-particle-filter` |
 | Kamerayla (ARCore) harita çıkarma, 2D duvar haritası, köşe noktaları | Yazıldı, **telefonda hiç çalışmadı** | `feat/ar-survey` |
 | Yer işaretleriyle (QR) konum bulma, "Kamerayla bul" | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
-| Kamerayla engel uyarısı: insan ve eşyalar (sandalye, masa, bank…) | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
-| 16 KB sayfa boyutu uyumu (LiteRT) | Yapıldı | `feat/ar-survey` |
 | Açık alanda kestirme bağlantılar, duvara dayalı yönerge | Yazıldı, **sahada doğrulanmadı** | `feat/ar-survey` |
-| Isı, pil ve telefonun tutuşuna göre kamera | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | Kurum harita sunucusu | Yazıldı, HTTP testleri geçiyor | `feat/ar-survey` |
 | Kapıların harita parçası olması | Yazıldı, **telefonda doğrulanmadı** | `feat/ar-survey` |
 | Harita düzenleme | Yazıldı, **TalkBack ile denenmedi** | `feat/ar-survey` |
@@ -88,8 +92,10 @@ boş kalır ve **Kod hazır** yazar; ne doğrulanacağı yanında belirtilir.
 
 Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla.
 
-- [ ] **0.1 Release derlemesi** (K). R8 küçültmeli `assembleRelease`
-  ARCore ve yeni serileştirilebilir sınıflarla derleniyor ve açılıyor.
+- [ ] **0.1 Release derlemesi** (K). **Kod hazır:** R8 küçültmeli
+  `assembleStandardRelease` ve `assembleInstitutionRelease` derleniyor
+  (5,2 ve 3,7 MB); native kütüphaneler 16 KB hizalı (`zipalign -P 16`
+  doğruladı). Telefonda açılması bekliyor.
   *Bitti:* imzasız release APK telefonda harita çıkarma ve yönlendirme
   ekranlarını açıyor.
 - [ ] **0.2 Kamerayla harita çıkarmayı telefonda dene** (K). Bu, Faz 3 ve
@@ -216,6 +222,27 @@ Yeni bir şeye geçmeden, yazılmış ama doğrulanmamış işi gerçeğe bağla
   simülatörün radyo modeline göre değil, saha kayıtlarına (0.3) göre
   ayarlanmalı.
   *Bitti:* klinikte yalnız beacon'la en az 30/36, ofiste kötüleşme yok.
+- [ ] **0.20 Kamerayla çıkan harita yönlendirilebilir mi?** (O). Sanal
+  kamera haritacısı (`VirtualCameraSurveyor`, `reconstruct = true`) artık
+  uygulamanın bugün çalıştırdığı hattan geçiyor: `MappingFrameGuard`,
+  `SpatialReconstructor` (160 × 120 güvenli derinlik) ve `ObservedRoutes`.
+  İlk ölçüm: sanal ofiste 23 yürünmüş kenardan **hiçbiri kalmıyor**, 20
+  yerin hiçbirine rota yok. Sebep gürültü ya da duvar değil, tamamen
+  *görülmemiş* zemin: kenarın 0,4 m çevresindeki hücrelerin hepsi "görülmüş
+  zemin" olmalı, oysa bir hücrenin zemin sayılması üç ayrı karede görülmesine
+  bağlı ve kamera yürüyenin altını ve yakın yanını (yaklaşık 2,6 m'den
+  yakını) hiç görmüyor. `ObservedRoutes` testi sınırlı iyileştirme aldı
+  (kapı eşiği, uç bölgeleri, tek hücrelik örnekleme boşluğu) ve 2 kenar
+  kalıyor. Denenip geri alınanlar (sanal derinlikle ayarlamak yanıltır):
+  zemin için bütün pikselleri oylamak (serbest hücre 3 kat), yürünen yolun
+  0,3 m çevresini zemin saymak, eşiği 0,3 m yapmak: en iyisi 23'ten 7 kenar.
+  Ayrıca 297 karede `EVIDENCE_LIMIT_REACHED` (30 bin voxel sınırı) doluyor.
+  Karar bekleyen: yürünmüş bir kenar, hiç *görülmemiş* (ama duvar da
+  görülmemiş) zeminden geçebilir mi? Geçemezse kanıt toplama telefonun
+  gerçek derinliğiyle yeniden kurulmalı; geçerse yürünen yol kanıt sayılır.
+  *Bitti:* gerçek telefonda çıkarılan bir katta yürünen kenarların
+  çoğu kalıyor, sanal ofiste en az %80'i; hiçbir kalan kenar duvardan
+  geçmiyor (`ReconstructedSurveyTest` bunu zaten sınıyor).
 - [ ] **0.14 Foto-gerçekçi ofis kopyası** (B). Gerçek bir ofisin telefon
   videosundan Gaussian splatting ile 3B kopya (nerfstudio ya da Mac'te
   OpenSplat; tek seferlik GPU işi). Kareleri 0.12'nin sanal kamerası yerine
@@ -484,9 +511,9 @@ Kurumla konuşmadan önce kapanması gereken açıklar. Hepsi küçük ve net.
   harita önizlemesi). TalkBack, büyük yazı ve yüksek kontrastla telefonda
   denetim bekliyor. Bütün ekranlar TalkBack,
   büyük yazı ve yüksek kontrastla denetlendi.
-- [ ] **5.5 Mağaza hazırlığı** (K). 16 KB sayfa boyutu çözüldü: insan
-  algılama LiteRT'ye taşındı, APK'daki bütün native kütüphaneler 16 KB
-  hizalı. Veri güvenliği özeti `docs/GIZLILIK.md`'de. Veri güvenliği formu, ARCore açıklaması,
+- [ ] **5.5 Mağaza hazırlığı** (K). 16 KB sayfa boyutu çözüldü:
+  engel algılama kaldırıldığı için TensorFlow/LiteRT APK'da yok, kalan bütün
+  native kütüphaneler 16 KB hizalı. Veri güvenliği özeti `docs/GIZLILIK.md`'de. Veri güvenliği formu, ARCore açıklaması,
   güvenlik uyarıları, 16 KB sayfa boyutu (`libtask_vision_jni.so`, Şubat
   2027 son tarih).
 

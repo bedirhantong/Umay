@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.key
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -60,8 +61,11 @@ fun OccupancyRaster.toWallMapImage(seenFloorColor: Color, wallColor: Color): Wal
 /** Decoded off the main thread: a large floor is hundreds of thousands of cells. */
 @Composable
 fun rememberWallMapImage(raster: OccupancyRaster?, seenFloorColor: Color, wallColor: Color): State<WallMapImage?> =
-    produceState<WallMapImage?>(initialValue = null, raster, seenFloorColor, wallColor) {
-        value = raster?.let { withContext(Dispatchers.Default) { it.toWallMapImage(seenFloorColor, wallColor) } }
+    key(raster, seenFloorColor, wallColor) {
+        // Never show the preceding floor/raster under the new floor's vector and hit-test transform.
+        produceState<WallMapImage?>(initialValue = null) {
+            value = raster?.let { withContext(Dispatchers.Default) { it.toWallMapImage(seenFloorColor, wallColor) } }
+        }
     }
 
 /**

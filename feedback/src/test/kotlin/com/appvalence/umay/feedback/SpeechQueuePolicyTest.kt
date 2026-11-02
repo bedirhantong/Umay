@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 class SpeechQueuePolicyTest {
     private fun alert(priority: AlertPriority = AlertPriority.INFO, guidance: Boolean = false) =
-        NavigationAlert(id = "a", priority = priority, message = "", relatedObstacle = null, createdAtMs = 0, isGuidance = guidance)
+        NavigationAlert(id = "a", priority = priority, message = "", createdAtMs = 0, isGuidance = guidance)
 
     @Test
     fun `new guidance replaces guidance not yet said`() {

@@ -11,7 +11,6 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
-import androidx.lifecycle.LifecycleOwner
 import com.appvalence.umay.R
 import com.appvalence.umay.common.speechLocale
 import com.appvalence.umay.coremodel.AlertPriority
@@ -22,7 +21,6 @@ import com.appvalence.umay.coremodel.FloorChangePhase
 import com.appvalence.umay.coremodel.GroundTruthEvent
 import com.appvalence.umay.coremodel.GuidanceEvent
 import com.appvalence.umay.coremodel.MapNode
-import com.appvalence.umay.coremodel.MarkerSighting
 import com.appvalence.umay.coremodel.NavigationAlert
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.PositionEvent
@@ -42,15 +40,6 @@ import com.appvalence.umay.orchestrator.FloorChangeConfirmation
 import com.appvalence.umay.orchestrator.BuildingQueryResult
 import com.appvalence.umay.orchestrator.NavigationOrchestrator
 import com.appvalence.umay.orchestrator.NavigationState
-import com.appvalence.umay.perception.CameraAim
-import com.appvalence.umay.perception.CameraAimJudge
-import com.appvalence.umay.perception.CameraFailure
-import com.appvalence.umay.perception.CameraPower
-import com.appvalence.umay.perception.CameraPowerPolicy
-import com.appvalence.umay.perception.CameraOptics
-import com.appvalence.umay.perception.CameraXObstacleDetector
-import com.appvalence.umay.perception.MlKitSignTextReader
-import com.appvalence.umay.perception.SignTextReader
 import com.appvalence.umay.positioning.baro.BarometerSensor
 import com.appvalence.umay.positioning.baro.BarometricFloorChangeDetector
 import com.appvalence.umay.positioning.ble.BeaconScanTargets
@@ -74,7 +63,6 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,11 +81,8 @@ data class NavigationSessionUi(
     val phase: NavigationPhase = NavigationPhase.SEARCHING,
     val instruction: String,
     val pipelineError: String? = null,
-    val cameraWarning: String? = null,
     val fingerprintCorrections: Int = 0,
     val barometerClimbMeters: Double? = null,
-    val readingSigns: Boolean = false,
-    val lastSignReading: String? = null,
     val askingQuestion: Boolean = false,
     val lastQuestionAnswer: String? = null,
 )
@@ -114,12 +99,6 @@ data class NavigationSessionUi(
  * [NavigationService] (a foreground service, so Android lets sensors, BLE
  * scanning and speech keep running with the screen off), the screen is now
  * just a view onto it.
- *
- * The one thing that genuinely can't continue with the screen off is the
- * camera: Android doesn't let a backgrounded app use it. So the screen
- * [attachCamera]s while it's visible and [detachCamera]s when it isn't, and
- * the user is *told* when obstacle detection pauses and resumes rather than
- * silently losing it (Ayarlar can keep the screen on for the whole walk).
  *
  * All methods are main-thread only.
  */
@@ -158,32 +137,6 @@ class NavigationSession internal constructor(
     // fingerprint corrections — alive with the screen off (see BeaconScanTargets).
     private val scanTargets = BeaconScanTargets.forBeaconIds(fingerprintBeaconIds)
 
-    private val detector = CameraXObstacleDetector(
-        appContext,
-        onBindFailed = { failure ->
-            val message = appContext.getString(
-                when (failure) {
-                    CameraFailure.MODEL_UNAVAILABLE -> R.string.camera_failure_model
-                    CameraFailure.CAMERA_UNAVAILABLE -> R.string.camera_failure_camera
-                },
-            )
-            _ui.update { it.copy(cameraWarning = message) }
-        },
-    )
-    private var cameraAttached = false
-    private var cameraPauseAnnounced = false
-
-    // How much the camera may run (heat, battery: see CameraPowerPolicy) and whether it's
-    // aimed where it can see anything (see CameraAimJudge). Main thread only.
-    private val conditions = DeviceConditions(appContext)
-    private var cameraPower = CameraPower.FULL
-    private var screenOwner: LifecycleOwner? = null
-    private var aimJob: Job? = null
-
-    // On-device, offline, free (see MlKitSignTextReader) — reads whatever frame the
-    // obstacle detector last saw rather than binding a second camera session.
-    private val signTextReader: SignTextReader = MlKitSignTextReader()
-
     // Local, free, on-device question answering (see BuildingQueryMatcher) — only
     // RECORD_AUDIO is needed for speech-to-text, no cloud, no connection, no language
     // model. The transcript never leaves the device; it's matched against this
@@ -218,12 +171,7 @@ class NavigationSession internal constructor(
         map = buildingMap,
         startNodeId = startNodeId,
         config = particleConfig,
-        // A printed place marker the camera sees settles where the walker is (see PlaceMarkers).
-        markerSightings = detector.markerSightings(),
     )
-
-    // Said once per marker per MARKER_ANNOUNCE_INTERVAL_MS: seeing it again a second later isn't news.
-    private val markersAnnouncedAtMs = HashMap<String, Long>()
 
     private val orchestrator: NavigationOrchestrator = run {
         val loggedPositioning = object : PositioningEngine {
@@ -234,13 +182,11 @@ class NavigationSession internal constructor(
                         _ui.update { ui -> ui.copy(fingerprintCorrections = ui.fingerprintCorrections + 1) }
                         recorder?.record(PositionEvent.of(PositionStream.FINGERPRINT, it))
                     }
-                    update.marker?.let(::onMarkerSeen)
                 }
                 .map { it.position }
         }
         NavigationOrchestrator(
             positioning = loggedPositioning,
-            perception = detector,
             map = buildingMap,
             feedback = feedback,
             startNodeId = startNodeId,
@@ -279,7 +225,6 @@ class NavigationSession internal constructor(
         scope.launch { hintHeadingFromCompass() }
         if (recorder != null) scope.launch { logRssi(recorder) }
         if (hasBarometer) scope.launch { watchBarometer() }
-        scope.launch { conditions.power().collect { applyCameraPower(CameraPowerPolicy.decide(it.thermalStatus, it.batteryPercent, it.charging)) } }
     }
 
     /**
@@ -310,20 +255,22 @@ class NavigationSession internal constructor(
                 val guidance = newState.alerts.firstOrNull {
                     it.id.startsWith("route-guide-") || it.id.startsWith("arrived-") || it.id.startsWith("no-route-")
                 }
-                val phase = navigationPhase(newState, destinationNode, destinationFloor)
+                val limited = buildingMap.floors.firstOrNull { it.floorIndex == newState.position.floor }?.reconstruction != null &&
+                    !NavigationOrchestrator.canGuide(newState.position)
+                val phase = if (limited) NavigationPhase.POSITION_UNCERTAIN else navigationPhase(newState, destinationNode, destinationFloor)
                 val previousPhase = _ui.value.phase
                 _ui.update {
                     it.copy(
                         state = newState,
                         phase = phase,
-                        instruction = guidance?.message ?: it.instruction,
+                        instruction = if (limited) appContext.getString(R.string.say_position_uncertain) else guidance?.message ?: it.instruction,
                         barometerClimbMeters = floorChanges.climbedMeters(),
                     )
                 }
 
                 if (recorder != null) {
                     if (phase != previousPhase) recorder.record(StatusEvent(System.currentTimeMillis(), phase.name))
-                    // combine() re-emits on every camera frame with the same position; log each position once.
+                    // Log each position once.
                     if (newState.position.timestampMs != lastLoggedPositionMs) {
                         lastLoggedPositionMs = newState.position.timestampMs
                         recorder.record(PositionEvent.of(PositionStream.FUSED, newState.position))
@@ -345,7 +292,7 @@ class NavigationSession internal constructor(
         } catch (e: Exception) {
             // Last-resort safety net: nothing in this pipeline is expected to throw (every
             // known failure mode is already caught and surfaced instead — BleScanState.Failed,
-            // CameraXObstacleDetector's onBindFailed, StepDetector.isAvailable gating before
+            // StepDetector.isAvailable gating before
             // this even starts) but an unanticipated one should be said out loud and shown
             // as a recoverable screen, not crash the app mid-walk.
             Log.e(TAG, "Navigation pipeline failed", e)
@@ -401,7 +348,11 @@ class NavigationSession internal constructor(
         val current = _ui.value.state
         val fresh = current?.let { orchestrator.currentInstruction(it.position) }
         if (fresh != null) _ui.update { it.copy(instruction = fresh) }
-        val remaining = current
+        val limited = current?.let { state ->
+            buildingMap.floors.firstOrNull { it.floorIndex == state.position.floor }?.reconstruction != null &&
+                !NavigationOrchestrator.canGuide(state.position)
+        } == true
+        val remaining = current?.takeUnless { limited }
             ?.let { routeProgress(it.route, it.nextRouteIndex, it.position, nodeFloor, buildingMap.floorTransitions) }
             ?.takeIf { it.nextNode.id != destinationNode.id }
             ?.metersToDestination?.roundToInt()
@@ -409,33 +360,6 @@ class NavigationSession internal constructor(
         val text = listOfNotNull(fresh ?: _ui.value.instruction, remaining).joinToString(" ")
         speech.speakNow(text)
         recorder?.record(GuidanceEvent(System.currentTimeMillis(), "repeat-request", "INFO", text))
-    }
-
-    /**
-     * "What does this say" — reads any text in the camera's current view (a room
-     * number, a sign) and speaks it. Works fully offline, no cloud involved. A no-op
-     * while a read is already in flight, so an impatient double-tap doesn't queue two.
-     */
-    fun readSignsAloud() {
-        if (_ui.value.readingSigns) return
-        val frame = detector.latestFrameOrNull()
-        if (frame == null) {
-            speakSignReadingResult(appContext.getString(R.string.sign_reading_no_camera))
-            return
-        }
-        _ui.update { it.copy(readingSigns = true) }
-        scope.launch {
-            val texts = signTextReader.read(frame)
-            _ui.update { it.copy(readingSigns = false) }
-            val message = if (texts.isEmpty()) appContext.getString(R.string.sign_reading_nothing_found) else texts.joinToString(". ")
-            speakSignReadingResult(message)
-        }
-    }
-
-    private fun speakSignReadingResult(message: String) {
-        _ui.update { it.copy(lastSignReading = message) }
-        speech.speakNow(message)
-        recorder?.record(GuidanceEvent(System.currentTimeMillis(), "sign-reading-${System.nanoTime()}", "INFO", message))
     }
 
     /**
@@ -521,83 +445,6 @@ class NavigationSession internal constructor(
         return event
     }
 
-    /** Starts obstacle detection; call whenever the navigation screen becomes visible. */
-    fun attachCamera(lifecycleOwner: LifecycleOwner) {
-        if (closed || cameraAttached) return
-        cameraAttached = true
-        screenOwner = lifecycleOwner
-        // No preview surface — nothing to show for a raw camera feed, and detection runs on
-        // ImageAnalysis frames either way. Too hot, it waits until the phone cools down.
-        if (cameraPower != CameraPower.OFF) {
-            detector.bind(lifecycleOwner)
-            watchAim()
-        }
-        if (cameraPauseAnnounced) announce(R.string.nav_camera_resumed)
-    }
-
-    private fun applyCameraPower(power: CameraPower) {
-        if (closed || power == cameraPower) return
-        val previous = cameraPower
-        cameraPower = power
-        detector.setFrameInterval(if (power == CameraPower.REDUCED) CameraPowerPolicy.REDUCED_FRAME_INTERVAL_MS else CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS)
-        detector.setSavingPower(power == CameraPower.REDUCED)
-        recorder?.record(StatusEvent(System.currentTimeMillis(), "CAMERA_${power.name}"))
-        when {
-            power == CameraPower.OFF -> {
-                if (cameraAttached) {
-                    detector.unbind()
-                    aimJob?.cancel()
-                }
-                announce(R.string.nav_camera_hot)
-            }
-            previous == CameraPower.OFF -> {
-                screenOwner?.takeIf { cameraAttached }?.let {
-                    detector.bind(it)
-                    watchAim()
-                }
-                announce(R.string.nav_camera_cooled)
-            }
-            power == CameraPower.REDUCED -> announce(R.string.nav_camera_saving)
-        }
-    }
-
-    /**
-     * While the camera looks, says so when it's aimed at the floor or the ceiling (the
-     * phone tipped in a hand or a chest strap), and again every [AIM_REPEAT_MS] it stays so.
-     */
-    private fun watchAim() {
-        aimJob?.cancel()
-        val judge = CameraAimJudge()
-        var lastToldMs = 0L
-        aimJob = scope.launch {
-            conditions.gravity().collect { gravity ->
-                val aim = judge.update(gravity[1], gravity[2])
-                val now = System.currentTimeMillis()
-                if (aim != CameraAim.OK && now - lastToldMs >= AIM_REPEAT_MS) {
-                    lastToldMs = now
-                    announce(if (aim == CameraAim.TOO_LOW) R.string.nav_aim_too_low else R.string.nav_aim_too_high)
-                } else if (aim == CameraAim.OK) {
-                    lastToldMs = 0L
-                }
-            }
-        }
-    }
-
-    /**
-     * Stops obstacle detection (screen off, app in the background, another tab) and says so:
-     * positioning and guidance carry on, but the user shouldn't believe they're still being
-     * warned about people ahead when they aren't.
-     */
-    fun detachCamera() {
-        if (closed || !cameraAttached) return
-        cameraAttached = false
-        screenOwner = null
-        aimJob?.cancel()
-        detector.unbind()
-        announce(if (cameraPauseAnnounced) R.string.nav_camera_paused else R.string.nav_camera_paused_first)
-        cameraPauseAnnounced = true
-    }
-
     private fun radiosOn(): Boolean {
         val bluetoothOn = appContext.getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
         val locationOn = appContext.getSystemService(LocationManager::class.java)?.let(LocationManagerCompat::isLocationEnabled) == true
@@ -620,23 +467,12 @@ class NavigationSession internal constructor(
         }
     }
 
-    private fun onMarkerSeen(sighting: MarkerSighting) {
-        val place = allNodesById[sighting.nodeId] ?: return
-        val now = sighting.timestampMs
-        if (now - (markersAnnouncedAtMs[place.id] ?: Long.MIN_VALUE / 2) < MARKER_ANNOUNCE_INTERVAL_MS) return
-        markersAnnouncedAtMs[place.id] = now
-        val message = appContext.getString(R.string.nav_marker_seen, place.name)
-        speech.emit(NavigationAlert(id = "marker-${place.id}-$now", priority = AlertPriority.INFO, message = message, relatedObstacle = null, createdAtMs = now))
-        recorder?.record(GuidanceEvent(now, "marker-${place.id}", "INFO", message))
-    }
-
     private fun announce(messageRes: Int) {
         speech.emit(
             NavigationAlert(
                 id = "system-${System.nanoTime()}",
                 priority = AlertPriority.WARNING,
                 message = appContext.getString(messageRes),
-                relatedObstacle = null,
                 createdAtMs = System.currentTimeMillis(),
             ),
         )
@@ -650,10 +486,8 @@ class NavigationSession internal constructor(
         runCatching { appContext.unregisterReceiver(radioReceiver) }
         scope.cancel()
         scanner.stop()
-        detector.release()
         speech.shutdown()
         haptics.stop()
-        (signTextReader as? MlKitSignTextReader)?.close()
         recorder?.record(SessionEndEvent(System.currentTimeMillis(), endReason))
         recorder?.close()
         onClosed(this)
@@ -705,8 +539,6 @@ class NavigationSession internal constructor(
                 "NavigationOrchestrator.ARRIVAL_DISTANCE_METERS" to NavigationOrchestrator.ARRIVAL_DISTANCE_METERS,
                 "NavigationOrchestrator.TURN_ANGLE_THRESHOLD_DEG" to NavigationOrchestrator.TURN_ANGLE_THRESHOLD_DEG,
                 "NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT" to NavigationOrchestrator.AUTO_FLOOR_CHANGE_STEP_COUNT.toDouble(),
-                "NavigationOrchestrator.CRITICAL_DISTANCE_METERS" to NavigationOrchestrator.CRITICAL_DISTANCE_METERS,
-                "NavigationOrchestrator.WARNING_DISTANCE_METERS" to NavigationOrchestrator.WARNING_DISTANCE_METERS,
                 "BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS" to BeaconMapBuilder.FLOOR_TRANSITION_COST_METERS,
                 "hasBarometer" to if (hasBarometer) 1.0 else 0.0,
                 "bleScanFiltered" to if (scanTargets != null) 1.0 else 0.0,
@@ -718,11 +550,6 @@ class NavigationSession internal constructor(
                 "BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS" to BarometricFloorChangeDetector.DEFAULT_FLOOR_HEIGHT_METERS,
                 "BarometricFloorChangeDetector.CONFIRM_FRACTION" to BarometricFloorChangeDetector.CONFIRM_FRACTION,
                 "BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS" to BarometricFloorChangeDetector.SETTLED_VERTICAL_SPEED_MPS,
-                "CameraOptics.LONG_SIDE_FOV_DEGREES" to CameraOptics.LONG_SIDE_FOV_DEGREES,
-                "CameraOptics.ANALYSIS_WIDTH_PX" to CameraOptics.ANALYSIS_WIDTH_PX.toDouble(),
-                "CameraOptics.MARKER_FRAME_WIDTH_PX" to CameraOptics.MARKER_FRAME_WIDTH_PX.toDouble(),
-                "CameraXObstacleDetector.NUM_THREADS" to CameraXObstacleDetector.NUM_THREADS.toDouble(),
-                "CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS" to CameraXObstacleDetector.MIN_FRAME_INTERVAL_MS.toDouble(),
             ) + listOfNotNull(
                 // Omitted, not NaN, for maps saved before this was tracked.
                 buildingMap.surveyStepLengthMeters?.let { "map.surveyStepLengthMeters" to it },
@@ -734,8 +561,6 @@ class NavigationSession internal constructor(
     private companion object {
         const val TAG = "NavigationSession"
         const val PRESSURE_LOG_INTERVAL_MS = 1_000L
-        const val MARKER_ANNOUNCE_INTERVAL_MS = 30_000L
-        const val AIM_REPEAT_MS = 15_000L
     }
 }
 
@@ -766,7 +591,8 @@ class NavigationSessionManager @Inject constructor(
 
     override fun start(map: BuildingMap, startNodeId: String, destinationNode: MapNode) {
         _active.value?.stop("replaced")
-        val session = NavigationSession(context, map, startNodeId, destinationNode, settings, fieldLogs, onClosed = { closed ->
+        val safeMap = map.copy(floors = map.floors.map(com.appvalence.umay.positioning.mapping.ObservedRoutes::restrict))
+        val session = NavigationSession(context, safeMap, startNodeId, destinationNode, settings, fieldLogs, onClosed = { closed ->
             if (_active.value === closed) _active.value = null
             NavigationService.stop(context)
         })

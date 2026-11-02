@@ -88,15 +88,16 @@
     <string name="tab_settings">Ayarlar</string>
 
     <!-- Navigation: setup -->
-    <string name="nav_permission_message">Nerede olduğunu bulmak için konum ve Bluetooth\'a, önündeki engelleri görmek için kameraya ihtiyacım var. Yönlendirme sürerken bir bildirim de gösteririm; ekran kapalıyken çalışmaya devam edebilmem bununla mümkün. Bu bilgiler cihazından dışarı çıkmaz.</string>
+    <string name="nav_permission_message">Nerede olduğunu bulmak için konum ve Bluetooth\'a ihtiyacım var. Yönlendirme sürerken bir bildirim de gösteririm; ekran kapalıyken çalışmaya devam edebilmem bununla mümkün. Bu bilgiler cihazından dışarı çıkmaz.</string>
     <string name="nav_permission_denied_title">İzin verilmedi</string>
-    <string name="nav_permission_denied_message">Yönlendirme için kamera, konum ve Bluetooth izni gerekiyor.</string>
+    <string name="nav_permission_denied_message">Yönlendirme için konum ve Bluetooth izni gerekiyor.</string>
     <string name="nav_unsupported_title">Cihaz desteklenmiyor</string>
     <string name="nav_unsupported_message">Bu cihazda konum takibi için gereken ivmeölçer veya jiroskop sensörü yok, navigasyon kullanılamıyor.</string>
     <string name="nav_no_map_title">Henüz bir harita yok</string>
     <string name="nav_no_map_message">Önce \"Beacon Tarayıcı\" ekranında bir saha kaydı yapıp haritayı kaydet, ya da başka bir cihazdan dışa aktarılmış bir haritayı içe aktar.</string>
     <string name="nav_empty_map_title">Harita boş</string>
     <string name="nav_empty_map_message">Kaydedilmiş haritada hiç nokta yok.</string>
+    <string name="nav_geometry_only">Ölçülmüş haritayı inceleyebilirsin. Yol tarifi için hedef noktaları ve doğrulanmış geçişler henüz hazır değil.</string>
     <string name="nav_change_building">Bina değiştir (şu an: %1$s)</string>
     <string name="nav_recording_on_hint">Saha kaydı açık: bu yönlendirme kaydedilecek. \"Dosyalar\" sekmesinden kapatabilir ya da paylaşabilirsin.</string>
     <string name="nav_pick_building_title">Hangi binada gitmek istiyorsun?</string>
@@ -123,32 +124,17 @@
     <!-- Navigation: active -->
     <string name="nav_status_searching">Konumun aranıyor…</string>
     <string name="nav_status_on_route">Yoldasın</string>
-    <string name="nav_status_warning">Dikkat, yakında bir engel var</string>
-    <string name="nav_status_critical">DUR! Hemen önünde bir engel var</string>
+    <string name="nav_status_uncertain">Konum belirsiz, yönlendirme duraklatıldı</string>
     <string name="nav_status_arrived">Hedefe ulaştın</string>
     <string name="nav_preparing">Yola çıkmaya hazırlanıyor…</string>
     <string name="nav_pipeline_error">Navigasyon durduruldu: %1$s</string>
     <string name="nav_pipeline_error_unknown">beklenmeyen bir hata oluştu</string>
     <string name="nav_error_title">Bir şeyler ters gitti</string>
     <string name="nav_no_fingerprints_warning">Bu haritada isimlendirilmiş nokta yok, konum sadece adım sayımıyla tahmin ediliyor ve zamanla sapabilir. Daha güvenilir takip için \"Beacon Tarayıcı\" ekranında yürürken yer isimlendir.</string>
-    <string name="nav_camera_warning">%1$s. Engel algılama olmadan devam ediliyor.</string>
-    <string name="camera_failure_model">Engel algılama modeli yüklenemedi</string>
-    <string name="camera_failure_camera">Kamera başlatılamadı</string>
-    <string name="nav_read_signs">Çevredeki yazıyı oku</string>
-    <string name="sign_reading_no_camera">Kamera şu an bir görüntü vermiyor, engel algılamanın açık olması gerekiyor.</string>
-    <string name="sign_reading_nothing_found">Okunabilir bir yazı bulamadım.</string>
     <string name="nav_floor_change_up">Kat değiştirdim (yukarı, Kat %1$d)</string>
     <string name="nav_floor_change_down">Kat değiştirdim (aşağı, Kat %1$d)</string>
     <string name="nav_floor_change_barometer_hint">Basınç sensörü kat değişimini kendisi algılayacak. Algılamazsa bu düğmeye dokun.</string>
     <string name="nav_stop">Yönlendirmeyi durdur</string>
-    <string name="nav_camera_paused_first">Engel algılama duraklatıldı, çünkü ekran kapalıyken kamera çalışamaz. Konum ve yönergeler devam ediyor. Engel algılamanın da sürmesi için Ayarlar\'dan ekranı açık tutmayı seçebilirsin.</string>
-    <string name="nav_camera_paused">Engel algılama duraklatıldı. Konum ve yönergeler devam ediyor.</string>
-    <string name="nav_camera_resumed">Engel algılama yeniden açık.</string>
-    <string name="nav_camera_hot">Telefon çok ısındı, engel algılama bir süreliğine kapatıldı. Konum ve yönergeler devam ediyor.</string>
-    <string name="nav_camera_cooled">Telefon soğudu, engel algılama yeniden açık.</string>
-    <string name="nav_camera_saving">Pil azaldı ya da telefon ısınıyor; kamera pil korumak için daha seyrek bakıyor.</string>
-    <string name="nav_aim_too_low">Telefonu biraz kaldır, kamera yere bakıyor.</string>
-    <string name="nav_aim_too_high">Telefonu biraz indir, kamera tavana bakıyor.</string>
     <string name="nav_radio_lost">Bluetooth ya da konum kapalı. Konumunu şimdilik sadece adımlarından takip ediyorum, zamanla sapabilir. İkisini de açarsan kendiliğinden düzeltmeye devam ederim.</string>
     <string name="nav_radio_back">Bluetooth ve konum açık, konum düzeltmesi devam ediyor.</string>
     <string name="notification_channel_name">Yönlendirme</string>
@@ -197,10 +183,6 @@
         <item quantity="one">%1$s hedefine yaklaşık %2$d metre.</item>
         <item quantity="other">%1$s hedefine yaklaşık %2$d metre.</item>
     </plurals>
-    <plurals name="nav_map_description_obstacles">
-        <item quantity="one">%1$d engel görünüyor.</item>
-        <item quantity="other">%1$d engel görünüyor.</item>
-    </plurals>
     <string name="nav_recording_active">Saha kaydı alınıyor</string>
     <string name="nav_recording_failed">Saha kaydı yazılamadı (depolama dolu olabilir), kayıt durdu.</string>
     <string name="nav_ground_truth_button">Buradayım: gerçek konumu işaretle</string>
@@ -212,6 +194,8 @@
     <string name="nav_technical_route">Rota: %1$s</string>
     <string name="nav_technical_details" tools:ignore="PluralsCandidate">x=%1$s y=%2$s kat=%3$d doğruluk≈%4$s m kaynak=%5$s fingerprint düzeltmesi=%6$d basınç Δ=%7$s</string>
     <string name="nav_map_show_all">Tüm katı göster</string>
+    <string name="map_fit">Haritayı sığdır</string>
+    <string name="map_geometry_legend">Turuncu kesikli: yüzey adayı · Yeşil: operatörce doğrulandı · Turkuaz kesikli: açıklık adayı · Gri kesikli: gözlem sınırı</string>
     <string name="nav_map_follow_me">Konumuma odaklan</string>
 
     <!-- Spoken guidance (see ResourceGuidancePhrases). Place names are never given a
@@ -233,9 +217,6 @@
     <string name="say_turn_right_now">Sağa dön.</string>
     <string name="say_turn_clock_now" tools:ignore="PluralsCandidate">Saat %1$d yönüne dön.</string>
     <string name="say_turn_around">Geri dön.</string>
-    <string name="say_pass_left">Engelin solundan geçebilirsin.</string>
-    <string name="say_pass_right">Engelin sağından geçebilirsin.</string>
-    <string name="say_pass_clock" tools:ignore="PluralsCandidate">Engeli saat %1$d yönünden geçebilirsin.</string>
     <string name="say_off_route">Rotadan çıktın. Bulunduğun yerden yeni rota hesaplandı.</string>
     <string name="say_wrong_way">Ters yöne gidiyorsun gibi görünüyor, geri dön.</string>
     <string name="say_walk_ahead">Yaklaşık %1$s düz ilerle.</string>
@@ -260,27 +241,7 @@
     <string name="say_hazard_elevator">Önünde asansör var.</string>
     <string name="say_arrived">Hedefe ulaştın.</string>
     <string name="say_no_route">Bu iki nokta arasında bir rota bulunamadı.</string>
-    <string name="say_rerouted">Önündeki engel yüzünden rota değişti.</string>
     <string name="say_no_step_free_route">Merdivensiz bir yol bulunamadı; rota merdivenden geçiyor.</string>
-    <!-- %1$s / %2$s: what it is, as below ("biri", "bir sandalye"). -->
-    <string name="say_obstacle_critical">Dur! Hemen önünde %1$s var.</string>
-    <string name="say_obstacle_warning">Dikkat, yaklaşık %1$s önünde %2$s var.</string>
-    <string name="say_obstacle_info">Yaklaşık %1$s önünde %2$s var.</string>
-    <string name="obstacle_person">biri</string>
-    <string name="obstacle_bicycle">bir bisiklet</string>
-    <string name="obstacle_motorcycle">bir motosiklet</string>
-    <string name="obstacle_fire_hydrant">bir yangın musluğu</string>
-    <string name="obstacle_bench">bir bank</string>
-    <string name="obstacle_dog">bir köpek</string>
-    <string name="obstacle_suitcase">bir valiz</string>
-    <string name="obstacle_chair">bir sandalye</string>
-    <string name="obstacle_couch">bir kanepe</string>
-    <string name="obstacle_potted_plant">bir saksı</string>
-    <string name="obstacle_bed">bir yatak</string>
-    <string name="obstacle_table">bir masa</string>
-    <string name="obstacle_toilet">bir klozet</string>
-    <string name="obstacle_refrigerator">bir buzdolabı</string>
-    <string name="obstacle_unknown">bir engel</string>
 
     <!-- Survey (Beacon Tarayıcı) -->
     <string name="survey_permission_message">Binadaki beacon\'ları bulmak için konum ve Bluetooth\'a ihtiyacım var. Bu bilgiler cihazından dışarı çıkmaz.</string>
@@ -358,7 +319,7 @@
     <string name="survey_type_elevator">Asansör</string>
     <string name="survey_type_ramp">Rampa</string>
     <string name="survey_tag_title">Bulunduğun yeri isimlendir</string>
-    <string name="survey_tag_body">\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. Kapı, merdiven, asansör ya da rampa gibi bir tehlike veya kat geçişiyse türünü de seç: kamera bunları göremez, navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir. Bir kavşağa ya da merdivene geri döndüğünde ona aynı adı yeniden ver: Umay ikisini tek yer sayar ve koridorları orada birleştirir.</string>
+    <string name="survey_tag_body">\"Ana Giriş\", \"203 Sınıfı\" gibi önemli bir noktaya geldiğinde ismini yaz ve işaretle. Kapı, merdiven, asansör ya da rampa gibi bir tehlike veya kat geçişiyse türünü de seç: navigasyon sırasında sesli uyarı ancak burada işaretlersen verilebilir. Bir kavşağa ya da merdivene geri döndüğünde ona aynı adı yeniden ver: Umay ikisini tek yer sayar ve koridorları orada birleştirir.</string>
     <string name="survey_tag_name_label">Yer adı</string>
     <string name="survey_tag_button">İşaretle</string>
     <string name="survey_tagged_with_type">%1$s (%2$s, kat %3$d)</string>
@@ -374,6 +335,7 @@
     <string name="survey_building_name">Bina adı</string>
     <string name="survey_building_name_hint">Aynı isimde kayıtlı bir bina varsa haritası bununla güncellenir.</string>
     <string name="survey_saved">Kaydedildi: %1$s, %2$s, %3$s.</string>
+    <string name="survey_saved_no_routes">Kaydedildi: %1$s, %2$s, %3$s. Yerler arasında bağlantı yok, bu haritayla yönlendirme yapılamaz. Kamerayla çıkardıysan zemin yeterince görülmemiş olabilir: ışığı olan bir yerde, kamerayı zemine ve duvarlara gezdirerek yeniden dene.</string>
     <string name="survey_save_failed">Kaydedilemedi, cihazda yer kalmamış olabilir. Tekrar dene.</string>
     <string name="survey_save">Haritayı kaydet</string>
     <string name="survey_section_title">Ya da var olan bir haritaya bölüm olarak ekle</string>
@@ -618,8 +580,6 @@
     <string name="haptic_continue">Düz devam: tek hafif dokunuş</string>
     <string name="haptic_hazard">Önünde merdiven, kapı ya da rampa: iki uzun, güçlü</string>
     <string name="haptic_floor_change">Kat değişimi: uzun, kısa, uzun</string>
-    <string name="haptic_obstacle_warning">Engel yakında: üç orta titreşim</string>
-    <string name="haptic_obstacle_critical">Dur, engel çok yakın: hızlı, güçlü seri</string>
     <string name="haptic_arrived">Hedefe vardın: uzun, sonra kısa</string>
     <string name="haptic_rerouted">Rota değişti: kısa, sonra uzun</string>
     <string name="haptic_no_route">Rota bulunamadı: tek uzun titreşim</string>
@@ -631,13 +591,13 @@
     <string name="settings_clock_directions">Yönleri saatle söyle</string>
     <string name="settings_clock_directions_body">“Sonra sağa dön” yerine “sonra saat 3 yönüne dön” denir. Saat 12 tam önün, 3 sağın, 6 arkan, 9 solundur; aradaki saatler çapraz yönlerdir.</string>
     <string name="settings_keep_screen_on">Ekranı açık tut</string>
-    <string name="settings_keep_screen_on_body">Ekran kapansa da konum ve yönergeler devam eder, ama kamera durur ve engel algılanmaz. Ekranı açık tutarsan engel algılama da sürer; pil daha çok harcanır. TalkBack açıkken pil için ekran en düşük parlaklığa indirilir.</string>
+    <string name="settings_keep_screen_on_body">Ekran kapansa da konum ve yönergeler devam eder. Ekranı açık tutarsan rota haritası görünür kalır; pil daha çok harcanır. TalkBack açıkken pil için ekran en düşük parlaklığa indirilir.</string>
     <string name="settings_about_title">Hakkında</string>
     <string name="settings_about_version">Umay %1$s</string>
     <string name="settings_about_license">Umay açık kaynaklıdır ve GNU Genel Kamu Lisansı sürüm 3 (GPL-3.0) ile dağıtılır: kaynak kodunu inceleyebilir, değiştirip paylaşabilirsin; paylaşılan her türev de aynı lisansla ve kaynak koduyla birlikte yayınlanmalıdır.</string>
     <string name="settings_about_source">Kaynak kodunu aç</string>
     <string name="settings_about_third_party">Kullanılan açık kaynak bileşenler (Apache 2.0 lisanslı): AndroidX ve Jetpack Compose, CameraX, Dagger ve Hilt, LiteRT (TensorFlow Lite) ve EfficientDet-Lite0 modeli, kotlinx.coroutines, kotlinx.serialization.</string>
-    <string name="settings_about_closed_components">Kapalı kaynak Google bileşenleri: tabela okuma için cihazda çalışan ML Kit metin tanıma ve kamerayla haritalama için ARCore.</string>
+    <string name="settings_about_closed_components">Kapalı kaynak Google bileşeni: kamerayla haritalama için ARCore.</string>
     <string name="source_code_url" translatable="false">https://github.com/bedirhantong/Umay</string>
     <string name="arcore_service_url" translatable="false">https://play.google.com/store/apps/details?id=com.google.ar.core</string>
     <string name="google_privacy_policy_url" translatable="false">https://policies.google.com/privacy</string>
@@ -693,16 +653,26 @@
     <string name="onboarding_welcome_title">Umay\'a hoş geldin</string>
     <string name="onboarding_welcome_body">Umay, bina içinde seni sesli yönergelerle gitmek istediğin yere götüren bir yardımcı. Bu kısa tanıtımı dinleyebilir ya da istediğin an atlayabilirsin. Devam etmek için ekranın en altındaki sağ düğmeye, geri dönmek için soldakine dokun.</string>
     <string name="onboarding_safety_title">Güvenliğin için</string>
-    <string name="onboarding_safety_body">Umay bir yardımcıdır; beyaz baston ya da rehber köpeğin yerini tutmaz. Kamera yalnızca önündeki insanları algılar. Merdiven, kapı ya da rampa gibi yerleri ancak haritayı çıkaran kişi işaretlediyse bilir. Konum tahmini ara sıra birkaç metre sapabilir. Yolda her zaman kendi dikkatine ve bastonuna güven.</string>
+    <string name="onboarding_safety_body">Umay bir yardımcıdır; beyaz baston ya da rehber köpeğin yerini tutmaz. Umay engelleri ve önündeki insanları algılamaz, seni onlara karşı uyarmaz. Merdiven, kapı ya da rampa gibi yerleri ancak haritayı çıkaran kişi işaretlediyse bilir. Konum tahmini ara sıra birkaç metre sapabilir. Yolda her zaman kendi dikkatine ve bastonuna güven.</string>
     <string name="onboarding_hold_title">Telefonu nasıl tutmalı</string>
-    <string name="onboarding_hold_body">Yürürken telefonu göğüs hizasında, ekranı sana, arka kamerası önüne bakacak şekilde tut. Umay adımlarını sayarak ve binadaki Bluetooth işaretçilerini dinleyerek nerede olduğunu bulur. Kamera da önündeki insanları fark edip seni uyarır. Yönlendirme sürerken ekranı kilitleyebilirsin; yönergeler devam eder, ama engel algılama için ekranın açık olması gerekir.</string>
+    <string name="onboarding_hold_body">Yürürken telefonu göğüs hizasında, ekranı sana bakacak şekilde tut. Umay adımlarını sayarak ve binadaki Bluetooth işaretçilerini dinleyerek nerede olduğunu bulur. Yönlendirme sürerken ekranı kilitleyebilir, telefonu cebine koyabilirsin; yönergeler devam eder.</string>
     <string name="onboarding_guidance_title">Yönlendirme</string>
-    <string name="onboarding_guidance_body">Navigasyon sekmesinde nerede olduğunu ve nereye gitmek istediğini seç, sonra Yönlendirmeyi başlat\'a dokun. Umay kaç metre yürüyeceğini, nerede döneceğini, kapı ya da merdiven gibi noktaları sesli söyler. Önüne biri çıkarsa hemen uyarır, hedefe vardığında da haber verir.</string>
+    <string name="onboarding_guidance_body">Navigasyon sekmesinde nerede olduğunu ve nereye gitmek istediğini seç, sonra Yönlendirmeyi başlat\'a dokun. Umay kaç metre yürüyeceğini, nerede döneceğini, kapı ya da merdiven gibi noktaları sesli söyler. Hedefe vardığında da haber verir.</string>
     <string name="onboarding_feel_title">Titreşim ve tekrar</string>
-    <string name="onboarding_feel_body">Her yönergeyi titreşimle de hissedersin, gürültülü bir yerde sesi kaçırsan bile. Sağa dönüş eşit aralıklı dört dokunuş, sola dönüş ikişerli dokunuşlardır. Engel çok yakınsa hızlı ve güçlü bir seri gelir. Bir yönergeyi kaçırırsan navigasyon ekranındaki Son yönergeyi tekrarla düğmesine dokun. Ayarlar sekmesinde her titreşimi deneyip öğrenebilir, konuşma hızını değiştirebilirsin.</string>
+    <string name="onboarding_feel_body">Her yönergeyi titreşimle de hissedersin, gürültülü bir yerde sesi kaçırsan bile. Sağa dönüş eşit aralıklı dört dokunuş, sola dönüş ikişerli dokunuşlardır. Bir yönergeyi kaçırırsan navigasyon ekranındaki Son yönergeyi tekrarla düğmesine dokun. Ayarlar sekmesinde her titreşimi deneyip öğrenebilir, konuşma hızını değiştirebilirsin.</string>
     <string name="onboarding_floors_title">Katlar arasında</string>
     <string name="onboarding_floors_body_barometer">Rota merdiven ya da asansörden geçiyorsa Umay bunu önceden söyler. Telefonundaki basınç sensörü sayesinde kat değiştirdiğini kendisi anlar; bir şeye dokunman gerekmez.</string>
     <string name="onboarding_floors_body_no_barometer">Rota merdiven ya da asansörden geçiyorsa Umay bunu önceden söyler. Merdivende kat değiştirdiğini adımlarından anlar. Asansörde ise indiğinde ekrandaki \"Kat değiştirdim\" düğmesine dokunman gerekir.</string>
     <string name="onboarding_setup_title">Başlamadan önce</string>
     <string name="onboarding_setup_body">Bir binada yönlendirme için önce o binanın haritası gerekir. Haritayı binayı tanıyan biri Beacon Tarayıcı sekmesinde yürüyerek çıkarır ya da başka bir cihazdan Dosyalar sekmesiyle içe aktarılır. Daha isabetli takip için Ayarlar sekmesinden adım uzunluğunu bir kez ölçmeni öneririm. Bu tanıtımı Ayarlar\'dan istediğin zaman yeniden dinleyebilirsin.</string>
+
+    <string name="survey_alignment_required">Kamera koordinatlarının yeniden hizalanması gerekiyor. Tarama inceleme ve kayıt için korunuyor; yeni geometri için ayrı tarama başlatın. Son konum ve yön yeni oturumu hizalamaya yetmez.</string>
+    <string name="survey_geometry_status">Dikey yüzey: %1$d · Kanıtlı açıklık adayı: %2$d · Gözlenmiş bölge: %3$d · Derinlik karesi: %4$d. Kesikli sınırlar tamamlanmamış gözlemdir.</string>
+    <string name="survey_floor_unresolved">Zemin henüz belirlenemedi. Kamerayı geniş bir zemin alanına yöneltip yavaşça hareket edin; geometri tekrarlı derinlik ve yatay düzlem desteğini bekliyor.</string>
+    <string name="survey_wall_evidence">Yüzey: %1$d · Destekleyen kare: %2$d · Uyum hatası: %3$.3f m. Fiziksel yüzeyi kontrol ettikten sonra doğrulayın.</string>
+    <string name="survey_wall_next">Sonraki yüzey</string>
+    <string name="survey_wall_confirm">Doğrula</string>
+    <string name="survey_wall_reject">Reddet</string>
+    <string name="survey_persistence_failed">Tarama diske yazılamadı. Son ölçümler bellekte tutuluyor; boş depolama alanını kontrol edin. Kayıt yeniden denenecek.</string>
+    <string name="say_position_uncertain">Konum yeterince güvenilir değil. Yön tarifleri duraklatıldı.</string>
 </resources>

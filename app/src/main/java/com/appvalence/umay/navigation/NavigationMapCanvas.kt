@@ -5,8 +5,10 @@ import android.graphics.Typeface
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,7 +20,6 @@ import androidx.compose.material.icons.filled.DoorFront
 import androidx.compose.material.icons.filled.Elevator
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Stairs
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.FilledTonalIconButton
@@ -30,10 +31,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -57,19 +61,24 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import com.appvalence.umay.R
 import com.appvalence.umay.common.WallMapImage
 import com.appvalence.umay.common.drawWallLayer
 import com.appvalence.umay.common.rememberWallMapImage
-import com.appvalence.umay.coremodel.DetectedObstacle
+import com.appvalence.umay.common.FloorPlanViewport
+import com.appvalence.umay.common.drawSpatialMap
+import com.appvalence.umay.common.drawMetricScale
+import com.appvalence.umay.common.floorPlanBounds
+import com.appvalence.umay.common.rememberSpatialMapDrawing
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapNode
+import com.appvalence.umay.coremodel.MetricPoint
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.Position
 import com.appvalence.umay.coremodel.isPlace
 import com.appvalence.umay.coremodel.isUnnamed
 import kotlin.math.cos
-import kotlin.math.min
 import kotlin.math.sin
 
 /**
@@ -77,7 +86,7 @@ import kotlin.math.sin
  * (Google/Apple Maps indoor views, airport wayfinding apps) rather than as
  * a raw node-edge graph:
  *
- * - Walked connections become soft, wide corridors, not hairlines between dots.
+ * - Legacy walked maps keep their corridor styling; reconstructed floors show measured geometry.
  * - The route is a thick line with a casing; the part already walked fades out.
  * - The user is the familiar blue dot, with a heading cone ("which way am I
  *   facing") and an accuracy halo that honestly grows as dead reckoning drifts.
@@ -91,9 +100,8 @@ import kotlin.math.sin
  * for "go left" to match the screen; **overview** fits the whole floor, with
  * a uniform scale in both axes so corridor proportions stay true.
  *
- * There's no true north here: every floor's coordinates come from the
- * survey walk's own dead-reckoning origin, so heading-up is also the only
- * orientation that means anything to someone standing in the building.
+ * Coordinates remain in the floor's local metric frame. Overview keeps its orientation;
+ * follow mode rotates the displayed frame to the user's heading.
  *
  * A blind user never needs this (everything here is also spoken), so the
  * whole canvas is one TalkBack stop announcing [description], not a maze of
@@ -107,21 +115,24 @@ fun NavigationMapCanvas(
     nextRouteIndex: Int,
     nodeFloor: Map<String, Int>,
     position: Position?,
-    obstacles: List<DetectedObstacle>,
     description: String,
     modifier: Modifier = Modifier,
 ) {
-    var followUser by remember { mutableStateOf(true) }
-    val following = followUser && position != null && position.floor == floorMap.floorIndex
+    val frameId = floorMap.reconstruction?.coordinateFrameId
+    var followUser by remember(floorMap.floorIndex, frameId) { mutableStateOf(true) }
+    var manualViewport by remember(floorMap.floorIndex, frameId) { mutableStateOf<FloorPlanViewport?>(null) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    val livePosition = position?.takeIf { it.floor == floorMap.floorIndex && it.x.isFinite() && it.y.isFinite() }
+    val following = followUser && livePosition != null
 
-    val headingUnwrapper = remember { HeadingUnwrapper() }
+    val headingUnwrapper = remember(floorMap.floorIndex, frameId) { HeadingUnwrapper() }
     val animatedHeading by animateFloatAsState(
-        headingUnwrapper.unwrap(position?.headingDeg?.toFloat() ?: 0f),
+        headingUnwrapper.unwrap(livePosition?.headingDeg?.takeIf { it.isFinite() }?.toFloat() ?: 0f),
         tween(MAP_ANIMATION_MS),
         label = "heading",
     )
-    val animatedX by animateFloatAsState(position?.x?.toFloat() ?: 0f, tween(MAP_ANIMATION_MS), label = "x")
-    val animatedY by animateFloatAsState(position?.y?.toFloat() ?: 0f, tween(MAP_ANIMATION_MS), label = "y")
+    val animatedX by animateFloatAsState(livePosition?.x?.toFloat() ?: 0f, tween(MAP_ANIMATION_MS), label = "x")
+    val animatedY by animateFloatAsState(livePosition?.y?.toFloat() ?: 0f, tween(MAP_ANIMATION_MS), label = "y")
 
     val colors = MapColors(
         background = MaterialTheme.colorScheme.surfaceVariant,
@@ -139,7 +150,6 @@ fun NavigationMapCanvas(
         place = MaterialTheme.colorScheme.secondary,
         label = MaterialTheme.colorScheme.onSurface,
         labelBackground = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        obstacle = Color(0xFFD32F2F),
     )
     val icons = MapIcons(
         door = rememberVectorPainter(Icons.Filled.DoorFront),
@@ -147,7 +157,6 @@ fun NavigationMapCanvas(
         elevator = rememberVectorPainter(Icons.Filled.Elevator),
         ramp = rememberVectorPainter(Icons.AutoMirrored.Filled.Accessible),
         destination = rememberVectorPainter(Icons.Filled.Flag),
-        obstacle = rememberVectorPainter(Icons.Filled.PriorityHigh),
     )
     val labelPaint = remember { Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD } }
     // Camera-surveyed floors carry a wall map; drawn under the route, like a robot vacuum's.
@@ -156,6 +165,18 @@ fun NavigationMapCanvas(
         seenFloorColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         wallColor = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    val drawing = rememberSpatialMapDrawing(floorMap.reconstruction)
+    val bounds = remember(floorMap) { floorPlanBounds(floorMap) }
+    val visibleBounds = livePosition?.let { bounds?.including(MetricPoint(it.x, it.y))
+        ?: com.appvalence.umay.common.FloorPlanBounds.of(listOf(MetricPoint(it.x, it.y))) } ?: bounds
+    val viewport = if (following) {
+        FloorPlanViewport(MetricPoint(animatedX.toDouble(), animatedY.toDouble()), canvasSize.width.toDouble(), canvasSize.height.toDouble(),
+            (minOf(canvasSize.width, canvasSize.height) / FOLLOW_VIEW_METERS).toDouble().coerceAtLeast(0.1),
+            panY = canvasSize.height * (FOLLOW_ANCHOR_FRACTION - 0.5), headingDeg = animatedHeading.toDouble())
+    } else manualViewport?.copy(widthPixels = canvasSize.width.toDouble(), heightPixels = canvasSize.height.toDouble())
+        ?: visibleBounds?.let { FloorPlanViewport.fit(it, canvasSize.width.toDouble(), canvasSize.height.toDouble(), padding = 36.0) }
+    val currentViewport by rememberUpdatedState(viewport)
+    val geometryLegend = if (floorMap.reconstruction != null) stringResource(R.string.map_geometry_legend) else ""
 
     Box(
         modifier = modifier
@@ -164,14 +185,17 @@ fun NavigationMapCanvas(
             .clip(RoundedCornerShape(16.dp))
             .background(colors.background),
     ) {
-        Canvas(modifier = Modifier.fillMaxSize().semantics { contentDescription = description }) {
-            if (floorMap.nodes.isEmpty()) return@Canvas
-            val livePosition = position?.takeIf { it.floor == floorMap.floorIndex }
-            val camera = if (following && livePosition != null) {
-                Camera.follow(this, animatedX.toDouble(), animatedY.toDouble(), animatedHeading.toDouble())
-            } else {
-                Camera.overview(this, floorMap.nodes, livePosition)
+        Canvas(modifier = Modifier.fillMaxSize().onSizeChanged { canvasSize = it }
+            .semantics { contentDescription = listOf(description, geometryLegend).filter { it.isNotBlank() }.joinToString(". ") }
+            .pointerInput(floorMap.floorIndex, frameId) {
+                detectTransformGestures { centroid, delta, factor, _ ->
+                    manualViewport = (manualViewport ?: currentViewport)?.transformed(
+                        centroid.x.toDouble(), centroid.y.toDouble(), factor.toDouble(), delta.x.toDouble(), delta.y.toDouble())
+                    followUser = false
+                }
             }
+        ) {
+            val camera = Camera(viewport ?: return@Canvas)
             drawFloor(
                 camera = camera,
                 floorMap = floorMap,
@@ -181,11 +205,11 @@ fun NavigationMapCanvas(
                 position = livePosition?.let {
                     if (following) it.copy(x = animatedX.toDouble(), y = animatedY.toDouble(), headingDeg = animatedHeading.toDouble()) else it
                 },
-                obstacles = obstacles,
                 colors = colors,
                 icons = icons,
                 labelPaint = labelPaint,
                 wallMap = wallMap,
+                spatialDrawing = drawing,
             )
         }
 
@@ -201,13 +225,17 @@ fun NavigationMapCanvas(
             )
         }
 
-        if (position != null) {
+        Row(modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)) {
             FilledTonalIconButton(
-                onClick = { followUser = !followUser },
-                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                onClick = { followUser = false; manualViewport = null },
+            ) {
+                Icon(Icons.Filled.ZoomOutMap, contentDescription = stringResource(R.string.map_fit))
+            }
+            if (livePosition != null) FilledTonalIconButton(
+                onClick = { followUser = !following; manualViewport = null },
             ) {
                 Icon(
-                    imageVector = if (following) Icons.Filled.ZoomOutMap else Icons.Filled.MyLocation,
+                    imageVector = Icons.Filled.MyLocation,
                     contentDescription = stringResource(if (following) R.string.nav_map_show_all else R.string.nav_map_follow_me),
                 )
             }
@@ -249,7 +277,6 @@ private data class MapColors(
     val place: Color,
     val label: Color,
     val labelBackground: Color,
-    val obstacle: Color,
 )
 
 private data class MapIcons(
@@ -258,7 +285,6 @@ private data class MapIcons(
     val elevator: VectorPainter,
     val ramp: VectorPainter,
     val destination: VectorPainter,
-    val obstacle: VectorPainter,
 )
 
 /**
@@ -267,54 +293,21 @@ private data class MapIcons(
  * rotation by [headingDeg] so that heading points up, and [anchor] as the
  * on-screen spot where world point ([centerX], [centerY]) lands.
  */
-private class Camera(
-    val centerX: Double,
-    val centerY: Double,
-    val headingDeg: Double,
-    val pixelsPerMeter: Float,
-    val anchor: Offset,
-) {
-    private val cosA = cos(Math.toRadians(headingDeg))
-    private val sinA = sin(Math.toRadians(headingDeg))
+private class Camera(val viewport: FloorPlanViewport) {
+    val centerX get() = viewport.center.x
+    val centerY get() = viewport.center.y
+    val headingDeg get() = viewport.headingDeg
+    val pixelsPerMeter get() = viewport.pixelsPerMeter.toFloat()
+    val anchor get() = Offset(viewport.anchorX.toFloat(), viewport.anchorY.toFloat())
 
     fun toScreen(x: Double, y: Double): Offset {
-        val dx = x - centerX
-        val dy = y - centerY
-        // Rotating by +heading counter-clockwise maps the heading vector (sin h, cos h) onto (0, 1): straight up.
-        val rx = dx * cosA - dy * sinA
-        val ry = dx * sinA + dy * cosA
-        return Offset(anchor.x + (rx * pixelsPerMeter).toFloat(), anchor.y - (ry * pixelsPerMeter).toFloat())
+        val (sx, sy) = viewport.toScreen(MetricPoint(x, y))
+        return Offset(sx.toFloat(), sy.toFloat())
     }
 
     /** A world heading as seen on screen, in degrees clockwise from up. */
     fun screenHeading(worldHeadingDeg: Double): Double = worldHeadingDeg - headingDeg
 
-    companion object {
-        fun follow(scope: DrawScope, x: Double, y: Double, headingDeg: Double) = Camera(
-            centerX = x,
-            centerY = y,
-            headingDeg = headingDeg,
-            pixelsPerMeter = scope.size.minDimension / FOLLOW_VIEW_METERS,
-            // Below center: what's ahead matters more than what's behind.
-            anchor = Offset(scope.size.width / 2f, scope.size.height * FOLLOW_ANCHOR_FRACTION),
-        )
-
-        fun overview(scope: DrawScope, nodes: List<MapNode>, position: Position?): Camera {
-            val xs = nodes.map { it.x } + listOfNotNull(position?.x)
-            val ys = nodes.map { it.y } + listOfNotNull(position?.y)
-            val spanX = (xs.max() - xs.min()).coerceAtLeast(MIN_SPAN_METERS)
-            val spanY = (ys.max() - ys.min()).coerceAtLeast(MIN_SPAN_METERS)
-            val padding = with(scope) { OVERVIEW_PADDING_DP.dp.toPx() }
-            val scale = min((scope.size.width - 2 * padding) / spanX, (scope.size.height - 2 * padding) / spanY).toFloat()
-            return Camera(
-                centerX = (xs.max() + xs.min()) / 2,
-                centerY = (ys.max() + ys.min()) / 2,
-                headingDeg = 0.0,
-                pixelsPerMeter = scale,
-                anchor = scope.center,
-            )
-        }
-    }
 }
 
 private fun DrawScope.drawFloor(
@@ -324,11 +317,11 @@ private fun DrawScope.drawFloor(
     nextRouteIndex: Int,
     nodeFloor: Map<String, Int>,
     position: Position?,
-    obstacles: List<DetectedObstacle>,
     colors: MapColors,
     icons: MapIcons,
     labelPaint: Paint,
     wallMap: WallMapImage?,
+    spatialDrawing: com.appvalence.umay.common.SpatialMapDrawing?,
 ) {
     val nodesById = floorMap.nodes.associateBy { it.id }
     wallMap?.let { drawWallMapLayer(camera, it, it.seenFloor) }
@@ -336,7 +329,7 @@ private fun DrawScope.drawFloor(
     fun onThisFloor(node: MapNode) = nodeFloor[node.id] == floorIndex
 
     // Corridors: a slightly darker edge under a lighter fill reads as a hallway with walls.
-    val corridorWidth = (CORRIDOR_WIDTH_METERS * camera.pixelsPerMeter).coerceIn(10.dp.toPx(), 36.dp.toPx())
+    val corridorWidth = if (floorMap.reconstruction != null) 2.dp.toPx() else (CORRIDOR_WIDTH_METERS * camera.pixelsPerMeter).coerceIn(10.dp.toPx(), 36.dp.toPx())
     floorMap.edges.forEach { edge ->
         val from = nodesById[edge.fromId] ?: return@forEach
         val to = nodesById[edge.toId] ?: return@forEach
@@ -349,6 +342,8 @@ private fun DrawScope.drawFloor(
     }
     // Walls on top of the corridor fill: where they disagree, the measured wall is the truth.
     wallMap?.let { drawWallMapLayer(camera, it, it.walls) }
+
+    drawSpatialMap(spatialDrawing, camera.viewport)
 
     // Doorways: a bar across the gap in the wall, so a door reads as a door, not a hole.
     floorMap.doors.forEach { door ->
@@ -398,14 +393,6 @@ private fun DrawScope.drawFloor(
         }
     }
 
-    obstacles.forEach { obstacle ->
-        val here = position ?: return@forEach
-        val bearing = Math.toRadians(here.headingDeg + obstacle.bearingDeg)
-        val center = camera.toScreen(here.x + obstacle.distanceMeters * sin(bearing), here.y + obstacle.distanceMeters * cos(bearing))
-        drawCircle(colors.obstacle.copy(alpha = 0.25f), radius = 18.dp.toPx(), center = center)
-        drawBadge(center, colors.obstacle, Color.White, icons.obstacle, 10.dp.toPx())
-    }
-
     position?.let { drawUser(camera, it, colors) }
 
     if (destination != null && onThisFloor(destination)) {
@@ -432,7 +419,7 @@ private fun DrawScope.drawFloor(
         drawLabel(node.name.ellipsize(MAX_LABEL_CHARS), Offset(anchor.x, anchor.y - lift), colors, labelPaint, placed, emphasized = node.id == destination?.id || node.id == nextNode?.id)
     }
 
-    drawScaleBar(camera.pixelsPerMeter, colors, labelPaint)
+    drawMetricScale(camera.viewport, labelPaint, colors.label)
 }
 
 private fun iconFor(type: NodeType, icons: MapIcons): VectorPainter? = when (type) {
@@ -548,35 +535,12 @@ private fun DrawScope.drawLabel(
     drawContext.canvas.nativeCanvas.drawText(text, rect.left + horizontalPadding, rect.bottom - (height - paint.textSize) / 2 - paint.descent() / 2, paint)
 }
 
-/** Bottom-left "|——| 5 m": the one thing that turns a picture into distances. */
-private fun DrawScope.drawScaleBar(pixelsPerMeter: Float, colors: MapColors, paint: Paint) {
-    val targetPx = 80.dp.toPx()
-    val meters = SCALE_BAR_STEPS_METERS.lastOrNull { it * pixelsPerMeter <= targetPx } ?: SCALE_BAR_STEPS_METERS.first()
-    val lengthPx = meters * pixelsPerMeter
-    val margin = 14.dp.toPx()
-    val y = size.height - margin
-    val start = Offset(margin, y)
-    val end = Offset(margin + lengthPx, y)
-    val tick = 5.dp.toPx()
-    val stroke = 2.dp.toPx()
-    listOf(start to end, start to Offset(start.x, y - tick), end to Offset(end.x, y - tick)).forEach { (a, b) ->
-        drawLine(colors.label, a, b, stroke, StrokeCap.Round)
-    }
-    paint.textSize = 11.dp.toPx()
-    paint.color = colors.label.toArgb()
-    val text = "${if (meters % 1f == 0f) meters.toInt().toString() else meters.toString()} m"
-    drawContext.canvas.nativeCanvas.drawText(text, end.x + 6.dp.toPx(), y, paint)
-}
-
 private fun String.ellipsize(maxChars: Int) = if (length <= maxChars) this else take(maxChars - 1) + "…"
 
 private const val MAP_HEIGHT_DP = 340
 private const val MAP_ANIMATION_MS = 350
 private const val FOLLOW_VIEW_METERS = 18f
 private const val FOLLOW_ANCHOR_FRACTION = 0.62f
-private const val OVERVIEW_PADDING_DP = 36
-private const val MIN_SPAN_METERS = 4.0
 private const val CORRIDOR_WIDTH_METERS = 1.8f
 private const val CONE_HALF_ANGLE_DEG = 32.0
 private const val MAX_LABEL_CHARS = 20
-private val SCALE_BAR_STEPS_METERS = listOf(1f, 2f, 5f, 10f, 20f, 50f, 100f)

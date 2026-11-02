@@ -218,8 +218,6 @@ private val HAPTIC_GUIDE = listOf(
     GuidanceCue.CONTINUE to R.string.haptic_continue,
     GuidanceCue.HAZARD_AHEAD to R.string.haptic_hazard,
     GuidanceCue.FLOOR_CHANGE to R.string.haptic_floor_change,
-    GuidanceCue.OBSTACLE_WARNING to R.string.haptic_obstacle_warning,
-    GuidanceCue.OBSTACLE_CRITICAL to R.string.haptic_obstacle_critical,
     GuidanceCue.ARRIVED to R.string.haptic_arrived,
     GuidanceCue.REROUTED to R.string.haptic_rerouted,
     GuidanceCue.NO_ROUTE to R.string.haptic_no_route,

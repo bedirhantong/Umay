@@ -11,6 +11,8 @@ import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.di.DefaultDispatcher
 import com.appvalence.umay.feedback.Speaker
 import com.appvalence.umay.positioning.fingerprint.RadioMapBudget
+import com.appvalence.umay.positioning.mapping.ObservedRoutes
+import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.positioning.mapping.OpenSpaceLinks
 import com.appvalence.umay.positioning.mapping.WallMapBudget
 import com.appvalence.umay.positioning.trilateration.BeaconMapBuilder
@@ -30,7 +32,10 @@ import javax.inject.Inject
 
 /** The result of saving a surveyed map. */
 sealed interface SurveySaveResult {
-    data class Saved(val points: Int, val connections: Int, val floors: Int) : SurveySaveResult
+    data class Saved(val points: Int, val connections: Int, val floors: Int) : SurveySaveResult {
+        /** Places saved but nothing joins them: navigation would find no route (a camera map whose floor was never seen well enough). */
+        val hasNoRoutes: Boolean get() = points >= 2 && connections == 0
+    }
     data object Failed : SurveySaveResult
 
     /** The walk was merged into an existing map as a re-surveyed section (see MapSections). */
@@ -111,6 +116,8 @@ class SurveyViewModel @Inject constructor(
         recorder.clear()
     }
 
+    fun reviewWall(wall: com.appvalence.umay.coremodel.WallSegment, accept: Boolean) = recorder.reviewWall(wall, accept)
+
     fun clearDiscovered() = recorder.clearDiscovered()
 
     /** [anchorName] names the beacons placed on the map ("Kat 1 · Beacon 3") — wording is the UI's. */
@@ -173,8 +180,15 @@ class SurveyViewModel @Inject constructor(
             // Doors cut into the walls after fitting, so a coarser map still gets them.
             // Then shortcuts across open space the camera saw (see OpenSpaceLinks).
             // And how the compass lines up with each floor, for navigation's starting direction.
-            floors = built.floors.map {
-                OpenSpaceLinks.add(MapDoors.apply(it.copy(occupancy = wallMaps[it.floorIndex], compass = survey.compass[it.floorIndex]?.calibration())))
+            floors = (built.floors + survey.spatialMaps.keys.filter { floor -> built.floors.none { it.floorIndex == floor } }
+                .map { FloorMap(it, emptyList(), emptyList()) }).map { floor ->
+                val geometry = survey.spatialMaps[floor.floorIndex]
+                val observed = floor.copy(occupancy = wallMaps[floor.floorIndex],
+                    reconstruction = geometry, compass = survey.compass[floor.floorIndex]?.calibration())
+                if (geometry != null) {
+                    // A tagged door does not authorize carving a guessed-width gap in measured geometry.
+                    ObservedRoutes.restrict(OpenSpaceLinks.add(observed))
+                } else OpenSpaceLinks.add(MapDoors.apply(observed))
             },
             // A camera-measured map isn't steps × stride, so there's no stride to rescale by.
             surveyStepLengthMeters = if (cameraSurvey) null else survey.stepLengthMeters ?: settings.stepLengthMeters,

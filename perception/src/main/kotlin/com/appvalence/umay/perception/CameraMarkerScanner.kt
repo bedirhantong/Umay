@@ -2,9 +2,13 @@ package com.appvalence.umay.perception
 
 import android.content.Context
 import android.util.Log
+import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -18,7 +22,7 @@ import java.util.concurrent.Executors
 /**
  * "Kamerayla bul": the camera, with nothing shown, looking only for place
  * markers while the person turns slowly where they stand — before a walk,
- * when the navigation camera isn't running. Reads the frame's luminance plane
+ * when no walk is running. Reads the frame's luminance plane
  * as it comes (QR decoding doesn't care which way up it is).
  *
  * [bind] and [unbind] are main-thread only.
@@ -26,7 +30,7 @@ import java.util.concurrent.Executors
 class CameraMarkerScanner(private val context: Context) {
     private val sightings = MutableSharedFlow<MarkerSighting>(extraBufferCapacity = 8)
     private val reader = QrMarkerReader()
-    private val throttle = FrameThrottle(CameraXObstacleDetector.MARKER_INTERVAL_MS)
+    private val throttle = FrameThrottle(MARKER_INTERVAL_MS)
     private var executor: ExecutorService? = null
     private var provider: ProcessCameraProvider? = null
     private var bindGeneration = 0
@@ -98,5 +102,19 @@ class CameraMarkerScanner(private val context: Context) {
 
     private companion object {
         const val TAG = "CameraMarkerScanner"
+
+        // Markers don't move: three looks a second is plenty, and decoding isn't free.
+        const val MARKER_INTERVAL_MS = 350L
     }
 }
+
+/** The analysis frame size asked of the camera (see [CameraOptics.ANALYSIS_WIDTH_PX]), or the nearest below it. */
+private fun analysisResolution(): ResolutionSelector = ResolutionSelector.Builder()
+    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+    .setResolutionStrategy(
+        ResolutionStrategy(
+            Size(CameraOptics.ANALYSIS_WIDTH_PX, CameraOptics.ANALYSIS_HEIGHT_PX),
+            ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+        ),
+    )
+    .build()

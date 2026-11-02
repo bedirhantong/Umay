@@ -122,14 +122,14 @@ class SurveyViewModelTest {
         var t = 1_000L
         suspend fun at(x: Double, y: Double, depth: DepthFrame? = null) {
             t += 1_100
-            camera.frames.emit(ArFrameSample(ArPose(x, 1.35, -y, 0.0, t), listOf(0.0), depth))
+            camera.frames.emit(ArFrameSample(ArPose(x, 1.35, -y, 0.0, t), listOf(0.0), depth?.let { SyntheticMappingDepth.frame(x.toFloat(),-y.toFloat(),3.0,t) }))
         }
         val wall = DepthFrame(
             32, 24, ShortArray(32 * 24) { 3000 }, null, 25f, 25f, 16f, 12f,
             floatArrayOf(1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 1.35f, 0f, 1f),
         )
 
-        repeat(3) { at(0.0, 0.0, wall) }
+        repeat(8) { at(0.0, 0.0, wall) }
         advanceUntilIdle()
         viewModel.tag("Giriş", NodeType.WAYPOINT)
         (1..20).forEach { at(0.0, it * 0.5) } // 10 m north…
@@ -147,7 +147,8 @@ class SurveyViewModelTest {
         val corner = floor.nodes.single { it.type == NodeType.CORRIDOR }
         assertEquals(0.0, corner.x, 0.3)
         assertEquals(10.0, corner.y, 0.3)
-        assertEquals(20.0, floor.edges.sumOf { it.distanceMeters }, 0.5)
+        assertTrue("a trajectory through unobserved floor cannot authorize routes", floor.edges.isEmpty())
+        assertTrue(floor.reconstruction!!.walls.isNotEmpty())
         assertNotNull(floor.occupancy?.decodeCells())
     }
 

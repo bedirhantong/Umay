@@ -1,8 +1,6 @@
 package com.appvalence.umay.orchestrator
 
-import com.appvalence.umay.coremodel.AlertPriority
 import com.appvalence.umay.coremodel.NodeType
-import com.appvalence.umay.coremodel.ObstacleKind
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.sign
@@ -79,9 +77,9 @@ interface GuidancePhrases {
 
     fun arrived(): String
 
-    fun noRoute(): String
+    fun positionUncertain(): String = "Position is uncertain. Route guidance is paused."
 
-    fun rerouted(): String
+    fun noRoute(): String
 
     /** Stairs were to be avoided, but every route to the destination takes them. */
     fun noStepFreeRoute(): String
@@ -91,10 +89,4 @@ interface GuidancePhrases {
 
     /** Heading back the way they came. */
     fun wrongWay(): String
-
-    /** There's room to walk past what's ahead on this [side]. */
-    fun passObstacle(side: TurnDirection): String
-
-    /** Something the camera saw ahead, by what it is ([ObstacleKind.UNKNOWN]: just "an obstacle"). */
-    fun obstacle(priority: AlertPriority, kind: ObstacleKind, distanceMeters: Double): String
 }

@@ -22,7 +22,6 @@ android {
 dependencies {
     api(project(":core-model"))
     api(project(":positioning"))
-    api(project(":perception"))
     api(project(":feedback"))
     implementation(libs.kotlinx.coroutines.android)
 

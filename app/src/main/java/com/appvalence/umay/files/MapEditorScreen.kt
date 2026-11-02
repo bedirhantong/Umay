@@ -3,6 +3,7 @@ package com.appvalence.umay.files
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,12 +43,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -56,20 +60,26 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.appvalence.umay.R
+import com.appvalence.umay.common.FloorPlanViewport
+import com.appvalence.umay.common.drawSpatialMap
+import com.appvalence.umay.common.drawMetricScale
 import com.appvalence.umay.common.drawWallLayer
+import com.appvalence.umay.common.floorPlanBounds
+import com.appvalence.umay.common.rememberSpatialMapDrawing
 import com.appvalence.umay.common.rememberWallMapImage
 import com.appvalence.umay.coremodel.BuildingMap
 import com.appvalence.umay.coremodel.FloorMap
 import com.appvalence.umay.coremodel.MapEdits
 import com.appvalence.umay.coremodel.MapNode
+import com.appvalence.umay.coremodel.MetricPoint
 import com.appvalence.umay.coremodel.NodeType
 import com.appvalence.umay.coremodel.isPlace
 import kotlinx.coroutines.launch
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -253,7 +263,7 @@ fun MapEditorScreen(
                 }
             }
 
-            if (floor.occupancy != null) {
+            if (floor.occupancy != null || floor.reconstruction != null) {
                 item(key = "walls-${floor.floorIndex}") {
                     Column {
                         Text(text = stringResource(R.string.editor_walls), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
@@ -434,48 +444,87 @@ private fun PlaceChoices(label: String, places: List<MapNode>, selected: String?
     }
 }
 
-/** The floor's wall map, fitted to the box; a tap wipes the walls around that spot. */
+/** The same metric viewport drives drawing and erasing, including after a pan or pinch. */
 @Composable
 private fun WallEraseCanvas(floor: FloorMap, description: String, onTap: (Double, Double) -> Unit) {
-    val raster = floor.occupancy ?: return
+    val raster = floor.occupancy
     val image by rememberWallMapImage(
         raster = raster,
         seenFloorColor = MaterialTheme.colorScheme.surfaceVariant,
         wallColor = MaterialTheme.colorScheme.onSurface,
     )
+    val spatialDrawing = rememberSpatialMapDrawing(floor.reconstruction)
+    val bounds = remember(floor) { floorPlanBounds(floor) }
+    var canvasSize by remember(floor.floorIndex) { mutableStateOf(IntSize.Zero) }
+    var manualViewport by remember(floor.floorIndex) { mutableStateOf<FloorPlanViewport?>(null) }
+    val fittedViewport = remember(bounds, canvasSize) {
+        bounds?.takeIf { canvasSize.width > 0 && canvasSize.height > 0 }?.let {
+            FloorPlanViewport.fit(it, canvasSize.width.toDouble(), canvasSize.height.toDouble())
+        }
+    }
+    val viewport = manualViewport?.copy(
+        widthPixels = canvasSize.width.toDouble(),
+        heightPixels = canvasSize.height.toDouble(),
+    ) ?: fittedViewport
+    val currentViewport by rememberUpdatedState(viewport)
+    val currentOnTap by rememberUpdatedState(onTap)
     val placeColor = MaterialTheme.colorScheme.primary
-    val widthMeters = raster.width * raster.cellSizeMeters
-    val heightMeters = raster.height * raster.cellSizeMeters
+    val scalePaint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
+    TextButton(onClick = { manualViewport = null }, enabled = bounds != null) {
+        Text(stringResource(R.string.map_fit))
+    }
+    if (floor.reconstruction != null) {
+        Text(stringResource(R.string.map_geometry_legend), style = MaterialTheme.typography.bodySmall)
+    }
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(280.dp)
             .padding(vertical = 8.dp)
+            .clipToBounds()
             .semantics { contentDescription = description }
-            .pointerInput(raster) {
+            .onSizeChanged { canvasSize = it }
+            .pointerInput(floor.floorIndex) {
+                // This detector consumes movement after touch slop, cancelling the tap
+                // detector below before a pan or pinch can become a destructive edit.
+                detectTransformGestures { centroid, pan, zoom, _ ->
+                    val current = manualViewport?.copy(widthPixels = size.width.toDouble(), heightPixels = size.height.toDouble())
+                        ?: currentViewport
+                    current?.let {
+                        manualViewport = current.transformed(
+                            centroidX = centroid.x.toDouble(),
+                            centroidY = centroid.y.toDouble(),
+                            zoomFactor = zoom.toDouble(),
+                            panDeltaX = pan.x.toDouble(),
+                            panDeltaY = pan.y.toDouble(),
+                        )
+                    }
+                }
+            }
+            .pointerInput(floor.floorIndex) {
                 detectTapGestures { tap ->
-                    val scale = min(size.width / widthMeters, size.height / heightMeters)
-                    val left = (size.width - widthMeters * scale) / 2
-                    val top = (size.height - heightMeters * scale) / 2
-                    val x = raster.originX + (tap.x - left) / scale
-                    val y = raster.originY + heightMeters - (tap.y - top) / scale
-                    onTap(x, y)
+                    val current = manualViewport?.copy(widthPixels = size.width.toDouble(), heightPixels = size.height.toDouble())
+                        ?: currentViewport
+                    current?.toWorld(tap.x.toDouble(), tap.y.toDouble())?.let { point ->
+                        currentOnTap(point.x, point.y)
+                    }
                 }
             },
     ) {
-        val scale = min(size.width / widthMeters, size.height / heightMeters)
-        val left = (size.width - widthMeters * scale) / 2
-        val top = (size.height - heightMeters * scale) / 2
+        val activeViewport = viewport ?: return@Canvas
         image?.let { walls ->
-            drawWallLayer(walls.seenFloor, walls, Offset(left.toFloat(), top.toFloat()), scale.toFloat())
-            drawWallLayer(walls.walls, walls, Offset(left.toFloat(), top.toFloat()), scale.toFloat())
+            val (left, top) = activeViewport.toScreen(MetricPoint(walls.originX, walls.originY + walls.heightMeters))
+            val topLeft = Offset(left.toFloat(), top.toFloat())
+            val scale = activeViewport.pixelsPerMeter.toFloat()
+            drawWallLayer(walls.seenFloor, walls, topLeft, scale)
+            drawWallLayer(walls.walls, walls, topLeft, scale)
         }
+        drawSpatialMap(spatialDrawing, activeViewport)
         floor.nodes.filter { it.isPlace }.forEach { node ->
-            val center = Offset(
-                (left + (node.x - raster.originX) * scale).toFloat(),
-                (top + (raster.originY + heightMeters - node.y) * scale).toFloat(),
-            )
+            val (x, y) = activeViewport.toScreen(MetricPoint(node.x, node.y))
+            val center = Offset(x.toFloat(), y.toFloat())
             drawCircle(placeColor, radius = 6.dp.toPx(), center = center)
         }
+        drawMetricScale(activeViewport, scalePaint, placeColor)
     }
 }

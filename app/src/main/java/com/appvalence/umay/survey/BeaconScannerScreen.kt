@@ -286,12 +286,21 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
             }
         }
 
+        if (survey.persistenceFailed) {
+            item { Text(stringResource(R.string.survey_persistence_failed), color = MaterialTheme.colorScheme.error) }
+        }
+        if (survey.alignmentRequired) {
+            item { Text(stringResource(R.string.survey_alignment_required), color = MaterialTheme.colorScheme.error) }
+        }
         item {
             SurveyMapCanvas(
                 trajectory = floorTrajectory,
                 results = floorResults,
                 waypoints = floorWaypoints,
                 wallMap = survey.wallMaps[survey.currentFloor],
+                spatialMap = survey.spatialMaps[survey.currentFloor],
+                floorIndex = survey.currentFloor,
+                onReviewWall = viewModel::reviewWall,
                 livePosition = survey.livePosition?.takeIf { it.floor == survey.currentFloor },
                 height = if (survey.mode == SurveyMode.CAMERA) 360.dp else 240.dp,
             )
@@ -305,11 +314,12 @@ fun BeaconScannerScreen(modifier: Modifier = Modifier, viewModel: SurveyViewMode
                     resultCount = survey.results.size,
                     taggedWaypointCount = survey.taggedWaypoints.size,
                     trajectoryPointCount = survey.trajectory.size,
+                    hasGeometry = survey.spatialMaps.values.any { it.hasGeometry },
                     save = save,
                     onSave = { name ->
                         viewModel.saveMap(name) { floor, number -> resources.getString(R.string.survey_anchor_name, floor, number) }
                     },
-                    savedBuildings = savedBuildings.orEmpty().map { it.id },
+                    savedBuildings = if (survey.spatialMaps.isEmpty()) savedBuildings.orEmpty().map { it.id } else emptyList(),
                     onAddSection = { buildingId, replaceOld ->
                         viewModel.addSectionTo(buildingId, replaceOld) { floor, number -> resources.getString(R.string.survey_anchor_name, floor, number) }
                     },
@@ -731,13 +741,14 @@ private fun SaveMapCard(
     onSave: (String) -> Unit,
     savedBuildings: List<String>,
     onAddSection: (buildingId: String, replaceOld: Boolean) -> Unit,
+    hasGeometry: Boolean = false,
 ) {
     var buildingName by rememberSaveable { mutableStateOf("") }
     var sectionOf by rememberSaveable { mutableStateOf<String?>(null) }
     var replaceOld by rememberSaveable { mutableStateOf(true) }
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            if (resultCount == 0 && taggedWaypointCount == 0) {
+            if (resultCount == 0 && taggedWaypointCount == 0 && !hasGeometry) {
                 Text(
                     text = pluralStringResource(R.plurals.survey_nothing_mapped, trajectoryPointCount, BeaconSurveySolver.MIN_OBSERVATIONS_FOR_FIX, trajectoryPointCount),
                     style = MaterialTheme.typography.bodyMedium,
@@ -818,7 +829,7 @@ private fun SaveMapCard(
                 Text(
                     text = when (result) {
                         is SurveySaveResult.Saved -> stringResource(
-                            R.string.survey_saved,
+                            if (result.hasNoRoutes) R.string.survey_saved_no_routes else R.string.survey_saved,
                             countText(R.plurals.count_points, result.points),
                             countText(R.plurals.count_connections, result.connections),
                             countText(R.plurals.count_floors, result.floors),
@@ -836,7 +847,7 @@ private fun SaveMapCard(
                         SurveySaveResult.SectionDoesNotFit -> stringResource(R.string.survey_section_does_not_fit)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (result is SurveySaveResult.Saved || result is SurveySaveResult.SectionAdded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+                    color = if ((result is SurveySaveResult.Saved && !result.hasNoRoutes) || result is SurveySaveResult.SectionAdded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
